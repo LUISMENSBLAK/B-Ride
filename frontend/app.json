@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "B-Ride",
+    "slug": "b-ride",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/ride.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/ride.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bride.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "B-Ride necesita tu ubicación para mostrarte conductores cercanos y calcular rutas.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real.",
+        "NSLocationAlwaysUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real."
+      }
+    },
+    "android": {
+      "package": "com.bride.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0A",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "B-Ride usa tu ubicación para conectarte con conductores cercanos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/ride.png",
+          "color": "#276EF1"
+        }
+      ],
+      "expo-localization"
+    ]
+  }
+}

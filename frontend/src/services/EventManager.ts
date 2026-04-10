@@ -1,0 +1,86 @@
+import { useEffect } from 'react';
+import socketService from './socket';
+
+class EventManager {
+  private listeners: Map<string, Array<(...args: any[]) => void>> = new Map();
+  private processedEvents: Set<string> = new Set();
+  private eventQueue: string[] = [];
+  private MAX_PROCESSED_EVENTS = 100;
+
+  constructor() {
+    // Escuchar universalmente desde el socket singleton
+    const socket = socketService.getSocket();
+    if (socket) {
+      // Capturador genérico (Socket.IO maneja .onAny)
+      socket.onAny((eventName, ...args) => {
+        this.dispatch(eventName, ...args);
+      });
+    }
+  }
+
+  reconnectSocketBindings() {
+      const socket = socketService.getSocket();
+      if (socket) {
+          socket.offAny();
+          socket.onAny((eventName, ...args) => {
+             this.dispatch(eventName, ...args);
+          });
+      }
+  }
+
+  subscribe(eventName: string, callback: (...args: any[]) => void) {
+    if (!this.listeners.has(eventName)) {
+      this.listeners.set(eventName, []);
+    }
+    this.listeners.get(eventName)?.push(callback);
+
+    // Permitir desencadenar limpieza devolviendo un un-sub
+    return () => this.unsubscribe(eventName, callback);
+  }
+
+  unsubscribe(eventName: string, callback: (...args: any[]) => void) {
+    const list = this.listeners.get(eventName);
+    if (list) {
+      this.listeners.set(eventName, list.filter(cb => cb !== callback));
+    }
+  }
+
+  dispatch(eventName: string, ...args: any[]) {
+    // Check para Idempotencia basada en EventID de Backend (si lo tiene)
+    const payload = args[0];
+    if (payload && typeof payload === 'object' && payload.eventId) {
+        if (this.processedEvents.has(payload.eventId)) {
+            console.log(`[EventManager] Ignorando evento repetido en Frontend: ${payload.eventId}`);
+            return;
+        }
+        
+        // Registrar Evento en Caché local
+        this.processedEvents.add(payload.eventId);
+        this.eventQueue.push(payload.eventId);
+        
+        if (this.eventQueue.length > this.MAX_PROCESSED_EVENTS) {
+            const oldest = this.eventQueue.shift();
+            if (oldest) this.processedEvents.delete(oldest);
+        }
+    }
+
+    const list = this.listeners.get(eventName);
+    if (list) {
+      list.forEach(cb => cb(...args));
+    }
+  }
+}
+
+const eventManager = new EventManager();
+
+// --- REACT HOOK DEFINITIVO PARA SOCKET EVENTS ---
+export function useRideSocketEvent(eventName: string, callback: (...args: any[]) => void) {
+  useEffect(() => {
+    const unsubscribe = eventManager.subscribe(eventName, callback);
+    return () => {
+      unsubscribe();
+    };
+  }, [eventName, callback]); // callback suele ser useCallback
+}
+
+export default eventManager;

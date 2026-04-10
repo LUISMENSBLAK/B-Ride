@@ -1,0 +1,1116 @@
+import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity,
+  TextInput, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, AppState, Linking
+} from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '../../store/authStore';
+import { useRideFlowStore } from '../../store/useRideFlowStore';
+import socketService from '../../services/socket';
+import { useAppTheme } from '../../hooks/useAppTheme';
+import { useTranslation } from '../../hooks/useTranslation';
+import type { Theme } from '../../theme';
+import MapRenderer, { MapRendererHandle } from '../../components/MapRenderer';
+import AddressAutocomplete, { PlaceResult } from '../../components/AddressAutocomplete';
+import { useRideSocketEvent } from '../../services/EventManager';
+import { useDriverTracking } from '../../hooks/useDriverTracking';
+import { syncRideState } from '../../api/ride';
+import BidCard from '../../components/BidCard';
+import { stripeFrontendService } from '../../services/stripe';
+import Button from '../../components/Button';
+import Loader from '../../components/Loader';
+import StatusBadge from '../../components/StatusBadge';
+import ChatSheet from '../../components/ChatSheet';
+import SearchingDriversView from '../../components/SearchingDriversView';
+import { RatingModal } from '../../components/RatingModal';
+import PaymentMethodSelector from '../../components/PaymentMethodSelector';
+// ─── Utilidad: distancia Haversine (km) ─────────────────────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ETA en minutos asumiendo velocidad media de 30 km/h en ciudad
+function etaMinutes(driverLat?: number, driverLng?: number, pickupLat?: number, pickupLng?: number): number | null {
+  if (driverLat == null || pickupLat == null) return null;
+  const km = haversineKm(driverLat, driverLng!, pickupLat, pickupLng!);
+  return Math.max(1, Math.round((km / 30) * 60));
+}
+
+
+
+// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+export default function PassengerDashboard() {
+  const { user, logout } = useAuthStore();
+  const navigation = useNavigation<any>();
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  
+  const theme = useAppTheme();
+  const { t } = useTranslation();
+  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const bidStylesFixed = React.useMemo(() => getBidStyles(theme), [theme]);
+
+  // Trip state centralizado
+  const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
+  const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  const [price, setPrice] = useState('');
+  const [completedRide, setCompletedRide] = useState<any>(null);
+  const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
+  const [paymentAuthorizing, setPaymentAuthorizing] = useState<boolean>(false);
+  const [chatVisible, setChatVisible] = useState(false);
+  const [distanceKm, setDistanceKm] = useState<number>(0);
+  const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
+
+  // Auto-calcular distancia y tarifa sugerida
+  useEffect(() => {
+    if (selectedPlace && location) {
+      const dist = haversineKm(
+        location.coords.latitude, location.coords.longitude,
+        selectedPlace.latitude, selectedPlace.longitude
+      );
+      setDistanceKm(Number(dist.toFixed(1)));
+      const baseEta = Math.max(1, Math.round((dist / 40) * 60)); // 40 km/h avg
+      const trafficFactor = 1.0 + Math.random() * 0.5; // (1.0 - 1.5) Simulate traffic
+      setEstimatedTimeMin(Math.round(baseEta * trafficFactor));
+    } else {
+      setDistanceKm(0);
+      setEstimatedTimeMin(0);
+    }
+  }, [selectedPlace, location]);
+
+  useEffect(() => {
+    if (distanceKm > 0) {
+      const suggestedPrice = 2 + (1.20 * distanceKm) + (0.25 * estimatedTimeMin);
+      setPrice(suggestedPrice.toFixed(2));
+    } else {
+      setPrice('');
+    }
+  }, [distanceKm, estimatedTimeMin]);
+
+  const mapRef = useRef<MapRendererHandle>(null);
+  const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);
+  
+  const localVersion = useRef(0);
+  // Removido: console.log de render count (producción)
+
+  // Refs anti-stale-closure
+  const currentRideIdRef = useRef<string | null>(null);
+  useEffect(() => { currentRideIdRef.current = currentRideId; }, [currentRideId]);
+
+  // ─── Socket setup (solo mount) ─────────────────────────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    let locationSubscription: Location.LocationSubscription | null = null;
+    socketService.connect();
+
+    // AppState Listener para Sincronía POST background (Fase API Re-Fetch)
+    const sub = AppState.addEventListener('change', async (nextAppState) => {
+       if (nextAppState === 'active' && currentRideIdRef.current) {
+          const serverRideState = await syncRideState(currentRideIdRef.current);
+          if (serverRideState && serverRideState.version > localVersion.current) {
+             localVersion.current = serverRideState.version;
+             setRideStatus(serverRideState.status);
+          }
+       }
+    });
+
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+        if (status !== 'granted') { setErrorMsg('Permiso denegado'); return; }
+
+        const loc = await Location.getCurrentPositionAsync({});
+        if (!isMounted) return;
+        setLocation(loc);
+
+        locationSubscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+          (newLoc) => { if (isMounted) setLocation(newLoc); }
+        );
+      } catch { if (isMounted) setErrorMsg('Servicio de ubicación falló.'); }
+    })();
+
+    return () => {
+      isMounted = false;
+      socketService.disconnect();
+      locationSubscription?.remove();
+      sub.remove();
+    };
+  }, []);
+
+  const [activeDriversCount, setActiveDriversCount] = useState<number>(0);
+  const [showDriverBanner, setShowDriverBanner] = useState<boolean>(false);
+
+  // --- EVENTOS SOCKET CENTRALIZADOS (EventManager) ---
+
+  useRideSocketEvent('driver_available_nearby', useCallback((data: any) => {
+    setActiveDriversCount(data && data.count != null ? data.count : (prev => prev + 1));
+    const currentStatus = useRideFlowStore.getState().status;
+    if (currentStatus === 'SEARCHING' || currentStatus === 'REQUESTING' || currentStatus === 'NEGOTIATING') {
+      setShowDriverBanner(true);
+      setTimeout(() => setShowDriverBanner(false), 3000);
+    }
+  }, []));
+
+  useRideSocketEvent('rideRequestCreated', useCallback((ride: any) => {
+    setRideContext(ride._id);
+    socketService.setRideRoom(ride._id);
+    localVersion.current = ride.version || 1;
+    setRideStatus('SEARCHING');
+  }, []));
+
+  useRideSocketEvent('trip_bid_received', useCallback((updatedRide: any) => {
+    if (updatedRide.bids) {
+      const isFirstBid = useRideFlowStore.getState().bids.length === 0;
+      if (isFirstBid) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      const pending = updatedRide.bids
+        .filter((b: any) => b.status === 'PENDING')
+        .sort((a: any, b: any) => a.price - b.price);
+      
+      // Update directly to the store for each bid
+      pending.forEach((b: any) => receiveBid(b));
+    }
+  }, []));
+
+  useRideSocketEvent('trip_state_changed', useCallback((updatedRide) => {
+    const { status, version } = updatedRide;
+    if (version && version <= localVersion.current) return;
+    if (version) localVersion.current = version;
+
+    // Cada estado del backend se mapea 1:1 a un estado UI distinto
+    if (status === 'ACCEPTED') {
+        setActiveRide(updatedRide);
+        setRideStatus('ACCEPTED');
+        bottomSheetRef.current?.snapToIndex(1);
+    } else if (status === 'ARRIVED') {
+        setRideStatus('ARRIVED');
+    } else if (status === 'IN_PROGRESS') {
+        setRideStatus('IN_PROGRESS');
+    } else if (status === 'COMPLETED' || status === 'CANCELLED') {
+        if (status === 'COMPLETED') {
+          // No need for state hacks anymore - compute scalar explicit values
+          const finalPrice = updatedRide?.bids?.find((b: any) => b.status === 'ACCEPTED')?.price
+            ?? updatedRide?.proposedPrice
+            ?? '—';
+          
+          stopTracking();
+          resetFlow();
+          setPrice('');
+          setAcceptingBidId(null);
+          setSelectedPlace(null);
+          bottomSheetRef.current?.snapToIndex(1);
+          
+          // Use robust navigation push for production grade persistence state
+          navigation.navigate('PassengerPayment', { 
+              price: finalPrice,
+              rideId: updatedRide?._id,
+              status: 'COMPLETED'
+          });
+        } else {
+          stopTracking();
+          resetFlow();
+          setPrice('');
+          setAcceptingBidId(null);
+          setSelectedPlace(null);
+          bottomSheetRef.current?.snapToIndex(1);
+          Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
+        }
+    }
+  }, [stopTracking]));
+
+  useRideSocketEvent('driverLocationUpdate', useCallback((locData) => {
+      // Usamos el hook purificado para Queue + Lerp Nativo + Watchdog Timeline
+      pushLocation(locData.latitude, locData.longitude);
+  }, [pushLocation]));
+
+  useRideSocketEvent('rideError', useCallback((error) => {
+    Alert.alert('Error', error.message);
+    resetFlow();
+    setAcceptingBidId(null);
+  }, []));
+
+  useRideSocketEvent('rating_submitted', useCallback(({ newAvg }) => {
+    Alert.alert('¡Gracias!', `Tu calificación fue enviada. Rating del conductor: ${newAvg} ★`);
+  }, []));
+
+  useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
+    // Cuando el chofer cancela la asignación
+    stopTracking();
+    resetFlow();
+    setPrice('');
+    setAcceptingBidId(null);
+    setSelectedPlace(null);
+    setDistanceKm(0);
+    setEstimatedTimeMin(0);
+    socketService.setRideRoom(null);
+    bottomSheetRef.current?.snapToIndex(1);
+    Alert.alert('Viaje Cancelado', 'El conductor ha cancelado el viaje. Puedes solicitar uno nuevo.');
+  }, [stopTracking]));
+
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleRequestRide = useCallback(async () => {
+    if (distanceKm > 100) {
+      Alert.alert(t('errors.outOfRange'), t('errors.outOfRangeMsg'));
+      return;
+    }
+    if (!selectedPlace) {
+      Alert.alert(t('errors.selectDestination'), t('errors.selectDestinationMsg'));
+      return;
+    }
+    if (!price || isNaN(Number(price)) || Number(price) <= 0) {
+      Alert.alert(t('errors.invalidFare'), t('errors.invalidFareMsg'));
+      return;
+    }
+    if (!location) {
+      Alert.alert(t('errors.locationNotReady'), t('errors.locationNotReadyMsg'));
+      return;
+    }
+
+    setRideStatus('REQUESTING');
+    try {
+      await socketService.emitWithAck('requestRide', {
+        passengerId: user?._id,
+        pickupLocation: {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          address: 'Mi Ubicación Actual',
+        },
+        dropoffLocation: {
+          latitude: selectedPlace.latitude,
+          longitude: selectedPlace.longitude,
+          address: selectedPlace.displayName,
+        },
+        proposedPrice: Number(price),
+        paymentMethod,
+      }, 3, 5000);
+      // 'rideRequestCreated' socket event will update status
+    } catch (error: any) {
+        Alert.alert('Error de conexión', error.message);
+        setRideStatus('IDLE');
+    }
+  }, [selectedPlace, price, location, user]);
+
+  const handleAcceptBid = useCallback(async (bidId: string, driverId: string) => {
+    if (acceptingBidId || paymentAuthorizing) return; // Prevent double click
+    setAcceptingBidId(bidId);
+
+    if (currentRideId) {
+       try {
+           setPaymentAuthorizing(true);
+           
+           if (paymentMethod === 'CARD') {
+             const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId);
+             if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
+           } else if (paymentMethod === 'APPLE_PAY') {
+             // Simulación de Apple Pay
+             await new Promise(resolve => setTimeout(resolve, 800)); 
+           }
+
+           // 2. Si retención fue exitosa (o es CASH/APPLE_PAY mock), mandar accept
+           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+           await socketService.emitWithAck('trip_accept_bid', {
+             rideId: currentRideId,
+             passengerId: user?._id,
+             bidId,
+             driverId,
+             paymentMethod,
+           });
+       } catch (error: any) {
+           Alert.alert('Transacción Detenida', error.message || 'No se pudo autorizar el pago.');
+           setAcceptingBidId(null);
+       } finally {
+           setPaymentAuthorizing(false);
+       }
+    }
+  }, [currentRideId, user, acceptingBidId, paymentAuthorizing]);
+
+  const handleCancelRequest = useCallback(async () => {
+    const rideId = currentRideIdRef.current;
+    if (rideId) {
+      try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          await socketService.emitWithAck('cancel_ride', { rideId, passengerId: user?._id });
+      } catch (e) {
+          console.warn('Fallback: Failed cancel explicitly but resetting locally');
+      }
+    }
+    socketService.setRideRoom(null);
+    resetFlow();
+    setAcceptingBidId(null);
+    setSelectedPlace(null);
+    setPrice('');
+    setDistanceKm(0);
+    setEstimatedTimeMin(0);
+    bottomSheetRef.current?.snapToIndex(1);
+  }, [user]);
+
+  const openNavigation = useCallback(() => {
+    if (!selectedPlace) return;
+    const url = Platform.OS === 'ios'
+      ? `http://maps.apple.com/?daddr=${selectedPlace.latitude},${selectedPlace.longitude}`
+      : `google.navigation:q=${selectedPlace.latitude},${selectedPlace.longitude}`;
+    Linking.openURL(url);
+  }, [selectedPlace]);
+
+  const handleRateDriver = useCallback(async (score: number) => {
+    if (completedRide) {
+       try {
+           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+           await socketService.emitWithAck('rate_driver', {
+             rideId: completedRide._id,
+             driverId: completedRide.driver?._id ?? completedRide.driver,
+             fromUserId: user?._id,
+             score,
+           });
+       } catch (error: any) {
+           Alert.alert('Error Calificando', error.message);
+       }
+    }
+    setCompletedRide(null);
+  }, [completedRide, user]);
+
+  const handleSkipRating = useCallback(() => setCompletedRide(null), []);
+
+  const isSearching =
+    rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING';
+  const isActiveRide = rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED';
+
+  // El bid más barato es el índice 0 (ya vienen ordenados por precio asc)
+  const bestBidId = bids.length > 0 ? bids[0]._id : null;
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      {/* Rating modal post-viaje */}
+      <RatingModal
+        visible={!!completedRide}
+        targetName={completedRide?.driver?.name ?? 'el conductor'}
+        onSubmit={handleRateDriver}
+        onSkip={handleSkipRating}
+      />
+
+      {/* Header */}
+      <View style={styles.headerOverlay}>
+        <View>
+          <Text style={styles.subtitle}>{t('general.greeting', { name: user?.name })}</Text>
+          <Text style={styles.title}>B-Ride</Text>
+        </View>
+        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+          <Text style={styles.logoutText}>{t('general.exit')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {location ? (
+        <MapRenderer
+          ref={mapRef}
+          latitude={location.coords.latitude}
+          longitude={location.coords.longitude}
+          title="Tú estás aquí"
+          destinationCoordinate={selectedPlace ? { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude } : undefined}
+        />
+      ) : (
+        <View style={styles.loaderContainer}>
+          <Loader label={errorMsg ?? t('general.locating')} />
+        </View>
+      )}
+
+      {showDriverBanner && (
+        <View style={styles.topDriverBanner}>
+          <Text style={styles.topDriverBannerText}>¡Hay conductores cerca! Revisando tu oferta...</Text>
+        </View>
+      )}
+
+      {/* Main BottomSheet — dinámico aislado, sin re-render del MapView */}
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={1}
+        snapPoints={[
+          '12%',
+          isSearching ? '75%' : isActiveRide ? '35%' : '52%',
+          '90%',
+        ]}
+        backgroundStyle={{ backgroundColor: theme.colors.surface, borderRadius: 36 }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.border, width: 44, height: 4 }}
+        style={theme.shadows.lg}
+      >
+        <BottomSheetScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+        {/* ── IDLE: formulario de solicitud ── */}
+        {rideStatus === 'IDLE' && (
+          <View style={{ paddingHorizontal: theme.spacing.xl }}>
+            {activeDriversCount === 0 && (
+              <View style={styles.idleStatusBanner}>
+                <Ionicons name="moon" size={16} color={theme.colors.textMuted} />
+                <View style={{ marginLeft: 8 }}>
+                  <Text style={styles.idleStatusBannerText}>{t('driver.offlineTitle')}</Text>
+                  <Text style={styles.idleStatusBannerSubtext}>{t('driver.tryAgainLater')}</Text>
+                </View>
+              </View>
+            )}
+            <Text style={styles.cardHeader}>{t('form.whereAreYouGoing')}</Text>
+
+            <View style={styles.formContainer}>
+              <View style={styles.dotContainer}>
+                <View style={styles.pickupDot} />
+                <View style={styles.line} />
+                <View style={styles.dropoffDot} />
+              </View>
+              <View style={styles.inputsSection}>
+                <TextInput
+                  style={styles.inputLocation}
+                  placeholder={t('form.currentLocation')}
+                  placeholderTextColor={theme.colors.text}
+                  editable={false}
+                />
+                {/* Autocomplete integrado */}
+                <AddressAutocomplete
+                  placeholder={t('form.enterDestination')}
+                  onSelect={(place) => setSelectedPlace(place)}
+                  value={selectedPlace?.displayName}
+                  userLat={location?.coords.latitude}
+                  userLng={location?.coords.longitude}
+                />
+              </View>
+            </View>
+
+            {selectedPlace && distanceKm > 0 && (
+              <View style={styles.pricingSection}>
+                <View style={styles.pricingCard}>
+                 <View style={styles.pricingMainRow}>
+                   <View style={styles.pricingInfo}>
+                     <Text style={styles.suggestedPriceLabel}>{t('form.suggestedPrice')}</Text>
+                     <Text style={styles.suggestedPriceValue}>${price}</Text>
+                   </View>
+                   <View style={styles.pricingDetails}>
+                     <Text style={styles.tripDataText}>{distanceKm} km</Text>
+                     <Text style={styles.tripDataText}>{estimatedTimeMin} min</Text>
+                   </View>
+                 </View>
+
+                 <View style={styles.pricingInputRow}>
+                   <Text style={styles.adjustPriceLabel}>{t('form.adjustLabel')}</Text>
+                   <View style={styles.priceRowCompact}>
+                     <Text style={styles.currencyCompact}>$</Text>
+                     <TextInput
+                       style={styles.priceInputCompact}
+                       placeholder="0.00"
+                       placeholderTextColor={theme.colors.inputPlaceholder}
+                       keyboardType="numeric"
+                       value={price}
+                       onChangeText={setPrice}
+                     />
+                   </View>
+                 </View>
+
+                 {distanceKm > 100 && (
+                     <Text style={{color: theme.colors.error, marginTop: 8, textAlign: 'center', fontWeight: '600', fontSize: 13}}>
+                       {t('errors.outOfRangeMsg')}
+                     </Text>
+                 )}
+                </View>
+              </View>
+            )}
+
+            <PaymentMethodSelector />
+
+            <TouchableOpacity
+              style={[styles.requestButton, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
+              onPress={handleRequestRide}
+              disabled={!selectedPlace || distanceKm > 100}
+            >
+              <Text style={styles.requestButtonText}>
+                {selectedPlace ? t('form.searchDriver') : t('form.selectDestination')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── REQUESTING / REQUESTED / NEGOTIATING ── */}
+        {isSearching && (
+          <View style={{ paddingHorizontal: theme.spacing.xl }}>
+
+            {/* States without bids */}
+            {(rideStatus === 'REQUESTING' ||
+              rideStatus === 'REQUESTED' ||
+              rideStatus === 'SEARCHING' ||
+              (rideStatus === 'NEGOTIATING' && bids.length === 0)) && (
+              <>
+              <SearchingDriversView
+                activeDriversCount={activeDriversCount}
+                onCancel={handleCancelRequest}
+              />
+              {/* Price raise stepper */}
+              {price && Number(price) > 0 && (
+                <View style={{ marginTop: 16, alignItems: 'center' }}>
+                  <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary, marginBottom: 8 }}>
+                    {t('form.adjustPrice')}
+                  </Text>
+                  <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.primary, marginBottom: 12 }}>
+                    ${price}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {[5, 10, 15].map(add => (
+                      <TouchableOpacity
+                        key={add}
+                        style={{
+                          backgroundColor: theme.colors.primaryLight,
+                          borderRadius: theme.borderRadius.pill,
+                          paddingHorizontal: 20,
+                          paddingVertical: 10,
+                          borderWidth: 1,
+                          borderColor: theme.colors.primary,
+                        }}
+                        onPress={() => {
+                          const newPrice = (Number(price) + add).toFixed(2);
+                          setPrice(newPrice);
+                          if (currentRideId) {
+                            socketService.emitWithAck('update_ride_price', {
+                              rideId: currentRideId,
+                              passengerId: user?._id,
+                              newPrice: Number(newPrice),
+                            }).catch(() => {});
+                          }
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                      >
+                        <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 15 }}>+${add}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+              </>
+            )}
+
+            {/* NEGOTIATING with bids → bid list + cancel */}
+            {rideStatus === 'NEGOTIATING' && bids.length > 0 && (
+              <View style={styles.searchingContainer}>
+                <View style={styles.searchingContent}>
+                  <Text style={styles.statusTitle}>
+                    {bids.length === 1
+                      ? t('general.bidsReceived', { count: bids.length })
+                      : t('general.bidsReceivedPlural', { count: bids.length })}
+                  </Text>
+
+                  {paymentAuthorizing && (
+                    <View style={styles.authStripeBox}>
+                      <Loader size="sm" color="#635BFF" />
+                      <Text style={styles.authStripeText}>{t('general.holdingFunds')}</Text>
+                    </View>
+                  )}
+
+                  <View style={{ marginTop: 8, width: '100%', paddingBottom: 20 }}>
+                    {bids.map((item: any) => (
+                      <BidCard
+                        key={item._id}
+                        bid={{...item, isProcessing: acceptingBidId === item._id}}
+                        isBest={item._id === bestBidId}
+                        pickupLat={location?.coords.latitude}
+                        pickupLng={location?.coords.longitude}
+                        onAccept={handleAcceptBid}
+                      />
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.cancelRequestBtn} onPress={handleCancelRequest}>
+                  <Text style={styles.cancelRequestBtnText}>{t('searching.cancel')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── ACTIVE: viaje en curso ── */}
+        {isActiveRide && (
+          <View style={[styles.statusCard, { paddingHorizontal: theme.spacing.xl }]}>
+            <StatusBadge
+              variant={rideStatus === 'IN_PROGRESS' ? 'active' : 'searching'}
+              label={rideStatus === 'ARRIVED' ? t('ride.status.arriving') : rideStatus === 'IN_PROGRESS' ? t('ride.status.inProgress') : t('ride.status.confirmed')}
+              style={{ marginBottom: 12, alignSelf: 'center' }}
+            />
+            <Text style={styles.statusTitle}>
+              {(rideStatus === 'ACCEPTED' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED') && t('ride.confirmed')}
+              {rideStatus === 'ARRIVED' && t('ride.arrivedTitle')}
+              {rideStatus === 'IN_PROGRESS' && t('ride.inProgress')}
+            </Text>
+            <Text style={styles.statusText}>
+              {(rideStatus === 'ACCEPTED' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED') && (driverTrackingState === 'RECONNECTING' ? t('ride.enRouteGps') : t('ride.enRoute'))}
+              {rideStatus === 'ARRIVED' && t('ride.arrivedSub')}
+              {rideStatus === 'IN_PROGRESS' && `${t('ride.heading')} ${selectedPlace?.displayName ?? '—'}`}
+            </Text>
+            
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                <TouchableOpacity
+                  style={[styles.chatBtn, { flex: 1 }]}
+                  onPress={() => setChatVisible(true)}
+                >
+                  <Ionicons name="chatbubble-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={styles.chatBtnText}>{t('chat.withDriver')}</Text>
+                </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        </BottomSheetScrollView>
+      </BottomSheet>
+
+      {/* Chat Sheet — flotante en 52%, no bloquea el mapa */}
+      <ChatSheet
+        rideId={currentRideId}
+        myUserId={user?._id}
+        visible={chatVisible}
+        onClose={() => setChatVisible(false)}
+      />
+    </KeyboardAvoidingView>
+  );
+}
+
+// ─── BidCard styles ──────────────────────────────────────────────────────────
+const getBidStyles = (theme: Theme) => StyleSheet.create({
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.m,
+    marginBottom: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    shadowColor: 'rgba(13,5,32,0.5)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  bestCard: {
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  bestBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  bestBadgeText: {
+    color: theme.colors.primaryText,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.colors.surfaceHigh,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarBest: {
+    backgroundColor: theme.colors.primary,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  info: {
+    flex: 1,
+  },
+  driverName: {
+    ...theme.typography.body,
+    fontWeight: '600',
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  ratingValue: {
+    ...theme.typography.bodyMuted,
+    fontSize: 12,
+    marginLeft: 2,
+  },
+  eta: {
+    ...theme.typography.bodyMuted,
+    fontSize: 12,
+    color: theme.colors.primary,
+  },
+  priceCol: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  price: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.success,
+  },
+  priceBest: {
+    color: theme.colors.primary,
+  },
+  acceptBtn: {
+    backgroundColor: theme.colors.text,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: theme.borderRadius.pill,
+    minWidth: 90,
+    alignItems: 'center',
+  },
+  acceptBtnDisabled: {
+    opacity: 0.7,
+  },
+  acceptBtnBest: {
+    backgroundColor: theme.colors.primary,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  acceptBtnText: {
+    color: theme.colors.primaryText,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});
+
+
+
+// ─── Main styles ─────────────────────────────────────────────────────────────
+const getStyles = (theme: Theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  headerOverlay: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    left: 20, right: 20,
+    zIndex: 10,
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: theme.spacing.l,
+    paddingVertical: theme.spacing.m,
+    borderRadius: theme.borderRadius.l,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: 'rgba(13,5,32,0.5)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  logoutButton: {
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.pill,
+  },
+  logoutText: { ...theme.typography.body, fontWeight: '600', color: theme.colors.error },
+  title: { ...theme.typography.header, fontSize: 22 },
+  subtitle: { ...theme.typography.bodyMuted, fontSize: 14, marginBottom: 2 },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
+  loaderText: { ...theme.typography.bodyMuted, marginTop: theme.spacing.m },
+  bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
+  biddingCard: {
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.xl,
+    paddingBottom: Platform.OS === 'ios' ? theme.spacing.xxxl : theme.spacing.xl,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    shadowColor: 'rgba(13,5,32,0.5)',
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  statusCard: { alignItems: 'center' },
+  dragHandle: { width: 48, height: 5, backgroundColor: theme.colors.border, borderRadius: 3, alignSelf: 'center', marginBottom: theme.spacing.l },
+  cardHeader: { ...theme.typography.title, marginBottom: theme.spacing.l },
+  formContainer: { flexDirection: 'row', marginBottom: theme.spacing.l },
+  dotContainer: { alignItems: 'center', paddingTop: 16, marginRight: theme.spacing.m },
+  pickupDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primary },
+  line: { flex: 1, width: 2, backgroundColor: theme.colors.border, marginVertical: 4 },
+  dropoffDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.text },
+  inputsSection: { flex: 1, gap: 8 },
+  inputLocation: {
+    backgroundColor: 'transparent',
+    padding: 12,
+    fontSize: 16,
+    color: theme.colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    fontWeight: '500',
+  },
+  pricingSection: { marginBottom: theme.spacing.xl },
+  pricingCard: {
+    backgroundColor: theme.colors.surfaceHigh,
+    padding: theme.spacing.m,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  pricingMainRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+    paddingBottom: 8,
+  },
+  pricingInfo: {
+    flexDirection: 'column',
+  },
+  pricingDetails: {
+    alignItems: 'flex-end',
+  },
+  suggestedPriceLabel: {
+    ...theme.typography.label,
+    marginBottom: 2,
+    color: theme.colors.textSecondary,
+  },
+  suggestedPriceValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: theme.colors.primary,
+  },
+  pricingSubtext: {
+    ...theme.typography.bodyMuted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  tripDataRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  tripDataText: {
+    ...theme.typography.body,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  pricingInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  adjustPriceLabel: {
+    ...theme.typography.label,
+    color: theme.colors.textSecondary,
+  },
+  priceRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.s,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    width: 100,
+  },
+  currencyCompact: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginRight: 4,
+  },
+  priceInputCompact: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+    paddingVertical: 6,
+  },
+  noDriversBadge: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 140 : 120,
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surfaceHigh,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.pill,
+    shadowColor: 'rgba(13,5,32,0.5)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    zIndex: 10,
+  },
+  noDriversBadgeText: {
+    ...theme.typography.label,
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+  },
+
+  requestButton: {
+    backgroundColor: theme.colors.primary,
+    padding: 18,
+    borderRadius: theme.borderRadius.pill,
+    alignItems: 'center',
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  requestButtonDisabled: {
+    backgroundColor: theme.colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  requestButtonText: { ...theme.typography.button, fontSize: 18 },
+  statusTitle: { ...theme.typography.header, color: theme.colors.text, marginBottom: theme.spacing.s, textAlign: 'center' },
+  statusText: { ...theme.typography.body, textAlign: 'center' },
+  infoText: { ...theme.typography.bodyMuted, textAlign: 'center', marginTop: theme.spacing.m },
+  searchingContainer: {
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: 24,
+    paddingBottom: 32,
+  },
+  searchingContent: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xl,
+  },
+  searchingTitle: {
+    ...theme.typography.title,
+    textAlign: 'center',
+    marginTop: theme.spacing.l,
+    marginBottom: theme.spacing.xs,
+    color: theme.colors.text,
+  },
+  searchingSubtitle: {
+    ...theme.typography.bodyMuted,
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  loaderWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: 'rgba(13,5,32,0.5)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cancelRequestBtn: {
+    marginTop: theme.spacing.m,
+    alignSelf: 'center',
+    backgroundColor: theme.colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 100,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  cancelRequestBtnText: {
+    ...theme.typography.body,
+    color: theme.colors.error,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  authStripeBox: {
+    backgroundColor: theme.colors.surfaceHigh, 
+    borderColor: theme.colors.primary, 
+    borderWidth: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: theme.borderRadius.m,
+    marginBottom: 8
+  },
+  authStripeText: {
+    marginLeft: 10,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    fontSize: 14
+  },
+  chatBtn: {
+    marginTop: theme.spacing.l,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.pill,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignSelf: 'center',
+  },
+  chatBtnText: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  topDriverBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 20,
+    left: 16,
+    right: 16,
+    backgroundColor: theme.colors.surface,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.s,
+    padding: 16,
+    zIndex: 100,
+    ...theme.shadows.md,
+  },
+  topDriverBannerText: {
+    ...theme.typography.body,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  idleStatusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceHigh,
+    padding: 12,
+    borderRadius: theme.borderRadius.m,
+    marginBottom: 16,
+  },
+  idleStatusBannerText: {
+    ...theme.typography.body,
+    fontWeight: '600',
+  },
+  idleStatusBannerSubtext: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+  },
+});
