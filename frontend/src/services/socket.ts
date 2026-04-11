@@ -13,6 +13,15 @@ const defaultSocketURL =
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
 
+// CORRECCIÓN 4: Warning claro si la URL de socket no está definida
+if (!process.env.EXPO_PUBLIC_SOCKET_URL) {
+    console.warn(
+        '[Socket] ⚠️ EXPO_PUBLIC_SOCKET_URL no está definida. ' +
+        'Usando fallback a ' + defaultSocketURL + '. ' +
+        'En producción configúrala con: eas secret:create --name EXPO_PUBLIC_SOCKET_URL --value https://tu-backend.railway.app'
+    );
+}
+
 // BUG 8: Ubicación conocida para re-emisión tras reconexiones (BUG 10)
 let _lastKnownDriverLocation: { lat: number; lng: number } | null = null;
 

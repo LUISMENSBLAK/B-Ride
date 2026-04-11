@@ -13,6 +13,9 @@ const requestCooldowns = new Map();
 const COOLDOWN_MS = 30 * 1000;
 
 class MatchingService {
+    constructor() {
+        this.activeCampaigns = new Map();
+    }
 
     canRequest(passengerId) {
         const lastRequest = requestCooldowns.get(passengerId.toString());
@@ -89,6 +92,44 @@ class MatchingService {
                   Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                   Math.sin(dLon / 2) ** 2;
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    abortCampaign(rideId) {
+        const rid = rideId.toString();
+        if (this.activeCampaigns.has(rid)) {
+            clearTimeout(this.activeCampaigns.get(rid));
+            this.activeCampaigns.delete(rid);
+        }
+    }
+
+    async startMatchingCampaign(rideObj, io) {
+        try {
+            this.abortCampaign(rideObj._id);
+
+            const pickup = rideObj.pickupLocation || {};
+            const coords = pickup.coordinates || [];
+            if (coords.length < 2) return;
+            const lng = coords[0];
+            const lat = coords[1];
+
+            const { drivers, noDrivers } = await this.findWithFallback(lat, lng);
+
+            if (noDrivers || !drivers || drivers.length === 0) {
+                // CORRECCIÓN 9: Emitir evento si no hay conductores
+                io.to(rideObj.passenger.toString()).emit('no_drivers_available', {
+                    rideId: rideObj._id,
+                    message: "Lo sentimos, no hay conductores disponibles cerca de ti en este momento. Intenta de nuevo más tarde."
+                });
+                return;
+            }
+
+            // Emitir evento a los conductores encontrados
+            for (const { driver } of drivers) {
+                 io.to(driver._id.toString()).emit('new_ride_request', rideObj);
+            }
+        } catch (error) {
+            console.error('[MatchingService] Error en campaign:', error.message);
+        }
     }
 }
 

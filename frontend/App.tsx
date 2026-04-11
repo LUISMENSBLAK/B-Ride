@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StripeProvider } from '@stripe/stripe-react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { registerForPushNotificationsAsync, setupNotificationListeners } from './src/services/notifications/NotificationService';
 import { useAuthStore } from './src/store/authStore';
 import { initLocale } from './src/services/i18n';
 import AnimatedSplash from './src/components/AnimatedSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
+
+const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 
 export default function App() {
 
@@ -21,13 +24,18 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <AnimatedSplash>
-          <SafeAreaProvider>
-            <AppNavigator />
-          </SafeAreaProvider>
-        </AnimatedSplash>
-      </GestureHandlerRootView>
+      <StripeProvider
+        publishableKey={STRIPE_PUBLISHABLE_KEY}
+        merchantIdentifier="merchant.com.bride.app"
+      >
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <AnimatedSplash>
+            <SafeAreaProvider>
+              <AppNavigator />
+            </SafeAreaProvider>
+          </AnimatedSplash>
+        </GestureHandlerRootView>
+      </StripeProvider>
     </ErrorBoundary>
   );
 }

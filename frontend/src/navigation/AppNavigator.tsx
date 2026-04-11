@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text as RNText } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -34,6 +34,9 @@ import PaymentStatusScreen from '../screens/passenger/PaymentStatusScreen';
 import PassengerProfileScreen from '../screens/passenger/PassengerProfileScreen';
 import RideHistory from '../screens/RideHistory';
 import SettingsScreen from '../screens/passenger/SettingsScreen';
+
+// ─── Legal ─────────────────────────────────────────────────────────────────
+import LegalScreen, { hasAcceptedLegal } from '../screens/LegalScreen';
 
 const AuthStack = createNativeStackNavigator();
 const DriverTab = createBottomTabNavigator();
@@ -150,15 +153,36 @@ function PassengerNavigator() {
 }
 
 // ─── ROOT NAVIGATOR ─────────────────────────────────────────────────────────
+
+// CORRECCIÓN 5: Deep link config para Stripe onboarding return
+const linking = {
+  prefixes: ['bride://'],
+  config: {
+    screens: {
+      DriverApp: {
+        screens: {
+          DriverHome: 'driver/onboarding/return',
+        },
+      },
+    },
+  },
+};
+
 export default function AppNavigator() {
     const { user, isLoading, checkAuth } = useAuthStore();
     const theme = useAppTheme();
+    const [legalAccepted, setLegalAccepted] = useState<boolean | null>(null);
 
     useEffect(() => {
         checkAuth();
     }, []);
 
-    if (isLoading) {
+    // CORRECCIÓN 7: Verificar si aceptó los términos legales
+    useEffect(() => {
+        hasAcceptedLegal().then(setLegalAccepted);
+    }, []);
+
+    if (isLoading || legalAccepted === null) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
                 <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -167,13 +191,20 @@ export default function AppNavigator() {
     }
 
     return (
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} linking={linking}>
             <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
                 {user ? (
-                    user.role === 'DRIVER' ? (
-                        <AuthStack.Screen name="DriverApp" component={DriverNavigator} />
+                    // Si no ha aceptado legal, redirigir a LegalScreen
+                    !legalAccepted ? (
+                        <AuthStack.Screen name="Legal">
+                            {() => <LegalScreen onAccept={() => setLegalAccepted(true)} />}
+                        </AuthStack.Screen>
                     ) : (
-                        <AuthStack.Screen name="PassengerApp" component={PassengerNavigator} />
+                        user.role === 'DRIVER' ? (
+                            <AuthStack.Screen name="DriverApp" component={DriverNavigator} />
+                        ) : (
+                            <AuthStack.Screen name="PassengerApp" component={PassengerNavigator} />
+                        )
                     )
                 ) : (
                     <>

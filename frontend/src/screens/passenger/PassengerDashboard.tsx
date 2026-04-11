@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
+import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, AppState, Linking
@@ -156,6 +157,13 @@ export default function PassengerDashboard() {
     setRideStatus('SEARCHING');
   }, []));
 
+  // CORRECCIÓN 9: Si no hay conductores, avisarle al pasajero
+  useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
+    Alert.alert('Sin conductores', data.message);
+    resetFlow(); // Vuelve al estado IDLE
+    setPrice(''); // Limpiar precio propuesto
+  }, []));
+
   useRideSocketEvent('trip_bid_received', useCallback((updatedRide: any) => {
     if (updatedRide.bids) {
       const isFirstBid = useRideFlowStore.getState().bids.length === 0;
@@ -311,8 +319,10 @@ export default function PassengerDashboard() {
     }
   }, [selectedPlace, price, location, user]);
 
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
   const handleAcceptBid = useCallback(async (bidId: string, driverId: string) => {
-    if (acceptingBidId || paymentAuthorizing) return; // Prevent double click
+    if (acceptingBidId || paymentAuthorizing) return;
     setAcceptingBidId(bidId);
 
     if (currentRideId) {
@@ -320,14 +330,29 @@ export default function PassengerDashboard() {
            setPaymentAuthorizing(true);
            
            if (paymentMethod === 'CARD') {
+             // CORRECCIÓN 3: Stripe Payment Sheet real
              const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId);
              if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
-           } else if (paymentMethod === 'APPLE_PAY') {
-             // Simulación de Apple Pay
-             await new Promise(resolve => setTimeout(resolve, 800)); 
-           }
 
-           // 2. Si retención fue exitosa (o es CASH/APPLE_PAY mock), mandar accept
+             const { error: initError } = await initPaymentSheet({
+               paymentIntentClientSecret: stripeRes.clientSecret,
+               merchantDisplayName: 'B-Ride',
+               applePay: { merchantCountryCode: 'US' },
+               googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ },
+               defaultBillingDetails: { name: user?.name || '' },
+             });
+             if (initError) throw new Error(initError.message);
+
+             const { error: presentError } = await presentPaymentSheet();
+             if (presentError) {
+               // Usuario canceló el payment sheet — no emitir socket
+               setAcceptingBidId(null);
+               setPaymentAuthorizing(false);
+               return;
+             }
+           }
+           // Para CASH no hay payment sheet, emitir directamente
+
            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
            await socketService.emitWithAck('trip_accept_bid', {
              rideId: currentRideId,
@@ -343,7 +368,7 @@ export default function PassengerDashboard() {
            setPaymentAuthorizing(false);
        }
     }
-  }, [currentRideId, user, acceptingBidId, paymentAuthorizing]);
+  }, [currentRideId, user, acceptingBidId, paymentAuthorizing, initPaymentSheet, presentPaymentSheet]);
 
   const handleCancelRequest = useCallback(async () => {
     const rideId = currentRideIdRef.current;

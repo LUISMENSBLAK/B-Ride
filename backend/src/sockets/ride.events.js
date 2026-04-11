@@ -153,8 +153,12 @@ const rideEvents = (socket) => {
     socket.on('requestRide', async (rideData, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { passengerId, pickupLocation, dropoffLocation, proposedPrice, eventId } = rideData;
+            const { pickupLocation, dropoffLocation, proposedPrice, eventId } = rideData;
             
+            // CORRECCIÓN 10: Extraer passengerId del JWT de forma segura (ignorar el del payload)
+            const passengerId = socket.user?.id;
+            if (!passengerId) throw new Error('No autorizado');
+
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if(isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
                 return;
@@ -215,8 +219,12 @@ const rideEvents = (socket) => {
     socket.on('trip_bid', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { rideId, driverId, price, passengerId, eventId } = payload;
+            const { rideId, price, passengerId, eventId } = payload;
             
+            // CORRECCIÓN 10: Extraer driverId del JWT
+            const driverId = socket.user?.id;
+            if (!driverId || socket.user?.role !== 'DRIVER') throw new Error('No autorizado');
+
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
                 return;
@@ -253,8 +261,12 @@ const rideEvents = (socket) => {
     socket.on('trip_accept_bid', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { rideId, passengerId, bidId, driverId, eventId } = payload;
+            const { rideId, bidId, driverId, eventId } = payload;
             
+            // CORRECCIÓN 10: Validar ownership del pasajero
+            const passengerId = socket.user?.id;
+            if (!passengerId) throw new Error('No autorizado');
+
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
                 return;
@@ -301,7 +313,11 @@ const rideEvents = (socket) => {
     socket.on('cancel_ride', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { rideId, passengerId, eventId } = payload;
+            const { rideId, eventId } = payload;
+            
+            // CORRECCIÓN 10: Validar
+            const passengerId = socket.user?.id;
+            if (!passengerId) throw new Error('No autorizado');
 
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
