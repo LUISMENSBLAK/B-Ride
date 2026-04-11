@@ -6,8 +6,8 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withSpring,
   useAnimatedScrollHandler, interpolate, Extrapolation,
 } from 'react-native-reanimated';
-import { useAppTheme } from '../../hooks/useAppTheme';
-import { useTranslation } from '../../hooks/useTranslation';
+import { useAppTheme } from '../hooks/useAppTheme';
+import { useTranslation } from '../hooks/useTranslation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');

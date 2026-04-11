@@ -30,6 +30,7 @@ import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
 import { haversineKm, etaMinutes } from '../../utils/geo';
+import { useCurrency } from '../../hooks/useCurrency';
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function PassengerDashboard() {
@@ -42,6 +43,7 @@ export default function PassengerDashboard() {
   
   const theme = useAppTheme();
   const { t } = useTranslation();
+  const { currency, formatPrice, convertToLocal, convertToUsd } = useCurrency();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const bidStylesFixed = React.useMemo(() => getBidStyles(theme), [theme]);
 
@@ -77,12 +79,12 @@ export default function PassengerDashboard() {
 
   useEffect(() => {
     if (distanceKm > 0) {
-      const suggestedPrice = 2 + (1.20 * distanceKm) + (0.25 * estimatedTimeMin);
-      setPrice(suggestedPrice.toFixed(2));
+      const suggestedPriceUsd = 2 + (1.20 * distanceKm) + (0.25 * estimatedTimeMin);
+      setPrice(convertToLocal(suggestedPriceUsd).toFixed(2));
     } else {
       setPrice('');
     }
-  }, [distanceKm, estimatedTimeMin]);
+  }, [distanceKm, estimatedTimeMin, currency]);
 
   const mapRef = useRef<MapRendererHandle>(null);
   const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);
@@ -278,6 +280,18 @@ export default function PassengerDashboard() {
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
   const handleRequestRide = useCallback(async () => {
+    if (!user?.avatarUrl && !user?.profilePhoto) {
+        Alert.alert(
+            'Foto Obligatoria',
+            'Por seguridad, debes subir una foto de perfil antes de pedir un viaje.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Subir Foto', onPress: () => navigation.navigate('PassengerProfile') }
+            ]
+        );
+        return;
+    }
+
     if (distanceKm > 100) {
       Alert.alert(t('errors.outOfRange'), t('errors.outOfRangeMsg'));
       return;
@@ -309,7 +323,8 @@ export default function PassengerDashboard() {
           longitude: selectedPlace.longitude,
           address: selectedPlace.displayName,
         },
-        proposedPrice: Number(price),
+        proposedPrice: convertToUsd(Number(price)),
+        currency: currency,
         paymentMethod,
       }, 3, 5000);
       // 'rideRequestCreated' socket event will update status
@@ -331,11 +346,11 @@ export default function PassengerDashboard() {
            
            if (paymentMethod === 'CARD') {
              // CORRECCIÓN 3: Stripe Payment Sheet real
-             const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId);
+             const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId, currency);
              if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
 
              const { error: initError } = await initPaymentSheet({
-               paymentIntentClientSecret: stripeRes.clientSecret,
+               paymentIntentClientSecret: stripeRes.clientSecret as string,
                merchantDisplayName: 'B-Ride',
                applePay: { merchantCountryCode: 'US' },
                googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ },
@@ -526,7 +541,7 @@ export default function PassengerDashboard() {
                  <View style={styles.pricingMainRow}>
                    <View style={styles.pricingInfo}>
                      <Text style={styles.suggestedPriceLabel}>{t('form.suggestedPrice')}</Text>
-                     <Text style={styles.suggestedPriceValue}>${price}</Text>
+                     <Text style={styles.suggestedPriceValue}>{formatPrice(convertToUsd(price))}</Text>
                    </View>
                    <View style={styles.pricingDetails}>
                      <Text style={styles.tripDataText}>{distanceKm} km</Text>
@@ -537,7 +552,7 @@ export default function PassengerDashboard() {
                  <View style={styles.pricingInputRow}>
                    <Text style={styles.adjustPriceLabel}>{t('form.adjustLabel')}</Text>
                    <View style={styles.priceRowCompact}>
-                     <Text style={styles.currencyCompact}>$</Text>
+                     <Text style={styles.currencyCompact}>{currency}</Text>
                      <TextInput
                        style={styles.priceInputCompact}
                        placeholder="0.00"
@@ -598,7 +613,7 @@ export default function PassengerDashboard() {
                     {t('form.adjustPrice')}
                   </Text>
                   <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.primary, marginBottom: 12 }}>
-                    ${price}
+                    {formatPrice(convertToUsd(price))}
                   </Text>
                   <View style={{ flexDirection: 'row', gap: 10 }}>
                     {[5, 10, 15].map(add => (

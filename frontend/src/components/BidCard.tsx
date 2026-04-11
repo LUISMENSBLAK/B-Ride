@@ -15,6 +15,7 @@ import Animated, {
 import { useAppTheme } from '../hooks/useAppTheme';
 import { type Theme } from '../theme';
 import { useTranslation } from '../hooks/useTranslation';
+import { useCurrency } from '../hooks/useCurrency';
 
 const BID_TTL_SECONDS = 25;
 
@@ -41,6 +42,7 @@ const StarRating = memo(({ rating, size = 12 }: { rating: number; size?: number 
 
 const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
   const { t } = useTranslation();
+  const { formatPrice } = useCurrency();
   const driverName: string = bid.driver?.name ?? t('auth.roleDriver');
   const initial = driverName.charAt(0).toUpperCase();
   const avgRating: number = bid.driver?.avgRating ?? 0;
@@ -143,7 +145,7 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
         {/* Precio + botón */}
         <View style={bidStyles.priceCol}>
           <Text style={[bidStyles.price, isBest && !expired && bidStyles.priceBest]}>
-            ${bid.price}
+            {formatPrice(bid.price)}
           </Text>
           {!expired ? (
             <TouchableOpacity

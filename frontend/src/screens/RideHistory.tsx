@@ -2,7 +2,7 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList,
-  StyleSheet, TouchableOpacity, Platform,
+  StyleSheet, TouchableOpacity, Platform, Modal, ActivityIndicator
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import client from '../api/client';
@@ -11,6 +11,7 @@ import { theme } from '../theme';
 import Loader from '../components/Loader';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { useTranslation } from '../hooks/useTranslation';
+import { useCurrency } from '../hooks/useCurrency';
 
 export default function RideHistory() {
   const theme = useAppTheme();
@@ -18,6 +19,7 @@ export default function RideHistory() {
 
   const { user } = useAuthStore();
   const { t, lang } = useTranslation();
+  const { formatPrice } = useCurrency();
 
   const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     COMPLETED:   { label: t('history.status.completed'),  color: theme.colors.success,     bg: theme.colors.successLight },
@@ -30,30 +32,54 @@ export default function RideHistory() {
 
   const [rides, setRides] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0); // trigger re-fetch
+  const [retryCount, setRetryCount] = useState(0); 
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  // Modal State
+  const [selectedRide, setSelectedRide] = useState<any | null>(null);
 
   const retry = useCallback(() => {
     setError(null);
     setLoading(true);
+    setPage(1);
+    setHasMore(true);
+    setRides([]);
     setRetryCount(c => c + 1);
   }, []);
 
   useEffect(() => {
     const fetchHistory = async () => {
+      if (!hasMore && page !== 1) return;
+      if (page === 1) setLoading(true);
+      else setLoadingMore(true);
+
       try {
-        const res = await client.get('/rides/history');
+        const res = await client.get(`/rides/history?page=${page}&limit=10`);
         if (res.data.success) {
-          setRides(res.data.data);
+          const fetched = res.data.data;
+          if (page === 1) setRides(fetched);
+          else setRides(prev => [...prev, ...fetched]);
+          
+          if (page >= res.data.pages) setHasMore(false);
         }
       } catch (err: any) {
-        setError(err.response?.data?.message || err.message || 'Error al obtener historial');
+        if (page === 1) setError(err.response?.data?.message || err.message || 'Error al obtener historial');
       } finally {
         setLoading(false);
+        setLoadingMore(false);
       }
     };
     fetchHistory();
-  }, [retryCount]);
+  }, [page, retryCount]);
+
+  const onEndReached = () => {
+    if (!loading && !loadingMore && hasMore) {
+        setPage(p => p + 1);
+    }
+  };
 
   const renderItem = ({ item }: { item: any }) => {
     // Precio final: bid aceptado o precio propuesto original
@@ -81,44 +107,46 @@ export default function RideHistory() {
     });
 
     return (
-      <View style={styles.card}>
-        {/* Header de la card */}
-        <View style={styles.cardHeader}>
-          <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
-            <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
-          </View>
-          <Text style={styles.price}>${displayPrice}</Text>
-        </View>
+      <TouchableOpacity activeOpacity={0.8} onPress={() => setSelectedRide(item)}>
+          <View style={styles.card}>
+            {/* Header de la card */}
+            <View style={styles.cardHeader}>
+              <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
+                <Text style={[styles.statusText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
+              </View>
+              <Text style={styles.price}>{formatPrice(displayPrice)}</Text>
+            </View>
 
-        {/* Ruta: origen → destino */}
-        <View style={styles.routeContainer}>
-          <View style={styles.routeDots}>
-            <View style={styles.pickupDot} />
-            <View style={styles.routeLine} />
-            <View style={styles.dropoffDot} />
-          </View>
-          <View style={styles.routeTexts}>
-            <Text style={styles.routeLabel}>{t('history.origin')}</Text>
-            <Text style={styles.routeAddress} numberOfLines={1}>
-              {item.pickupLocation?.address ?? '—'}
-            </Text>
-            <View style={styles.routeSpacer} />
-            <Text style={styles.routeLabel}>{t('history.destination')}</Text>
-            <Text style={styles.routeAddress} numberOfLines={1}>
-              {item.dropoffLocation?.address ?? '—'}
-            </Text>
-          </View>
-        </View>
+            {/* Ruta: origen → destino */}
+            <View style={styles.routeContainer}>
+              <View style={styles.routeDots}>
+                <View style={styles.pickupDot} />
+                <View style={styles.routeLine} />
+                <View style={styles.dropoffDot} />
+              </View>
+              <View style={styles.routeTexts}>
+                <Text style={styles.routeLabel}>{t('history.origin')}</Text>
+                <Text style={styles.routeAddress} numberOfLines={1}>
+                  {item.pickupLocation?.address ?? '—'}
+                </Text>
+                <View style={styles.routeSpacer} />
+                <Text style={styles.routeLabel}>{t('history.destination')}</Text>
+                <Text style={styles.routeAddress} numberOfLines={1}>
+                  {item.dropoffLocation?.address ?? '—'}
+                </Text>
+              </View>
+            </View>
 
-        {/* Footer: conductor/pasajero + fecha */}
-        <View style={styles.cardFooter}>
-          <Text style={styles.footerText}>
-            <Text style={styles.footerLabel}>{otherPartyLabel}: </Text>
-            {otherPartyName}
-          </Text>
-          <Text style={styles.dateText}>{formattedDate}</Text>
-        </View>
-      </View>
+            {/* Footer: conductor/pasajero + fecha */}
+            <View style={styles.cardFooter}>
+              <Text style={styles.footerText}>
+                <Text style={styles.footerLabel}>{otherPartyLabel}: </Text>
+                {otherPartyName}
+              </Text>
+              <Text style={styles.dateText}>{formattedDate}</Text>
+            </View>
+          </View>
+      </TouchableOpacity>
     );
   };
 
@@ -173,6 +201,9 @@ export default function RideHistory() {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={loadingMore ? <ActivityIndicator size="small" style={{ margin: 20 }} /> : null}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🚗</Text>
@@ -181,6 +212,26 @@ export default function RideHistory() {
           </View>
         }
       />
+
+      {/* MODAL BLOQUE 6 */}
+      <Modal visible={!!selectedRide} animationType="slide" transparent>
+         <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+               <Text style={styles.modalTitle}>Detalles del Viaje</Text>
+               {selectedRide && (
+                  <>
+                    <Text style={styles.modalLabel}>ID: {selectedRide._id}</Text>
+                    <Text style={styles.modalLabel}>Estado: {selectedRide.status}</Text>
+                    <Text style={styles.modalLabel}>Origen: {selectedRide.pickupLocation?.address}</Text>
+                    <Text style={styles.modalLabel}>Destino: {selectedRide.dropoffLocation?.address}</Text>
+                  </>
+               )}
+               <TouchableOpacity style={styles.modalBtn} onPress={() => setSelectedRide(null)}>
+                  <Text style={styles.modalBtnText}>Cerrar</Text>
+               </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
     </View>
   );
 }
@@ -378,4 +429,14 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 24,
   },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center'
+  },
+  modalContent: {
+    width: '80%', padding: 20, backgroundColor: theme.colors.background, borderRadius: 12
+  },
+  modalTitle: { ...theme.typography.title, fontSize: 20, marginBottom: 15 },
+  modalLabel: { ...theme.typography.body, marginBottom: 10 },
+  modalBtn: { marginTop: 20, padding: 12, backgroundColor: theme.colors.primary, borderRadius: 8, alignItems: 'center' },
+  modalBtnText: { color: theme.colors.primaryText, fontWeight: '700' }
 });

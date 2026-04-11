@@ -2,65 +2,128 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
 
+const RefreshToken = require('../models/RefreshToken');
+const uuid = require('uuid');
+
 class AuthService {
     async register(userData) {
         const { name, email, password, role, phoneNumber } = userData;
 
-        // Check if user exists
         const userExists = await User.findOne({ email });
         if (userExists) {
             throw new Error('User already exists');
         }
 
-        // Hash password
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Create user
+        // Bloque 2: Generar y guardar código 6 dígitos
+        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedCode = await bcrypt.hash(verifyCode, salt);
+
         const user = await User.create({
             name,
             email,
             password: hashedPassword,
             role: role || 'USER',
             phoneNumber,
+            isEmailVerified: false,
+            emailVerificationToken: hashedCode,
+            emailVerificationExpires: Date.now() + 15 * 60 * 1000,
         });
 
-        const accessToken = generateAccessToken(user._id);
-        const refreshToken = generateRefreshToken(user._id);
+        console.log(`[EMAIL SIMULADO] Para ${email}: Tu código de B-Ride es ${verifyCode}`);
 
+        // Aunque no esté verificado, podemos devolver success, pero no tokens (o tokens pero no lo dejamos pasar)
+        // El prompt indica "En el login, si isEmailVerified es false devuelve 403" 
+        // por ende sí podemos dar el JWT pero bloquearemos sockets y endpoints, 
+        // o mejor, que se autentique cuando pida login. Devolveré null tokens en el registro para forzar el flujo clásico.
+        
         return {
             _id: user.id,
             name: user.name,
             email: user.email,
-            role: user.role,
-            accessToken,
-            refreshToken,
+            message: 'Requiere verificar email. Revisa tu bandeja de entrada.',
+            verify_required: true
         };
     }
 
-    async login(email, password) {
-        // Find user and include password for validation
-        const user = await User.findOne({ email }).select('+password');
-        if (!user) {
-            throw new Error('Invalid credentials');
+    async login(email, password, deviceMeta) {
+        const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil');
+        if (!user) throw new Error('Invalid credentials');
+
+        // B2: Account Lockout
+        if (user.isLocked) {
+           const mins = Math.ceil((user.lockUntil - Date.now()) / 60000);
+           throw new Error(`Cuenta bloqueada. Intenta de nuevo en ${mins} minutos.`);
         }
 
-        // Compare password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
+            user.loginAttempts += 1;
+            if (user.loginAttempts >= 5) {
+                user.lockUntil = Date.now() + 15 * 60 * 1000;
+            }
+            await user.save();
             throw new Error('Invalid credentials');
         }
 
+        // B2: Email Verify Check
+        if (!user.isEmailVerified && !user.emailVerified) {
+            // Re-generar token
+            const salt = await bcrypt.genSalt(10);
+            const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+            user.emailVerificationToken = await bcrypt.hash(verifyCode, salt);
+            user.emailVerificationExpires = Date.now() + 15 * 60 * 1000;
+            await user.save();
+            console.log(`[EMAIL SIMULADO] Para ${email}: Reenvío. Tu nuevo código de B-Ride es ${verifyCode}`);
+            const e = new Error('NOT_VERIFIED');
+            e.code = 403;
+            throw e;
+        }
+
+        // B2: Success -> Reset Attempts
+        user.loginAttempts = 0;
+        user.lockUntil = undefined;
+        
+        // B2: Dispositivo Nuevo Tracking
+        if (deviceMeta && deviceMeta.deviceId) {
+            const isKnown = user.knownDevices.find(d => d.deviceId === deviceMeta.deviceId);
+            if (!isKnown) {
+                user.knownDevices.push({
+                    deviceId: deviceMeta.deviceId,
+                    deviceName: deviceMeta.deviceName || 'Desconocido',
+                    platform: deviceMeta.platform || 'Unknown',
+                    firstSeen: Date.now(),
+                    lastSeen: Date.now()
+                });
+                console.log(`[EMAIL SIMULADO ALERTA] Nuevo inicio de sesión desde ${deviceMeta.deviceName || 'dispositivo nuevo'} en ${new Date().toISOString()}`);
+            } else {
+                isKnown.lastSeen = Date.now();
+            }
+        }
+        await user.save();
+
         const accessToken = generateAccessToken(user._id);
-        const refreshToken = generateRefreshToken(user._id);
+        const rawRefreshToken = generateRefreshToken(user._id);
+
+        // B2: Familia de Tokens
+        const familyId = uuid.v4();
+        await RefreshToken.create({
+            token: rawRefreshToken,
+            user: user._id,
+            familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+        });
 
         return {
             _id: user.id,
             name: user.name,
             email: user.email,
             role: user.role,
+            approvalStatus: user.driverApprovalStatus || user.approvalStatus,
             accessToken,
-            refreshToken,
+            refreshToken: rawRefreshToken,
         };
     }
 }

@@ -1,7 +1,9 @@
 import { useAppTheme } from '../../hooks/useAppTheme';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image, Alert, ActivityIndicator } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
+import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 import { theme } from '../../theme';
 import SkeletonLoader from '../../components/SkeletonLoader';
@@ -12,8 +14,9 @@ export default function PassengerProfileScreen() {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const { t, lang } = useTranslation();
   // BUG 17 FIX: Conectar Switch al estado real de notificaciones
   const { notificationsEnabled, toggleNotifications, loadSettings } = useSettings();
@@ -36,6 +39,45 @@ export default function PassengerProfileScreen() {
     return () => clearTimeout(timer);
   }, []);
 
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      uploadPhoto(result.assets[0].uri);
+    }
+  };
+
+  const uploadPhoto = async (uri: string) => {
+      setUploading(true);
+      try {
+          const filename = uri.split('/').pop() || 'avatar.jpg';
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : `image`;
+
+          const formData = new FormData();
+          // @ts-ignore
+          formData.append('avatar', { uri, name: filename, type });
+
+          const res = await client.post('/auth/profile/avatar', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          
+          if (res.data.success && res.data.avatarUrl) {
+              await updateUser({ avatarUrl: res.data.avatarUrl });
+              Alert.alert('Éxito', 'Foto de perfil actualizada correctamente.');
+          }
+      } catch (err: any) {
+          Alert.alert('Error', err.response?.data?.message || 'No se pudo subir la foto');
+      } finally {
+          setUploading(false);
+      }
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -55,17 +97,23 @@ export default function PassengerProfileScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.profileCard}>
+      <TouchableOpacity activeOpacity={0.8} style={styles.profileCard} onPress={handlePickImage} disabled={uploading}>
         <View style={styles.avatar}>
           {user?.avatarUrl ? (
             <Image source={{ uri: user.avatarUrl }} style={{ width: '100%', height: '100%', borderRadius: 40 }} />
           ) : (
             <Text style={styles.avatarText}>{user?.name?.[0]?.toUpperCase() ?? 'P'}</Text>
           )}
+          {uploading && (
+             <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' }]}>
+                 <ActivityIndicator color="#fff" />
+             </View>
+          )}
         </View>
+        <View style={styles.editBadge}><Text style={{fontSize: 12}}>✏️</Text></View>
         <Text style={styles.name}>{user?.name ?? 'Pasajero'}</Text>
         <Text style={styles.email}>{user?.email}</Text>
-      </View>
+      </TouchableOpacity>
 
       <View style={styles.section}>
         <Text style={styles.sectionLabel}>{t('settings.preferences')}</Text>
@@ -101,7 +149,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.m,
   },
   avatarText: { fontSize: 36, fontWeight: '800', color: theme.colors.primaryText },
-  name: { ...theme.typography.header, fontSize: 24, marginBottom: 4 },
+  editBadge: { position: 'absolute', top: 90, backgroundColor: theme.colors.surface, padding: 6, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.border },
+  name: { ...theme.typography.header, fontSize: 24, marginBottom: 4, marginTop: 8 },
   email: { ...theme.typography.bodyMuted },
   section: {
     backgroundColor: theme.colors.surface,

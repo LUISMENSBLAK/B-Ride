@@ -6,6 +6,7 @@ import { useAuthStore } from '../../store/authStore';
 import { theme } from '../../theme';
 import { useTranslation } from '../../hooks/useTranslation';
 import client from '../../api/client';
+import { useCurrency } from '../../hooks/useCurrency';
 
 export default function EarningsScreen() {
   const theme = useAppTheme();
@@ -14,6 +15,7 @@ export default function EarningsScreen() {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const { t } = useTranslation();
+  const { formatPrice } = useCurrency();
 
   // BUG 16 FIX: Estado real en vez de hardcodeado
   const [todayStats, setTodayStats] = useState({ trips: 0, earned: 0.00, rating: user?.avgRating ?? 5.0 });
@@ -103,7 +105,7 @@ export default function EarningsScreen() {
       {/* Card principal */}
       <View style={styles.earningsCard}>
         <Text style={styles.cardLabel}>{t('driver.earningsToday')}</Text>
-        <Text style={styles.earningsAmount}>${todayStats.earned.toFixed(2)}</Text>
+        <Text style={styles.earningsAmount}>{formatPrice(todayStats.earned)}</Text>
         <Text style={styles.cardSub}>
           {todayStats.trips === 1 
             ? t('driver.tripsCompleted_one', { count: 1 }) 
