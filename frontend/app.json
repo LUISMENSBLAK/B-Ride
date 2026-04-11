@@ -6,6 +6,12 @@
     "orientation": "portrait",
     "icon": "./assets/ride.png",
     "userInterfaceStyle": "dark",
+    "scheme": "bride",
+    "extra": {
+      "eas": {
+        "projectId": "REEMPLAZAR_CON_TU_EAS_PROJECT_ID"
+      }
+    },
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/ride.png",
@@ -15,6 +21,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bride.app",
+      "backgroundModes": ["location"],
+      "entitlements": {
+        "com.apple.developer.location.push": true
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "B-Ride necesita tu ubicación para mostrarte conductores cercanos y calcular rutas.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real.",
@@ -53,7 +63,14 @@
           "color": "#276EF1"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.bride.app",
+          "enableGooglePay": true
+        }
+      ]
     ]
   }
 }

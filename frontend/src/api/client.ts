@@ -1,15 +1,23 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform, Alert } from 'react-native';
 
-import { Platform } from 'react-native';
-
-// For Android emulator it usually is 10.0.2.2.
-// For iOS simulator, localhost works.
+// CORRECCIÓN 4: Warning claro si EXPO_PUBLIC_API_URL no está definida
 const defaultURL = Platform.OS === 'android' ? 'http://10.0.2.2:5001/api' : 'http://localhost:5001/api';
 const baseURL = process.env.EXPO_PUBLIC_API_URL || defaultURL;
 
+if (!process.env.EXPO_PUBLIC_API_URL) {
+    console.warn(
+        '[API Client] ⚠️ EXPO_PUBLIC_API_URL no está definida. ' +
+        'Usando fallback a ' + defaultURL + '. ' +
+        'En producción configúrala con: eas secret:create --name EXPO_PUBLIC_API_URL --value https://tu-backend.railway.app/api'
+    );
+}
+
+// CORRECCIÓN 12: Timeout global de 10 segundos
 const client = axios.create({
     baseURL,
+    timeout: 10000,
 });
 
 client.interceptors.request.use(
@@ -32,13 +40,26 @@ client.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
+        // CORRECCIÓN 12: Manejo de errores de red (sin respuesta del servidor)
+        if (!error.response) {
+            // Solo mostrar alerta si no es un retry interno
+            if (!originalRequest._networkAlertShown) {
+                originalRequest._networkAlertShown = true;
+                Alert.alert(
+                    'Sin conexión',
+                    'Verifica tu internet e intenta de nuevo.',
+                    [{ text: 'OK' }]
+                );
+            }
+            return Promise.reject(error);
+        }
+
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
             try {
                 const refreshToken = await AsyncStorage.getItem('refreshToken');
                 if (!refreshToken) {
-                    // LAUNCH 8 FIX: Hacer logout del store
                     const { useAuthStore } = require('../store/authStore');
                     useAuthStore.getState().logout();
                     return Promise.reject(error);
@@ -53,12 +74,10 @@ client.interceptors.response.use(
                     return client(originalRequest);
                 }
             } catch (err) {
-                // LAUNCH 8 FIX: Refresh falló → logout completo del store
                 try {
                     const { useAuthStore } = require('../store/authStore');
                     await useAuthStore.getState().logout();
                 } catch (logoutErr) {
-                    // Fallback: limpiar manualmente
                     await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
                 }
                 return Promise.reject(err);

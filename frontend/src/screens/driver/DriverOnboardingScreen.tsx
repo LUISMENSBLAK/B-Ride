@@ -4,29 +4,28 @@ import {
   ScrollView, Alert, Platform, ActivityIndicator, SafeAreaView
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Linking from 'expo-linking';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useTranslation } from '../../hooks/useTranslation';
 import { useAuthStore } from '../../store/authStore';
 import client from '../../api/client';
 
-type Step = 'PERSONAL' | 'VEHICLE' | 'DOCUMENTS' | 'WAITING';
+type Step = 'VEHICLE' | 'DOCUMENTS' | 'PAYMENT';
 
 /**
- * V2: Onboarding de conductor en 4 pasos.
- * Restricción: conductor no puede ponerse online si no está APPROVED.
+ * CORRECCIÓN 8: V2 Onboarding de conductor en 3 pasos:
+ * 1. Vehículo
+ * 2. Documentos (Carnet)
+ * 3. Stripe Connect
  */
 export default function DriverOnboardingScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, checkAuth } = useAuthStore();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
-  const [step, setStep] = useState<Step>('PERSONAL');
+  const [step, setStep] = useState<Step>('VEHICLE');
   const [loading, setLoading] = useState(false);
-
-  // Personal
-  const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState('');
 
   // Vehicle
   const [make, setMake] = useState('');
@@ -37,11 +36,8 @@ export default function DriverOnboardingScreen() {
   const [vehicleType, setVehicleType] = useState('SEDAN');
   const [capacity, setCapacity] = useState('4');
 
-  // Documents (URIs)
+  // Documents
   const [licenseUri, setLicenseUri] = useState<string | null>(null);
-  const [insuranceUri, setInsuranceUri] = useState<string | null>(null);
-  const [registrationUri, setRegistrationUri] = useState<string | null>(null);
-  const [vehiclePhotoUri, setVehiclePhotoUri] = useState<string | null>(null);
 
   const pickImage = async (setter: (uri: string) => void) => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -56,16 +52,9 @@ export default function DriverOnboardingScreen() {
   const submitStep = async () => {
     setLoading(true);
     try {
-      if (step === 'PERSONAL') {
-        if (!name || !phone) {
-          Alert.alert('Error', 'Nombre y teléfono son obligatorios');
-          return;
-        }
-        await client.put('/auth/profile', { name, phoneNumber: phone });
-        setStep('VEHICLE');
-      } else if (step === 'VEHICLE') {
-        if (!make || !model || !plate) {
-          Alert.alert('Error', 'Marca, modelo y placa son obligatorios');
+      if (step === 'VEHICLE') {
+        if (!make || !model || !plate || !color || !year) {
+          Alert.alert('Error', 'Todos los campos del vehículo son obligatorios');
           return;
         }
         await client.put('/auth/profile', {
@@ -79,15 +68,14 @@ export default function DriverOnboardingScreen() {
         setStep('DOCUMENTS');
       } else if (step === 'DOCUMENTS') {
         if (!licenseUri) {
-          Alert.alert('Error', 'La licencia es obligatoria');
+          Alert.alert('Error', 'La foto del carnet de conducir es obligatoria');
           return;
         }
-        // En producción usar FormData + Cloudinary (B2)
-        // Por ahora marca como subidos
+        // En producción aquí se subiría a Cloudinary (B2)
         await client.put('/auth/profile', {
           approvalStatus: 'UNDER_REVIEW',
         });
-        setStep('WAITING');
+        setStep('PAYMENT');
       }
     } catch (e: any) {
       Alert.alert('Error', e.response?.data?.message || 'Error al guardar');
@@ -96,13 +84,20 @@ export default function DriverOnboardingScreen() {
     }
   };
 
-  const renderPersonal = () => (
-    <View>
-      <Text style={styles.stepTitle}>📋 Datos personales</Text>
-      <TextInput style={styles.input} placeholder="Nombre completo" placeholderTextColor={theme.colors.inputPlaceholder} value={name} onChangeText={setName} returnKeyType="next" />
-      <TextInput style={styles.input} placeholder="Teléfono" placeholderTextColor={theme.colors.inputPlaceholder} value={phone} onChangeText={setPhone} keyboardType="phone-pad" returnKeyType="done" />
-    </View>
-  );
+  const handleConnectStripe = async () => {
+    setLoading(true);
+    try {
+      const res = await client.post('/payment/onboard');
+      if (res.data.success && res.data.url) {
+        // Abre el navegador del sistema para el onboarding de Stripe
+        Linking.openURL(res.data.url);
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e.response?.data?.message || 'Error conectando con Stripe');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderVehicle = () => (
     <View>
@@ -110,12 +105,11 @@ export default function DriverOnboardingScreen() {
       <TextInput style={styles.input} placeholder="Marca (ej: Toyota)" placeholderTextColor={theme.colors.inputPlaceholder} value={make} onChangeText={setMake} returnKeyType="next" />
       <TextInput style={styles.input} placeholder="Modelo (ej: Corolla)" placeholderTextColor={theme.colors.inputPlaceholder} value={model} onChangeText={setModel} returnKeyType="next" />
       <View style={styles.row}>
-        <TextInput style={[styles.input, styles.halfInput]} placeholder="Año" placeholderTextColor={theme.colors.inputPlaceholder} value={year} onChangeText={setYear} keyboardType="numeric" />
-        <TextInput style={[styles.input, styles.halfInput]} placeholder="Color" placeholderTextColor={theme.colors.inputPlaceholder} value={color} onChangeText={setColor} />
+        <TextInput style={[styles.input, styles.halfInput]} placeholder="Año" placeholderTextColor={theme.colors.inputPlaceholder} value={year} onChangeText={setYear} keyboardType="numeric" returnKeyType="next" />
+        <TextInput style={[styles.input, styles.halfInput]} placeholder="Color" placeholderTextColor={theme.colors.inputPlaceholder} value={color} onChangeText={setColor} returnKeyType="next" />
       </View>
-      <TextInput style={styles.input} placeholder="Placa (ej: ABC-1234)" placeholderTextColor={theme.colors.inputPlaceholder} value={plate} onChangeText={setPlate} autoCapitalize="characters" returnKeyType="next" />
-      <TextInput style={styles.input} placeholder="Capacidad de pasajeros" placeholderTextColor={theme.colors.inputPlaceholder} value={capacity} onChangeText={setCapacity} keyboardType="numeric" returnKeyType="done" />
-
+      <TextInput style={styles.input} placeholder="Matrícula (ej: ABC-1234)" placeholderTextColor={theme.colors.inputPlaceholder} value={plate} onChangeText={setPlate} autoCapitalize="characters" returnKeyType="next" />
+      
       <Text style={styles.label}>Tipo de vehículo:</Text>
       <View style={styles.typeRow}>
         {['SEDAN', 'SUV', 'VAN', 'MOTO'].map(vt => (
@@ -130,78 +124,66 @@ export default function DriverOnboardingScreen() {
   const renderDocuments = () => (
     <View>
       <Text style={styles.stepTitle}>📄 Documentos</Text>
-      <DocUploadRow label="Licencia de conducir *" uri={licenseUri} onPress={() => pickImage(setLicenseUri)} theme={theme} />
-      <DocUploadRow label="Seguro del vehículo" uri={insuranceUri} onPress={() => pickImage(setInsuranceUri)} theme={theme} />
-      <DocUploadRow label="Registro vehicular" uri={registrationUri} onPress={() => pickImage(setRegistrationUri)} theme={theme} />
-      <DocUploadRow label="Foto del vehículo" uri={vehiclePhotoUri} onPress={() => pickImage(setVehiclePhotoUri)} theme={theme} />
+      <Text style={styles.bodyText}>Necesitamos una foto legible de tu carnet de conducir para verificarte.</Text>
+      <TouchableOpacity style={styles.uploadBox} onPress={() => pickImage(setLicenseUri)}>
+        <Text style={styles.uploadIcon}>{licenseUri ? '✅' : '📷'}</Text>
+        <Text style={styles.uploadText}>{licenseUri ? 'Carnet subido (tocar para cambiar)' : 'Tocar para subir foto del carnet'}</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const renderWaiting = () => (
-    <View style={styles.waitingContainer}>
-      <Text style={styles.waitingEmoji}>⏳</Text>
-      <Text style={styles.waitingTitle}>Documentos en revisión</Text>
-      <Text style={styles.waitingSubtitle}>
-        Tu solicitud está siendo revisada por nuestro equipo. Te notificaremos cuando sea aprobada.
+  const renderPayment = () => (
+    <View>
+      <Text style={styles.stepTitle}>💳 Recibe tus pagos</Text>
+      <Text style={styles.bodyText}>
+        B-Ride utiliza Stripe para procesar los pagos y enviarte tus ganancias de forma segura. 
+        Conecta tu cuenta para poder recibir viajes.
       </Text>
+      <TouchableOpacity style={styles.stripeBtn} onPress={handleConnectStripe} disabled={loading}>
+        {loading ? <ActivityIndicator color="#FFF" /> : (
+          <Text style={styles.stripeBtnText}>Conectar cuenta con Stripe</Text>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.refreshBtn} onPress={checkAuth} disabled={loading}>
+        <Text style={styles.refreshBtnText}>Ya conecté mi cuenta (Actualizar estado)</Text>
+      </TouchableOpacity>
     </View>
   );
 
-  const stepIndex = { PERSONAL: 0, VEHICLE: 1, DOCUMENTS: 2, WAITING: 3 }[step];
+  const stepIndex = { VEHICLE: 0, DOCUMENTS: 1, PAYMENT: 2 }[step];
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Progress bar */}
         <View style={styles.progressContainer}>
-          {[0, 1, 2, 3].map(i => (
+          {[0, 1, 2].map(i => (
             <View key={i} style={[styles.progressDot, i <= stepIndex && styles.progressDotActive]} />
           ))}
         </View>
 
         <Text style={styles.header}>Registro de conductor</Text>
-        <Text style={styles.stepLabel}>Paso {stepIndex + 1} de 4</Text>
+        <Text style={styles.stepLabel}>Paso {stepIndex + 1} de 3</Text>
 
-        {step === 'PERSONAL' && renderPersonal()}
         {step === 'VEHICLE' && renderVehicle()}
         {step === 'DOCUMENTS' && renderDocuments()}
-        {step === 'WAITING' && renderWaiting()}
+        {step === 'PAYMENT' && renderPayment()}
 
-        {step !== 'WAITING' && (
+        {step !== 'PAYMENT' && (
           <TouchableOpacity style={[styles.nextBtn, loading && { opacity: 0.5 }]} onPress={submitStep} disabled={loading}>
             {loading ? <ActivityIndicator color={theme.colors.primaryText} /> : (
-              <Text style={styles.nextBtnText}>
-                {step === 'DOCUMENTS' ? 'Enviar para revisión' : 'Siguiente'}
-              </Text>
+              <Text style={styles.nextBtnText}>Siguiente</Text>
             )}
           </TouchableOpacity>
         )}
 
-        {step !== 'PERSONAL' && step !== 'WAITING' && (
-          <TouchableOpacity style={styles.backBtn} onPress={() => {
-            if (step === 'VEHICLE') setStep('PERSONAL');
-            if (step === 'DOCUMENTS') setStep('VEHICLE');
-          }}>
+        {step !== 'VEHICLE' && step !== 'PAYMENT' && (
+          <TouchableOpacity style={styles.backBtn} onPress={() => setStep('VEHICLE')} disabled={loading}>
             <Text style={styles.backBtnText}>← Atrás</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function DocUploadRow({ label, uri, onPress, theme }: any) {
-  return (
-    <TouchableOpacity style={{
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      backgroundColor: theme.colors.background, padding: 14, borderRadius: 12,
-      marginBottom: 10, borderWidth: 1, borderColor: theme.colors.border,
-    }} onPress={onPress}>
-      <Text style={{ color: theme.colors.text, fontSize: 14, flex: 1 }}>{label}</Text>
-      <Text style={{ color: uri ? theme.colors.success : theme.colors.primary, fontWeight: '700', fontSize: 13 }}>
-        {uri ? '✅ Subido' : '📎 Subir'}
-      </Text>
-    </TouchableOpacity>
   );
 }
 
@@ -211,6 +193,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   header: { ...theme.typography.header, fontSize: 24, marginBottom: 4 },
   stepLabel: { ...theme.typography.bodyMuted, marginBottom: 24 },
   stepTitle: { ...theme.typography.title, fontSize: 18, marginBottom: 16 },
+  bodyText: { ...theme.typography.body, color: theme.colors.textMuted, marginBottom: 20, lineHeight: 22 },
   input: {
     backgroundColor: theme.colors.surface, padding: 14, borderRadius: 12,
     marginBottom: 12, fontSize: 15, color: theme.colors.text,
@@ -234,8 +217,20 @@ const getStyles = (theme: any) => StyleSheet.create({
   nextBtnText: { ...theme.typography.button },
   backBtn: { alignItems: 'center', marginTop: 16, padding: 12 },
   backBtnText: { color: theme.colors.textMuted, fontWeight: '600', fontSize: 15 },
-  waitingContainer: { alignItems: 'center', paddingVertical: 48 },
-  waitingEmoji: { fontSize: 64, marginBottom: 16 },
-  waitingTitle: { ...theme.typography.title, fontSize: 22, marginBottom: 12 },
-  waitingSubtitle: { ...theme.typography.bodyMuted, textAlign: 'center', paddingHorizontal: 24, lineHeight: 22 },
+  uploadBox: {
+    borderWidth: 2, borderStyle: 'dashed', borderColor: theme.colors.primary,
+    borderRadius: 16, padding: 32, alignItems: 'center', backgroundColor: theme.colors.primaryLight + '20',
+  },
+  uploadIcon: { fontSize: 48, marginBottom: 16 },
+  uploadText: { ...theme.typography.body, textAlign: 'center', color: theme.colors.primary, fontWeight: '600' },
+  stripeBtn: {
+    backgroundColor: '#6772E5', // Stripe blurple
+    padding: 16, borderRadius: 30, alignItems: 'center', marginTop: 12,
+  },
+  stripeBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  refreshBtn: {
+    backgroundColor: theme.colors.surface, padding: 16, borderRadius: 30,
+    alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: theme.colors.border,
+  },
+  refreshBtnText: { ...theme.typography.body, fontWeight: '600', color: theme.colors.text },
 });

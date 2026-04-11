@@ -33,6 +33,27 @@ module.exports = {
         io = require('socket.io')(httpServer, {
             cors: { origin: '*', methods: ['GET', 'POST'] }
         });
+
+        // CORRECCIÓN 10: Validación de JWT en Sockets
+        const jwt = require('jsonwebtoken');
+        io.use((socket, next) => {
+            try {
+                // Soportar token en header (extraHeaders) o en auth object
+                const authHeader = socket.handshake.headers.authorization;
+                const token = (authHeader && authHeader.split(' ')[1]) || socket.handshake.auth?.token;
+                
+                if (!token) {
+                    return next(new Error('Authentication error: No token provided'));
+                }
+                
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                socket.user = decoded; // decoded tendrá id, role, etc.
+                next();
+            } catch (err) {
+                return next(new Error('Authentication error: Invalid token'));
+            }
+        });
+
         return io;
     },
     getIO: () => {

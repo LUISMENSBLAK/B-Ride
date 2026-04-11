@@ -21,7 +21,8 @@ class StripeService {
 
         const account = await stripe.accounts.create({
             type: 'express',
-            country: 'US', // O tu país de operación
+            // CORRECCIÓN 6: País configurable via env var
+            country: process.env.STRIPE_CONNECT_COUNTRY || 'US',
             email: user.email,
             capabilities: {
                 card_payments: { requested: true },
@@ -35,8 +36,9 @@ class StripeService {
 
         const accountLink = await stripe.accountLinks.create({
             account: account.id,
-            refresh_url: 'http://localhost:8081/driver/onboarding/refresh',
-            return_url: 'http://localhost:8081/driver/onboarding/return',
+            // CORRECCIÓN 5: URLs desde env vars (deep links Expo)
+            refresh_url: process.env.STRIPE_ONBOARDING_REFRESH_URL || 'bride://driver/onboarding/refresh',
+            return_url: process.env.STRIPE_ONBOARDING_RETURN_URL || 'bride://driver/onboarding/return',
             type: 'account_onboarding',
         });
 
@@ -87,7 +89,8 @@ class StripeService {
         // 3. Crear el Intent de captura manual (Hold) a nombre de la App con transferencia directa.
         const paymentIntent = await stripe.paymentIntents.create({
             amount: amountCents,
-            currency: 'usd',
+            // CORRECCIÓN 6: Moneda configurable
+            currency: process.env.STRIPE_CURRENCY || 'usd',
             customer: customerId,
             capture_method: 'manual', // Obligatorio para retener sin cobrar
             transfer_data: {
