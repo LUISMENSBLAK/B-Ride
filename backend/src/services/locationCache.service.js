@@ -39,7 +39,6 @@ class LocationCacheService {
                          update: {
                              $set: {
                                  'lastKnownLocation.coordinates': [data.lng, data.lat],
-                                 driverStatus: 'AVAILABLE'
                              }
                          }
                      }

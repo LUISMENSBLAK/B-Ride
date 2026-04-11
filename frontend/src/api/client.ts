@@ -32,34 +32,35 @@ client.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // Si la solicitud falla con 401 Unauthorized y no ha sido reintentada todavía
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
 
             try {
-                // Obtener el refreshToken almacenado
                 const refreshToken = await AsyncStorage.getItem('refreshToken');
                 if (!refreshToken) {
+                    // LAUNCH 8 FIX: Hacer logout del store
+                    const { useAuthStore } = require('../store/authStore');
+                    useAuthStore.getState().logout();
                     return Promise.reject(error);
                 }
 
-                // Generar un nuevo token contra la API (sin usar 'client' para evitar loops)
                 const res = await axios.post(`${baseURL}/auth/refresh`, { token: refreshToken });
 
                 if (res.data.success && res.data.accessToken) {
                     const newAccessToken = res.data.accessToken;
-                    
-                    // Guardar nuevo token persistente
                     await AsyncStorage.setItem('userToken', newAccessToken);
-
-                    // Reintentar la API que falló con los nuevos credenciales
                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                     return client(originalRequest);
                 }
             } catch (err) {
-                // Si la renovación falla (ej. refresh token inválido o expirado)
-                // Limpiamos los datos locales para forzar a la app a desvincularse
-                await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo']);
+                // LAUNCH 8 FIX: Refresh falló → logout completo del store
+                try {
+                    const { useAuthStore } = require('../store/authStore');
+                    await useAuthStore.getState().logout();
+                } catch (logoutErr) {
+                    // Fallback: limpiar manualmente
+                    await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
+                }
                 return Promise.reject(err);
             }
         }

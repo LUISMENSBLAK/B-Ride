@@ -6,31 +6,28 @@ import { registerForPushNotificationsAsync, setupNotificationListeners } from '.
 import { useAuthStore } from './src/store/authStore';
 import { initLocale } from './src/services/i18n';
 import AnimatedSplash from './src/components/AnimatedSplash';
+import ErrorBoundary from './src/components/ErrorBoundary';
 
 export default function App() {
 
   useEffect(() => {
-    // Inicializar idioma guardado en AsyncStorage
     initLocale();
-
-    // Configurar listeners para tap on push etc.
     const unsubscribe = setupNotificationListeners();
-
-    // Solo pedimos permisos e intentamos registrar el token al abrir la app.
     registerForPushNotificationsAsync();
-
     return () => {
       if (unsubscribe) unsubscribe();
     };
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <AnimatedSplash>
-        <SafeAreaProvider>
-          <AppNavigator />
-        </SafeAreaProvider>
-      </AnimatedSplash>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AnimatedSplash>
+          <SafeAreaProvider>
+            <AppNavigator />
+          </SafeAreaProvider>
+        </AnimatedSplash>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

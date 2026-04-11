@@ -38,4 +38,7 @@ router.put('/push-token', protect, require('../controllers/auth.controller').upd
 router.delete('/push-token', protect, require('../controllers/auth.controller').removePushToken);
 router.post('/profile/avatar', protect, upload.single('avatar'), require('../controllers/auth.controller').uploadAvatar);
 
+// V1/V2/S4/UX-B: Actualizar perfil (vehículo, contacto emergencia, direcciones, etc.)
+router.put('/profile', protect, require('../controllers/auth.controller').updateProfile);
+
 module.exports = router;

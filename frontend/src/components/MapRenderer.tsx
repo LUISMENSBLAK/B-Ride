@@ -1,6 +1,7 @@
 import React, { memo, forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 import { StyleSheet, Platform, View, ActivityIndicator, Text } from 'react-native';
 import MapView, { Marker, Region, Polyline } from 'react-native-maps';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme';
 
 import CarMarker from './CarMarker';
@@ -40,14 +41,17 @@ function isValidCoord(c: Coordinate | undefined | null): c is Coordinate {
 
 /** Generate a smooth curved polyline between two points (no API needed) */
 function generateCurvedPolyline(start: Coordinate, end: Coordinate, numPoints = 30): Coordinate[] {
+  const dLat = end.latitude - start.latitude;
+  const dLng = end.longitude - start.longitude;
+  const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+  // BUG 6 FIX: Si start ≈ end, retornar línea recta para evitar NaN
+  if (dist < 0.0001) return [start, end];
+
   const points: Coordinate[] = [];
   const midLat = (start.latitude + end.latitude) / 2;
   const midLng = (start.longitude + end.longitude) / 2;
 
-  // Perpendicular offset for curve effect
-  const dLat = end.latitude - start.latitude;
-  const dLng = end.longitude - start.longitude;
-  const dist = Math.sqrt(dLat * dLat + dLng * dLng);
   const offset = dist * 0.15; // 15% curvature
 
   // Control point perpendicular to the midpoint
@@ -100,6 +104,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   destinationCoordinate,
   pickupCoordinate, dropoffCoordinate, driverPhase,
 }, ref) => {
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const driverMarkerRef = useRef<any>(null);
 
@@ -130,26 +135,29 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     }
   }, [latitude, longitude]);
 
+  // BUG 12 FIX: Siempre actualizar firstDriverPing para asegurar que el marker se renderice.
+  // Usar animateMarkerToCoordinate solo como optimización cuando el marker ya está montado.
   useImperativeHandle(ref, () => ({
     updateDriverPosition: (lat: number, lng: number) => {
-      if (!firstDriverPing) {
-        setFirstDriverPing({ latitude: lat, longitude: lng });
-      } else {
+      // Calcular heading si hay posición previa
+      if (firstDriverPing) {
         if (firstDriverPing.latitude !== lat || firstDriverPing.longitude !== lng) {
           const dy = lat - firstDriverPing.latitude;
           const dx = Math.cos(Math.PI / 180 * firstDriverPing.latitude) * (lng - firstDriverPing.longitude);
           const angle = Math.atan2(dx, dy) * 180 / Math.PI;
           setHeading(angle);
         }
-
-        if (driverMarkerRef.current && typeof driverMarkerRef.current.animateMarkerToCoordinate === 'function') {
-          driverMarkerRef.current.animateMarkerToCoordinate(
-            { latitude: lat, longitude: lng }, 1000
-          );
-        } else {
-          setFirstDriverPing({ latitude: lat, longitude: lng });
-        }
       }
+
+      // Intentar animación nativa si el marker ya está montado
+      if (driverMarkerRef.current && typeof driverMarkerRef.current.animateMarkerToCoordinate === 'function') {
+        driverMarkerRef.current.animateMarkerToCoordinate(
+          { latitude: lat, longitude: lng }, 1000
+        );
+      }
+
+      // Siempre actualizar el state para que React renderice/actualice el Marker
+      setFirstDriverPing({ latitude: lat, longitude: lng });
     }
   }));
 
@@ -182,6 +190,8 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   // ── Compute polyline points ──
   const [polylinePoints, setPolylinePoints] = useState<Coordinate[] | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
+  // UX 3: Indicar si la ruta mostrada es fallback (bezier) o real (OSRM)
+  const [routeFallback, setRouteFallback] = useState(false);
 
   useEffect(() => {
     let start: Coordinate | null = null;
@@ -203,16 +213,19 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     if (start && end) {
       const calculateRoute = async () => {
         setPolylinePoints(generateCurvedPolyline(start!, end!)); // Immediate visual feedback
+        setRouteFallback(true);
         setRouteLoading(true);
         const realRoute = await fetchOsrmRoute(start!, end!);
         setRouteLoading(false);
         if (realRoute) {
           setPolylinePoints(realRoute);
+          setRouteFallback(false);
         }
       };
       calculateRoute();
     } else {
       setPolylinePoints(null);
+      setRouteFallback(false);
     }
   }, [latitude, longitude, destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
 
@@ -240,7 +253,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       {/* Own position marker */}
       {isDriver ? (
         <Marker coordinate={{ latitude, longitude }} title={title} anchor={{ x: 0.5, y: 0.5 }}>
-          <CarMarker heading={heading} size={44} />
+          <CarMarker heading={heading} size={28} />
         </Marker>
       ) : (
         <Marker coordinate={{ latitude, longitude }} title={title} anchor={{ x: 0.5, y: 0.5 }}>
@@ -275,14 +288,19 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
           title="Conductor"
           anchor={{ x: 0.5, y: 0.5 }}
         >
-          <CarMarker heading={heading} size={44} />
+          <CarMarker heading={heading} size={28} />
         </Marker>
       )}
     </MapView>
     {routeLoading && (
-      <View style={styles.routingOverlay}>
+      <View style={[styles.routingOverlay, { top: insets.top + 8 }]}>
         <ActivityIndicator size="small" color={theme.colors.primary} />
         <Text style={styles.routingText}>Trazando ruta...</Text>
+      </View>
+    )}
+    {!routeLoading && routeFallback && polylinePoints && (
+      <View style={[styles.routingOverlay, { top: insets.top + 8 }]}>
+        <Text style={styles.routingText}>Ruta aproximada</Text>
       </View>
     )}
     </>

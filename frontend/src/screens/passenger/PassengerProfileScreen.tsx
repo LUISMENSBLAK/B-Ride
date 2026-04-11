@@ -15,6 +15,10 @@ export default function PassengerProfileScreen() {
   const { user, logout } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const { t, lang } = useTranslation();
+  // BUG 17 FIX: Conectar Switch al estado real de notificaciones
+  const { notificationsEnabled, toggleNotifications, loadSettings } = useSettings();
+
+  useEffect(() => { loadSettings(); }, []);
 
   const getLanguageLabel = (l: string) => {
     switch(l) {
@@ -72,7 +76,8 @@ export default function PassengerProfileScreen() {
         <View style={styles.settingRow}>
           <Text style={styles.settingText}>🔔 {t('settings.notifications')}</Text>
           <Switch
-            value={true}
+            value={notificationsEnabled}
+            onValueChange={toggleNotifications}
             trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
             thumbColor={theme.colors.background}
           />

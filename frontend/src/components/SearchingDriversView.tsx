@@ -13,7 +13,6 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
   const theme = useAppTheme();
   const { t } = useTranslation();
   
-  // Timer de 3 minutos
   const [timeLeft, setTimeLeft] = useState(180);
   
   useEffect(() => {
@@ -27,7 +26,7 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
   const secs = timeLeft % 60;
   const timeString = `${mins}:${secs.toString().padStart(2, '0')}`;
 
-  // Animaciones de radar/pulso (3 anillos)
+  // LAUNCH 1 FIX: Hooks declarados al nivel superior del componente, no dentro de función
   const ring1 = useSharedValue(0);
   const ring2 = useSharedValue(0);
   const ring3 = useSharedValue(0);
@@ -38,13 +37,22 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
     ring3.value = withDelay(1200, withRepeat(withTiming(1, { duration: 2000, easing: Easing.out(Easing.ease) }), -1, false));
   }, []);
 
-  const getRingStyle = (ring: SharedValue<number>) => useAnimatedStyle(() => ({
-    opacity: 1 - ring.value,
-    transform: [{ scale: 1 + ring.value * 2 }],
+  const ring1Style = useAnimatedStyle(() => ({
+    opacity: 1 - ring1.value,
+    transform: [{ scale: 1 + ring1.value * 2 }],
+  }));
+
+  const ring2Style = useAnimatedStyle(() => ({
+    opacity: 1 - ring2.value,
+    transform: [{ scale: 1 + ring2.value * 2 }],
+  }));
+
+  const ring3Style = useAnimatedStyle(() => ({
+    opacity: 1 - ring3.value,
+    transform: [{ scale: 1 + ring3.value * 2 }],
   }));
 
   const styles = React.useMemo(() => getStyles(theme), [theme]);
-
   const hasDrivers = activeDriversCount > 0;
 
   return (
@@ -52,9 +60,9 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
       <View style={styles.radarContainer}>
         {hasDrivers && (
           <>
-            <Animated.View style={[styles.ring, getRingStyle(ring3)]} />
-            <Animated.View style={[styles.ring, getRingStyle(ring2)]} />
-            <Animated.View style={[styles.ring, getRingStyle(ring1)]} />
+            <Animated.View style={[styles.ring, ring3Style]} />
+            <Animated.View style={[styles.ring, ring2Style]} />
+            <Animated.View style={[styles.ring, ring1Style]} />
           </>
         )}
         <View style={styles.centerDot} />
@@ -84,62 +92,16 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
 };
 
 const getStyles = (theme: any) => StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing.xl,
-  },
-  radarContainer: {
-    width: 60,
-    height: 60,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.xl,
-  },
-  ring: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-  },
-  centerDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: theme.colors.primary,
-    ...theme.shadows.primary,
-  },
-  title: {
-    ...theme.typography.title,
-    marginBottom: theme.spacing.xs,
-    textAlign: 'center',
-  },
-  subtitle: {
-    ...theme.typography.bodyMuted,
-    marginBottom: theme.spacing.l,
-    textAlign: 'center',
-  },
-  timerContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primaryLight,
-    marginBottom: theme.spacing.xl,
-  },
-  timerText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  cancelBtn: {
-    padding: theme.spacing.m,
-  },
-  cancelText: {
-    color: theme.colors.textMuted,
-    fontWeight: '600',
-    ...theme.typography.body,
-  },
+  container: { alignItems: 'center', paddingVertical: theme.spacing.xl },
+  radarContainer: { width: 60, height: 60, justifyContent: 'center', alignItems: 'center', marginBottom: theme.spacing.xl },
+  ring: { position: 'absolute', width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: theme.colors.primary },
+  centerDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: theme.colors.primary, ...theme.shadows.primary },
+  title: { ...theme.typography.title, marginBottom: theme.spacing.xs, textAlign: 'center' },
+  subtitle: { ...theme.typography.bodyMuted, marginBottom: theme.spacing.l, textAlign: 'center' },
+  timerContainer: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: theme.colors.primaryLight, marginBottom: theme.spacing.xl },
+  timerText: { color: theme.colors.primary, fontWeight: '700', fontSize: 16 },
+  cancelBtn: { padding: theme.spacing.m },
+  cancelText: { color: theme.colors.textMuted, fontWeight: '600', ...theme.typography.body },
 });
 
 export default SearchingDriversView;

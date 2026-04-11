@@ -1,13 +1,3 @@
-/**
- * DriverDashboard — UI Premium para Conducción Real
- *
- * Principios de diseño aplicados:
- * - MapView dominante: 100% de pantalla siempre visible
- * - Header mínimo: estado + toggle ONLINE/OFFLINE muy claro
- * - BottomSheet ausente en IDLE (solo aparece cuando hay acción)
- * - Botones de viaje: grandes, alto contraste, uso con una mano
- * - Menos texto = más seguridad al volante
- */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
@@ -40,19 +30,11 @@ import Loader from '../../components/Loader';
 import StatusBadge from '../../components/StatusBadge';
 import ChatSheet from '../../components/ChatSheet';
 import { RatingModal } from '../../components/RatingModal';
+import { haversineKm } from '../../utils/geo';
+import { geohashEncode } from '../../utils/geo';
 
 // ─── TIPOS ────────────────────────────────────────────────────────────────────
 type TripPhase = 'IDLE' | 'INCOMING' | 'BID_SENT' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS';
-
-// ─── Utilidad: distancia Haversine (km) ─────────────────────────────────────
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 export default function DriverDashboard() {
   const { user, logout } = useAuthStore();
@@ -78,6 +60,9 @@ export default function DriverDashboard() {
   useEffect(() => { isOnlineRef.current = isOnline; }, [isOnline]);
   useEffect(() => { activeRideRef.current = activeRide; }, [activeRide]);
   useEffect(() => { locationRef.current = location; }, [location]);
+
+  // Ref para geohash anterior (BUG 4)
+  const lastGeoHashRef = useRef<string | null>(null);
 
   // ── BottomSheet Ref ───────────────────────────────────────────────────────
   const sheetRef = useRef<BottomSheet>(null);
@@ -147,34 +132,47 @@ export default function DriverDashboard() {
     };
   }, [user?._id]);
 
-  // ── Emisión estable de Socket y Coordenadas ──────────────────────────────
+  // BUG 4 FIX: useEffect 1 — Solo para driver:join (cuando cambia la celda geohash)
   useEffect(() => {
-    // Si location tarda en llegar, emitiremos esto SOLO cuando haya coordenadas válidas
     if (!isOnline || !location) return;
 
     const lat = location.coords?.latitude;
     const lng = location.coords?.longitude;
+    if (lat == null || lng == null) return;
 
-    // Log solicitado antes del emit
-    console.log("[LOCATION]", lat, lng);
-
-    // Validación solicitada: asegurar que no sean null/undefined
-    if (lat != null && lng != null) {
+    const currentHash = geohashEncode(lat, lng, 5);
+    if (currentHash !== lastGeoHashRef.current) {
+      lastGeoHashRef.current = currentHash;
       const socket = socketService.getSocket();
       if (socket) {
-        // Log solicitado justo antes de emitir
-        console.log("[SOCKET] Emitting driver:join");
+        console.log("[SOCKET] Emitting driver:join (celda cambió)");
         socket.emit('driver:join', { lat, lng });
-
-        // Emitir location para tracking
-        socket.emit('updateLocation', {
-          driverId:    user?._id,
-          latitude:    lat,
-          longitude:   lng,
-          passengerId: activeRide?.passenger?._id,
-        });
       }
     }
+  }, [location, isOnline]);
+
+  // BUG 4 FIX: useEffect 2 — Solo para updateLocation (cada tick GPS)
+  useEffect(() => {
+    if (!isOnline || !location) return;
+
+    const lat = location.coords?.latitude;
+    const lng = location.coords?.longitude;
+    if (lat == null || lng == null) return;
+
+    console.log("[LOCATION]", lat, lng);
+
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.emit('updateLocation', {
+        driverId:    user?._id,
+        latitude:    lat,
+        longitude:   lng,
+        passengerId: activeRide?.passenger?._id,
+      });
+    }
+
+    // BUG 10: Guardar ubicación para re-emisión de driver:join tras reconexión
+    socketService.setLastKnownDriverLocation(lat, lng);
   }, [location, isOnline, user?._id, activeRide?.passenger?._id]);
 
   // ── Stripe Onboarding ─────────────────────────────────────────────────────
@@ -437,10 +435,10 @@ export default function DriverDashboard() {
         </View>
 
         {/* Toggle ONLINE — grande, claro */}
+        {/* BUG 3 FIX: Solo el Switch dispara toggleOnline, TouchableOpacity es solo contenedor visual */}
         <TouchableOpacity
           style={[styles.onlineToggle, isOnline ? styles.onlineToggleActive : styles.onlineToggleInactive]}
-          onPress={toggleOnline}
-          activeOpacity={0.8}
+          activeOpacity={1}
         >
           <Text style={[styles.onlineToggleText, isOnline && styles.onlineToggleTextActive]}>
             {isOnline ? 'EN LÍNEA' : 'CONECTAR'}

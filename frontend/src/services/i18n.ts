@@ -13,8 +13,9 @@ const i18n = new I18n({ en, es, fr, de, it });
 
 i18n.defaultLocale = 'es';
 i18n.enableFallback  = true;
-// Configuración de advertencias y fallback de missing keys se deja en default de la API
-// i18n.missingBehavior = 'guess';
+// FIX: Configurar missingBehavior para evitar TypeError: this.missingTranslation.get
+i18n.missingBehavior = 'guess';
+
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 const LANG_KEY = '@bRide_language';

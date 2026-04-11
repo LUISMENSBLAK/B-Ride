@@ -106,6 +106,18 @@ function DriverNavigator() {
     );
 }
 
+// ─── PASSENGER HOME STACK (BUG 19 FIX) ─────────────────────────────────────
+const PassengerHomeStack = createNativeStackNavigator();
+
+function PassengerHomeStackScreen() {
+    return (
+        <PassengerHomeStack.Navigator screenOptions={{ headerShown: false }}>
+            <PassengerHomeStack.Screen name="PassengerDashboard" component={PassengerDashboard} />
+            <PassengerHomeStack.Screen name="PassengerPayment" component={PaymentStatusScreen} />
+        </PassengerHomeStack.Navigator>
+    );
+}
+
 // ─── PASSENGER NAVIGATOR ────────────────────────────────────────────────────
 function PassengerNavigator() {
     const { t } = useTranslation();
@@ -115,13 +127,8 @@ function PassengerNavigator() {
         <PassengerTab.Navigator screenOptions={tabBarOptions}>
             <PassengerTab.Screen
                 name="PassengerHome"
-                component={PassengerDashboard}
+                component={PassengerHomeStackScreen}
                 options={{ title: t('nav.home'), tabBarLabel: t('nav.home'), tabBarIcon: ({ color }) => <Map color={color} size={24} /> }}
-            />
-            <PassengerTab.Screen
-                name="PassengerPayment"
-                component={PaymentStatusScreen}
-                options={{ title: t('nav.payment'), tabBarLabel: t('nav.payment'), tabBarIcon: ({ color }) => <CreditCard color={color} size={24} /> }}
             />
             <PassengerTab.Screen
                 name="PassengerHistory"

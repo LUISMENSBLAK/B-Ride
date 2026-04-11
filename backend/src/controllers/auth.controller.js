@@ -254,3 +254,51 @@ const uploadAvatar = async (req, res) => {
 };
 
 module.exports.uploadAvatar = uploadAvatar;
+
+/**
+ * V1/V2/S4/UX-B: Actualizar perfil del usuario.
+ * Permite actualizar: name, phoneNumber, vehicle, documents, emergencyContact,
+ * savedAddresses, approvalStatus, etc.
+ */
+const updateProfile = async (req, res) => {
+    try {
+        const User = require('../models/User');
+
+        // Campos permitidos para actualización
+        const allowedFields = [
+            'name', 'phoneNumber',
+            'vehicle', 'documents', 'approvalStatus',
+            'emergencyContact', 'savedAddresses',
+        ];
+
+        const updateData = {};
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        }
+
+        // Seguridad: un usuario no puede auto-aprobarse
+        if (updateData.approvalStatus && updateData.approvalStatus === 'APPROVED') {
+            delete updateData.approvalStatus;
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user._id,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+        }
+
+        res.status(200).json({ success: true, data: updatedUser });
+    } catch (error) {
+        console.error('[Auth Controller] Error updating profile:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports.updateProfile = updateProfile;
+

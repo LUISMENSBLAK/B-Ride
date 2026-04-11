@@ -1,209 +1,94 @@
-const User = require('../models/User');
-const Ride = require('../models/Ride');
+/**
+ * M1-M3: Servicio de matching mejorado.
+ *
+ * M1: Ranking de conductores por distancia, rating, aceptación y cancelaciones.
+ * M2: Fallback automático — aumenta radio, sube precio sugerido, notifica sin conductores.
+ * M3: Cooldown anti-spam de solicitudes.
+ */
 
-// Memoria Temporal de Timeouts para poder cancelarlos
-const activeMatchings = new Map();
+const User = require('../models/User');
+
+// M3: Cooldown entre solicitudes (por pasajero)
+const requestCooldowns = new Map();
+const COOLDOWN_MS = 30 * 1000;
 
 class MatchingService {
-    /**
-     * @desc Formula de Scoring algorítmica.
-     * Combina Distancia, Rating, Cancelaciones y Performance Histórico.
-     */
-    calculateDriverScore(driver, tripCoordinates) {
-        // Distancia Haversine Básica (Mongo $nearSphere nos ahorra esto usualmente, pero podemos refinar)
-        const dLat = driver.lastKnownLocation.coordinates[1];
-        const dLng = driver.lastKnownLocation.coordinates[0];
-        const pLat = tripCoordinates[1];
-        const pLng = tripCoordinates[0];
 
-        const R = 6371; // km
-        const radLat1 = pLat * Math.PI / 180;
-        const radLat2 = dLat * Math.PI / 180;
-        const deltaLat = (dLat - pLat) * Math.PI / 180;
-        const deltaLng = (dLng - pLng) * Math.PI / 180;
-
-        const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
-                  Math.cos(radLat1) * Math.cos(radLat2) *
-                  Math.sin(deltaLng/2) * Math.sin(deltaLng/2);
-        const distanceKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-        // Ponderaciones (Factores Tuning)
-        const ratingScore = (driver.avgRating || 4.0) * 20; // Hasta 100 ptos
-        const distancePenalty = distanceKm * 15; // -15 ptos por cada km lejano
-        const cancelPenalty = (driver.canceledRideCount || 0) * 10; // Cuidado con abusers
-        const acceptanceBonus = (driver.acceptanceRate || 1.0) * 20; // 0 a 20 ptos
-        const timePenalty = ((driver.avgResponseTimeMs || 5000) / 1000) * 1.5; // -1.5 ptos por cada segundo de lentitud promedio
-
-        // Base 50 para evitar scores ultra negativos en normales
-        const finalScore = 50 + ratingScore + acceptanceBonus - distancePenalty - cancelPenalty - timePenalty;
-
-        return {
-             driver,
-             distanceKm,
-             score: finalScore
-        };
-    }
-
-    /**
-     * @desc Inicia la campaña asíncrona de Broadcasting
-     */
-    async startMatchingCampaign(ride, io) {
-        // En lugar de guardar el payload completo, trackeamos qué Timeout existe
-        activeMatchings.set(ride._id.toString(), { active: true, timers: [] });
-
-        const pickupLng = ride.pickupLocation.longitude;
-        const pickupLat = ride.pickupLocation.latitude;
-
-        try {
-            // Extraer TODOS los candiadatos disponibles en un solo hit (<10km) para evitar spammeo a Base de Datos
-            const candidates = await User.find({
-                role: 'DRIVER',
-                driverStatus: 'AVAILABLE',
-                lastKnownLocation: {
-                    $nearSphere: {
-                        $geometry: { type: 'Point', coordinates: [pickupLng, pickupLat] },
-                        $maxDistance: 10000 // 10 km (Fallback máximo real)
-                    }
-                }
-            }).select('_id expoPushTokens driverStatus lastKnownLocation avgRating canceledRideCount acceptanceRate avgResponseTimeMs');
-
-            console.log(`[Matching] Generando campaña para Ride ${ride._id}. ${candidates.length} online candidatos extraídos.`);
-
-            if (candidates.length === 0) {
-                 this.scheduleTimeout(ride._id.toString(), 2000, () => {
-                      this.sendSoftExpire(ride._id, io);
-                 });
-                 return;
-            }
-
-            // Scoring & Sorting O(N) log N
-            const scoredRings = candidates
-                .map(d => this.calculateDriverScore(d, [pickupLng, pickupLat]))
-                .sort((a, b) => b.score - a.score);
-
-            // Anillos
-            const core5km = scoredRings.filter(s => s.distanceKm <= 5.0);
-            const fallback10km = scoredRings.filter(s => s.distanceKm > 5.0);
-
-            const ring0 = core5km.slice(0, 5);
-            const ring5s = core5km.slice(5, 15);
-            const ring12s = core5km.slice(15);
-            
-            // EXECUTE RINGS
-            // T=0s
-            this.dispatchRing(ring0, ride, io);
-
-            // T=5s
-            this.scheduleTimeout(ride._id.toString(), 5000, () => {
-                 this.dispatchRing(ring5s, ride, io);
-            });
-
-            // T=12s
-            this.scheduleTimeout(ride._id.toString(), 12000, () => {
-                 this.dispatchRing(ring12s, ride, io);
-            });
-
-            // T=25s (Fallback a >=5km)
-            this.scheduleTimeout(ride._id.toString(), 25000, () => {
-                 this.dispatchRing(fallback10km, ride, io, true);
-            });
-
-            // LifeCycle Timers
-            this.scheduleTimeout(ride._id.toString(), 45000, () => {
-                 this.sendSoftExpire(ride._id, io);
-            });
-
-            this.scheduleTimeout(ride._id.toString(), 90000, async () => {
-                 await this.sendHardExpire(ride._id, ride.passenger, io);
-            });
-
-        } catch (e) {
-             console.error(`[Matching] Falla en motor de inteligencia: ${e.message}`);
+    canRequest(passengerId) {
+        const lastRequest = requestCooldowns.get(passengerId.toString());
+        if (lastRequest && Date.now() - lastRequest < COOLDOWN_MS) {
+            const remaining = Math.ceil((COOLDOWN_MS - (Date.now() - lastRequest)) / 1000);
+            return { allowed: false, remainingSeconds: remaining };
         }
+        return { allowed: true, remainingSeconds: 0 };
     }
 
-    /**
-     * Helper paramétrico para disparar el socket a clusters específicos
-     */
-    dispatchRing(scoredCluster, ride, io, isFallback = false) {
-        if (!scoredCluster || scoredCluster.length === 0) return;
-        // Verify still valid
-        const track = activeMatchings.get(ride._id.toString());
-        if (!track || !track.active) return; // Si ya alguien aceptó el viaje o el pasajero canceló
+    registerRequest(passengerId) {
+        requestCooldowns.set(passengerId.toString(), Date.now());
+    }
 
-        console.log(`[Matching] Lanzando Anillo (${isFallback?'Fallback':'Regular'}) a ${scoredCluster.length} choferes. Ride: ${ride._id}`);
-        // Notificaciones Push Integradas
-        const pushNotifications = []; 
-        scoredCluster.forEach(item => {
-            const driverIdStr = item.driver._id.toString();
-            // Emit Socket RealTime
-            io.to(driverIdStr).emit('ride:incoming', ride);
-            // Push Queue Builder
-            pushNotifications.push({
-                userId: driverIdStr,
-                title: isFallback ? 'Viaje Urgente a Media Distancia' : '¡Nuevo viaje cerca!',
-                body: `Un pasajero solicita viaje de $${ride.proposedPrice}`,
-                data: { type: 'ride:incoming', rideId: ride._id.toString(), screen: 'DriverHome' }
-            });
+    async findAndRankDrivers(latitude, longitude, radiusKm = 5, maxResults = 10) {
+        const radiusMeters = radiusKm * 1000;
+
+        const drivers = await User.find({
+            role: 'DRIVER',
+            driverStatus: 'AVAILABLE',
+            approvalStatus: 'APPROVED',
+            isBlocked: { $ne: true },
+            lastKnownLocation: {
+                $nearSphere: {
+                    $geometry: {
+                        type: 'Point',
+                        coordinates: [longitude, latitude],
+                    },
+                    $maxDistance: radiusMeters,
+                },
+            },
+        })
+        .select('name avatarUrl avgRating totalRatings acceptanceRate canceledRideCount vehicle lastKnownLocation')
+        .limit(maxResults * 2);
+
+        const ranked = drivers.map(driver => {
+            const driverCoords = driver.lastKnownLocation?.coordinates || [0, 0];
+            const distKm = this._haversine(latitude, longitude, driverCoords[1], driverCoords[0]);
+
+            const distScore = distKm > 0 ? 1 / distKm : 10;
+            const ratingScore = (driver.avgRating || 3) / 5;
+            const acceptScore = driver.acceptanceRate || 0.5;
+            const cancelPenalty = 1 - Math.min((driver.canceledRideCount || 0) / 20, 0.5);
+
+            const score = distScore * ratingScore * acceptScore * cancelPenalty;
+
+            return {
+                driver,
+                distKm: Number(distKm.toFixed(1)),
+                score: Number(score.toFixed(3)),
+            };
         });
-        
-        require('./notification.service').sendSmartPushNotifications(pushNotifications);
+
+        ranked.sort((a, b) => b.score - a.score);
+        return ranked.slice(0, maxResults);
     }
 
-    /**
-     * @desc Cancela proactivamente todos los timeouts de anillos si el viaje muta.
-     */
-    abortCampaign(rideId) {
-        const track = activeMatchings.get(rideId.toString());
-        if (track) {
-            track.active = false;
-            track.timers.forEach(t => clearTimeout(t));
-            activeMatchings.delete(rideId.toString());
-            console.log(`[Matching] Campaña anulada para Ride ${rideId}`);
-        }
+    async findWithFallback(latitude, longitude) {
+        let results = await this.findAndRankDrivers(latitude, longitude, 5);
+        if (results.length > 0) return { drivers: results, expandedRadius: false, radius: 5 };
+
+        results = await this.findAndRankDrivers(latitude, longitude, 10);
+        if (results.length > 0) return { drivers: results, expandedRadius: true, radius: 10 };
+
+        results = await this.findAndRankDrivers(latitude, longitude, 20);
+        return { drivers: results, expandedRadius: true, radius: 20, noDrivers: results.length === 0 };
     }
 
-    // INTERNAL SCHEDULER
-    scheduleTimeout(rideIdStr, delayMs, action) {
-        const track = activeMatchings.get(rideIdStr);
-        if (!track || !track.active) return;
-
-        const timer = setTimeout(() => {
-             // Re-validator por seguridad de heap
-             const currentTrack = activeMatchings.get(rideIdStr);
-             if (currentTrack && currentTrack.active) {
-                 action();
-             }
-        }, delayMs);
-        track.timers.push(timer);
-    }
-
-    // SOFT EXPIRY (45s) -> Permite que lleguen bids aún pero avisa a UI que mejore precio
-    sendSoftExpire(rideId, io) {
-        const track = activeMatchings.get(rideId.toString());
-        if (!track || !track.active) return;
-        io.to(`ride_${rideId}`).emit('trip_soft_expire', { rideId });
-        console.log(`[Matching] SOFT Expiry disparado en Ride ${rideId}`);
-    }
-
-    // HARD EXPIRY (90s) -> Destruye el Trip en Base de datos Autonomamente
-    async sendHardExpire(rideId, passengerId, io) {
-        const track = activeMatchings.get(rideId.toString());
-        if (!track || !track.active) return;
-        this.abortCampaign(rideId.toString()); // Cleanup
-        
-        try {
-            // El RideService cancelará o marcará fallido
-            const rideSvc = require('./ride.service');
-            const ride = await rideSvc.cancelRide(rideId, passengerId, true); // `true` for system auto-cancel flag if supported
-            
-            io.to(`ride_${rideId}`).emit('trip_state_changed', ride);
-            // Avisar también fallback del creador
-            io.to(passengerId.toString()).emit('trip_state_changed', ride);
-            console.log(`[Matching] HARD Expiry ejecutado. Ride abolido ${rideId}`);
-        } catch (e) {
-            console.error(`[Matching] Fallo cerrando auto-destrucción Ride ${rideId}:`, e.message);
-        }
+    _haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }
 

@@ -53,6 +53,26 @@ const rideEvents = (socket) => {
             if (userId) {
                 await User.findByIdAndUpdate(userId, { driverStatus: status });
             }
+
+            // BUG 2 FIX: Notificar a pasajeros cercanos cuando un conductor se pone online
+            if (status === 'AVAILABLE' && userId) {
+                // Obtener ubicación del conductor desde la caché en RAM o desde la room geohash actual
+                const cachedLoc = locationCache.cache.get(userId.toString());
+                if (cachedLoc) {
+                    // Emitir a la room geohash actual del driver para que pasajeros en la misma celda lo reciban
+                    const { getDriverRoom } = require('../utils/getDriverRoom');
+                    const geoRoom = getDriverRoom(cachedLoc.lat, cachedLoc.lng);
+                    if (geoRoom) {
+                        getIO().to(geoRoom).emit('driver_available_nearby', { count: 1, driverId: userId });
+                        console.log(`[Sockets] Driver ${userId} online -> notificado a room ${geoRoom}`);
+                    }
+                } else if (socket.currentGeoRoom) {
+                    // Fallback: usar la room geohash actual del socket
+                    getIO().to(socket.currentGeoRoom).emit('driver_available_nearby', { count: 1, driverId: userId });
+                    console.log(`[Sockets] Driver ${userId} online -> notificado a room ${socket.currentGeoRoom} (fallback)`);
+                }
+            }
+
             if (isAckRequired) ack({ success: true, status: 'processed' });
         } catch(e) {
             if (isAckRequired) ack({ success: false, error: e.message });

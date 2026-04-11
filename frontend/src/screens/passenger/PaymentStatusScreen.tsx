@@ -12,6 +12,8 @@ export default function PaymentStatusScreen() {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const { t } = useTranslation();
+  // BUG 14 FIX: Destructurar resetFlow del store para que el botón "Volver a inicio" funcione
+  const { resetFlow } = useRideFlowStore();
 
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
@@ -90,7 +92,7 @@ export default function PaymentStatusScreen() {
         <View style={styles.detailCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('payment.fareCharged')}</Text>
-            <Text style={styles.detailValue}>${price}</Text>
+            <Text style={styles.detailValue}>${finalPrice}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('payment.method')}</Text>
@@ -105,7 +107,11 @@ export default function PaymentStatusScreen() {
         </View>
 
         {isCompleted && (
-          <TouchableOpacity style={styles.doneBtn} onPress={resetFlow}>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => {
+            // BUG 20 FIX: Limpiar el recibo cacheado al salir
+            AsyncStorage.removeItem('lastCompletedRideId').catch(() => {});
+            resetFlow();
+          }}>
             <Text style={styles.doneBtnText}>{t('payment.backHome')}</Text>
           </TouchableOpacity>
         )}

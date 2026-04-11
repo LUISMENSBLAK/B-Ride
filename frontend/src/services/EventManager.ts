@@ -69,6 +69,13 @@ class EventManager {
       list.forEach(cb => cb(...args));
     }
   }
+
+  /**
+   * Emite un evento localmente (sin pasar por socket) para recovery y testing.
+   */
+  emitLocalRideEvent(eventName: string, ...args: any[]) {
+    this.dispatch(eventName, ...args);
+  }
 }
 
 const eventManager = new EventManager();

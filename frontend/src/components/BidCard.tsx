@@ -46,8 +46,20 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
   const avgRating: number = bid.driver?.avgRating ?? 0;
   const totalRatings: number = bid.driver?.totalRatings ?? 0;
 
-  // ── Timer regresivo ────────────────────────────────────────────────────────
-  const [secondsLeft, setSecondsLeft] = useState(BID_TTL_SECONDS);
+  // V3: Info del vehículo si está disponible
+  const vehicle = bid.driver?.vehicle;
+  const vehicleInfo = vehicle?.make
+    ? `${vehicle.color || ''} ${vehicle.make} ${vehicle.model || ''} • ${vehicle.plate || ''}`.trim()
+    : null;
+
+  // ── WEEK 1 FIX: Timer basado en createdAt del servidor ───────────────────
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    if (bid.createdAt) {
+      const elapsed = Math.floor((Date.now() - new Date(bid.createdAt).getTime()) / 1000);
+      return Math.max(0, BID_TTL_SECONDS - elapsed);
+    }
+    return BID_TTL_SECONDS;
+  });
   const expired = secondsLeft <= 0;
 
   useEffect(() => {
@@ -59,10 +71,10 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
   const theme = useAppTheme();
   const bidStyles = React.useMemo(() => getBidStyles(theme), [theme]);
 
-  // Barra de progreso animada: verde → amarillo → rojo
-  const progress = useSharedValue(1);
+  // Barra de progreso animada
+  const progress = useSharedValue(secondsLeft / BID_TTL_SECONDS);
   useEffect(() => {
-    progress.value = withTiming(0, { duration: BID_TTL_SECONDS * 1000 });
+    progress.value = withTiming(0, { duration: secondsLeft * 1000 });
   }, []);
 
   const barStyle = useAnimatedStyle(() => ({
@@ -76,6 +88,9 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
 
   const urgentText = secondsLeft <= 8;
 
+  // P1: Indicador de surge si existe
+  const surgeMultiplier = bid.surgeMultiplier;
+
   return (
     <Animated.View
       entering={FadeInDown.duration(350).springify()}
@@ -85,6 +100,13 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
       {isBest && !expired && (
         <View style={bidStyles.bestBadge}>
           <Text style={bidStyles.bestBadgeText}>✦ Mejor Oferta</Text>
+        </View>
+      )}
+
+      {/* P1: Badge de surge */}
+      {surgeMultiplier && surgeMultiplier > 1 && (
+        <View style={bidStyles.surgeBadge}>
+          <Text style={bidStyles.surgeBadgeText}>⚡ {surgeMultiplier.toFixed(1)}x</Text>
         </View>
       )}
 
@@ -102,7 +124,7 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
           <Text style={bidStyles.avatarText}>{initial}</Text>
         </View>
 
-        {/* Info conductor */}
+        {/* Info conductor + V3: vehículo */}
         <View style={bidStyles.info}>
           <Text style={bidStyles.driverName}>{driverName}</Text>
           <View style={bidStyles.ratingRow}>
@@ -112,6 +134,10 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
               {totalRatings > 0 ? ` (${totalRatings})` : ''}
             </Text>
           </View>
+          {/* V3: Info de vehículo */}
+          {vehicleInfo && (
+            <Text style={bidStyles.vehicleInfo} numberOfLines={1}>🚗 {vehicleInfo}</Text>
+          )}
         </View>
 
         {/* Precio + botón */}
@@ -269,6 +295,27 @@ const getBidStyles = (theme: Theme) => StyleSheet.create({
     ...theme.typography.caption,
     color:            theme.colors.textMuted,
     fontWeight:       '600',
+  },
+  // V3: Info de vehículo
+  vehicleInfo: {
+    ...theme.typography.caption,
+    color:            theme.colors.textMuted,
+    fontSize:         11,
+    marginTop:        2,
+  },
+  // P1: Surge badge
+  surgeBadge: {
+    alignSelf:        'flex-start',
+    backgroundColor:  theme.colors.warning,
+    borderRadius:     theme.borderRadius.pill,
+    paddingHorizontal: 8,
+    paddingVertical:  2,
+    marginBottom:     4,
+  },
+  surgeBadgeText: {
+    color:            '#000',
+    fontSize:         11,
+    fontWeight:       '800',
   },
 });
 

@@ -13,6 +13,9 @@ const defaultSocketURL =
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
 
+// BUG 8: Ubicación conocida para re-emisión tras reconexiones (BUG 10)
+let _lastKnownDriverLocation: { lat: number; lng: number } | null = null;
+
 class SocketService {
   private socket: Socket | null = null;
   private currentRideId: string | null = null;
@@ -25,7 +28,12 @@ class SocketService {
     const user = useAuthStore.getState().user;
     const token = user?.accessToken; 
     
-    if (!token) return; 
+    if (!token) return;
+
+    // BUG 8 FIX: Warning visible si la URL apunta a localhost/emulador en un entorno real
+    if (SOCKET_URL.includes('localhost') || SOCKET_URL.includes('10.0.2.2')) {
+      console.warn('[Socket] ⚠️ URL contiene localhost/10.0.2.2. En dispositivos físicos define EXPO_PUBLIC_SOCKET_URL en .env');
+    }
     
     if (this.socket) {
         this.socket.removeAllListeners();
@@ -56,6 +64,12 @@ class SocketService {
         // Re-join dynamic room if active
         if (this.currentRideId) {
              this.socket?.emit('join_ride_room', this.currentRideId);
+        }
+
+        // BUG 10 FIX: Re-emitir driver:join tras reconexión si es conductor y hay ubicación conocida
+        if (userState.role === 'DRIVER' && _lastKnownDriverLocation) {
+          this.socket?.emit('driver:join', _lastKnownDriverLocation);
+          console.log('[Socket] Re-emitted driver:join tras reconexión');
         }
         
         // WEBSOCKETS RECOVERY: Pedimos el active ride state
@@ -130,6 +144,11 @@ class SocketService {
 
   getSocket() {
     return this.socket;
+  }
+
+  // BUG 10: Permite a DriverDashboard guardar la ubicación para re-emisión tras reconexión
+  setLastKnownDriverLocation(lat: number, lng: number) {
+    _lastKnownDriverLocation = { lat, lng };
   }
 }
 

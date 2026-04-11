@@ -27,6 +27,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Haptics from 'expo-haptics';
 import {
   CreditCard,
   Globe,
@@ -327,7 +328,11 @@ export default function SettingsScreen() {
                       text: t('settings.delete'),
                       style: 'destructive',
                       onPress: () => {
-                        // Future: delete account API call
+                        // BUG 23 FIX: Informar al usuario que la función está en desarrollo
+                        Alert.alert(
+                          t('general.underConstruction', { defaultValue: 'Próximamente' }),
+                          t('general.underConstructionMsg', { defaultValue: 'Esta función estará disponible pronto.' })
+                        );
                       },
                     },
                   ]

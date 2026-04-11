@@ -61,6 +61,7 @@ export default function LoginScreen({
                                 onChangeText={setEmail}
                                 keyboardType="email-address"
                                 autoCapitalize="none"
+                                returnKeyType="next"
                             />
                             <TextInput
                                 style={styles.input}
@@ -69,9 +70,14 @@ export default function LoginScreen({
                                 secureTextEntry
                                 value={password}
                                 onChangeText={setPassword}
+                                returnKeyType="done"
+                                onSubmitEditing={handleLogin}
                             />
                             
-                            <TouchableOpacity onPress={() => {}}>
+                            <TouchableOpacity onPress={() => Alert.alert(
+                              t('auth.recoverPassword', { defaultValue: 'Recuperar contraseña' }),
+                              t('auth.recoverPasswordMsg', { defaultValue: 'Contacta a soporte en soporte@b-ride.com para restablecer tu contraseña.' })
+                            )}>
                                 <Text style={styles.forgotPassword}>{t('auth.forgotPassword')}</Text>
                             </TouchableOpacity>
                         </View>

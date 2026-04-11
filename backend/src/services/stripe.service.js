@@ -1,8 +1,11 @@
 const Stripe = require('stripe');
 const User = require('../models/User');
 
-// Usa una Sk de test segura o provista por el entorno
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock_b_ride_123');
+// LAUNCH 5 FIX: Sin fallback a clave mock — falla si no hay env var
+if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('[Stripe] STRIPE_SECRET_KEY es obligatoria. Configura tu .env');
+}
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 class StripeService {
     

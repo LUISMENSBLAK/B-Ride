@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+// LAUNCH 6: Validar env vars antes de hacer cualquier otra cosa
+const validateEnv = require('./src/config/validateEnv');
+validateEnv();
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -18,8 +23,14 @@ const chatEvents = require('./src/sockets/chat.events');
 const app = express();
 
 // Security Middlewares
-app.use(helmet()); // Set security HTTP headers
-app.use(cors());
+app.use(helmet());
+
+// LAUNCH 4 FIX: CORS restringido por variable de entorno
+const corsOrigin = process.env.CORS_ORIGIN;
+app.use(cors({
+    origin: corsOrigin ? corsOrigin.split(',').map(o => o.trim()) : '*',
+    credentials: true,
+}));
 
 // Webhook strictly requires raw body for Stripe signature
 const paymentWebhookRoute = require('./src/routes/payment.webhook.routes');
@@ -35,12 +46,18 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use('/uploads', express.static(uploadsDir));
 
-app.use(express.json({ limit: '10mb' })); // Limit body payload extended for avatar base64
+app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting — B3: por IP + por usuario autenticado
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 mins
-    max: 100 // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    keyGenerator: (req) => {
+        // B3 FIX: Rate limit por usuario si está autenticado, sino por IP
+        return req.user?._id?.toString() || req.ip;
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
@@ -50,9 +67,7 @@ const server = http.createServer(app);
 // Initialize Socket.io
 const io = socketio.init(server);
 io.on('connection', (socket) => {
-    // Attach ride events to each connection
     rideEvents(socket);
-    // Attach chat lifecycle
     chatEvents(socket);
 });
 
@@ -60,15 +75,19 @@ app.use('/api/auth', require('./src/routes/auth.routes'));
 app.use('/api/rides', require('./src/routes/ride.routes'));
 app.use('/api/payment', require('./src/routes/payment.routes'));
 app.use('/api/drivers', require('./src/routes/driver.routes'));
+// A1: Admin routes
+app.use('/api/admin', require('./src/routes/admin.routes'));
+// S5 + O1: Reports/support routes
+app.use('/api/reports', require('./src/routes/report.routes'));
 
 // Basic Healthcheck Route
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'API is running' });
+    res.json({ status: 'API is running', timestamp: new Date().toISOString() });
 });
 
-// CRON JOB: Payment Expiration Cleanup running every 5 minutes
+// CRON JOB: Payment Expiration Cleanup
 cron.schedule('*/5 * * * *', () => {
-    console.log('[System] Corriendo recovery job (Zombies en PROCESSING & Expiraciones)...');
+    console.log('[System] Corriendo recovery job...');
     paymentService.cronRecoveryJobs().catch(e => console.error('[Cron Error]', e.message));
 });
 
@@ -84,14 +103,13 @@ const locationInterval = setInterval(() => {
     locationCacheModule.flushToDatabase().catch(e => console.error('[Flush] Err:', e.message));
 }, 60000);
 
-// GRACEFUL SHUTDOWN (SIGINT / SIGTERM)
+// GRACEFUL SHUTDOWN
 const shutdownHandler = async (signal) => {
     console.log(`\n[System] Recibida señal ${signal}. Iniciando Graceful Shutdown...`);
     clearInterval(locationInterval);
     
-    // Fallback Timer en caso de colapso extremo
     const forceExitTimer = setTimeout(() => {
-        console.error('[System] Shutdown forzado por Timeout (3s). Saliendo ciegamente.');
+        console.error('[System] Shutdown forzado. Saliendo.');
         process.exit(1);
     }, 3000);
 
@@ -100,12 +118,12 @@ const shutdownHandler = async (signal) => {
         console.log('[System] Telemetría residual asegurada en MongoDB.');
         
         expressServer.close(() => {
-            console.log('[System] Interfaces Express/HTTP cerradas exitosamente.');
+            console.log('[System] Interfaces Express/HTTP cerradas.');
             clearTimeout(forceExitTimer);
             process.exit(0);
         });
     } catch (e) {
-        console.error('[System] Error Crítico cerrando el sistema:', e.message);
+        console.error('[System] Error Crítico cerrando:', e.message);
         process.exit(1);
     }
 };

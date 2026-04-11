@@ -17,7 +17,7 @@ export default function RideHistory() {
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
   const { user } = useAuthStore();
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
 
   const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     COMPLETED:   { label: t('history.status.completed'),  color: theme.colors.success,     bg: theme.colors.successLight },
@@ -75,7 +75,7 @@ export default function RideHistory() {
       bg: theme.colors.surface,
     };
 
-    const formattedDate = new Date(item.createdAt).toLocaleDateString('es', {
+    const formattedDate = new Date(item.createdAt).toLocaleDateString(lang, {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });

@@ -83,18 +83,32 @@ const rideSchema = new mongoose.Schema(
             type: { type: String, enum: ['CAPTURE', 'REFUND', 'DISPUTE', 'FAILED', 'CANCELED', 'HOLD'] },
             timestamp: { type: Date, default: Date.now },
             metadata: { type: mongoose.Schema.Types.Mixed }
-        }]
+        }],
+        // P2: Tarifa de cancelación
+        cancellationFee: { type: Number, default: 0 },
+        cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        cancelReason: { type: String, default: null },
+        // R1: Timestamps de transiciones de estado
+        acceptedAt: { type: Date, default: null },
+        arrivedAt: { type: Date, default: null },
+        startedAt: { type: Date, default: null },
+        completedAt: { type: Date, default: null },
+        cancelledAt: { type: Date, default: null },
     },
     {
         timestamps: true,
     }
 );
 
-// GeoSpatial Index for Uber-level matching
+// B4: Índices para rendimiento
 rideSchema.index({ 'pickupLocation.location': '2dsphere' });
 rideSchema.index({ 'dropoffLocation.location': '2dsphere' });
+rideSchema.index({ passenger: 1, status: 1 });
+rideSchema.index({ driver: 1, status: 1 });
+rideSchema.index({ status: 1, createdAt: -1 });
+rideSchema.index({ paymentStatus: 1 });
 
-// TTL Expiration: Elimina viajes abandonados automáticamente pasadas 3 horas (10800s)
+// TTL Expiration: Elimina viajes abandonados automáticamente pasadas 3 horas
 rideSchema.index({ createdAt: 1 }, { expireAfterSeconds: 10800 });
 
 module.exports = mongoose.model('Ride', rideSchema);

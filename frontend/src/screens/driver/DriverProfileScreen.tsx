@@ -23,6 +23,10 @@ export default function DriverProfileScreen() {
   };
 
   const { user, logout } = useAuthStore();
+  // BUG 17 FIX: Conectar Switch al estado real de notificaciones
+  const { notificationsEnabled, toggleNotifications, loadSettings } = useSettings();
+
+  React.useEffect(() => { loadSettings(); }, []);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -55,7 +59,8 @@ export default function DriverProfileScreen() {
         <View style={styles.settingRow}>
           <Text style={styles.settingText}>🔔 {t('settings.notifications')}</Text>
           <Switch
-            value={true}
+            value={notificationsEnabled}
+            onValueChange={toggleNotifications}
             trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
             thumbColor={theme.colors.background}
           />

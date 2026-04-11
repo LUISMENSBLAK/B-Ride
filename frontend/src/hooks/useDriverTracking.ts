@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { MapRendererHandle } from '../components/MapRenderer';
 
 export function useDriverTracking(mapRef: React.RefObject<MapRendererHandle | null>) {
@@ -11,7 +11,9 @@ export function useDriverTracking(mapRef: React.RefObject<MapRendererHandle | nu
     };
   }, []);
 
-  const pushLocation = (lat: number, lng: number) => {
+  // BUG 7 FIX: Envolver pushLocation en useCallback para evitar re-suscripciones infinitas
+  // en useRideSocketEvent donde pushLocation está en el array de dependencias.
+  const pushLocation = useCallback((lat: number, lng: number) => {
     // Inject the raw location. Because we're using Native Driver `animateMarkerToCoordinate`
     // inside MapRenderer, it natively lerps for 1000ms. We don't need JS thread looping.
     if (mapRef.current) {
@@ -29,12 +31,13 @@ export function useDriverTracking(mapRef: React.RefObject<MapRendererHandle | nu
         // Limit: 5000ms passed without a single ping -> Reconnecting.
         setDriverTrackingState('RECONNECTING');
     }, 5000);
-  };
+  }, [mapRef]);
 
-  const stopTracking = () => {
+  // BUG 7 FIX: Envolver stopTracking en useCallback
+  const stopTracking = useCallback(() => {
     if (lastHeartbeatTimer.current) clearTimeout(lastHeartbeatTimer.current);
     setDriverTrackingState('IDLE');
-  };
+  }, []);
 
   return {
     driverTrackingState,

@@ -8,7 +8,7 @@ interface CarMarkerProps {
     size?: number;
 }
 
-const CarMarker = ({ heading = 0, size = 44 }: CarMarkerProps) => (
+const CarMarker = ({ heading = 0, size = 28 }: CarMarkerProps) => (
   <View style={{
     width: size,
     height: size * 1.6,

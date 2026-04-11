@@ -5,6 +5,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, wit
 import { useAuthStore } from '../../store/authStore';
 import { theme } from '../../theme';
 import { useTranslation } from '../../hooks/useTranslation';
+import client from '../../api/client';
 
 export default function EarningsScreen() {
   const theme = useAppTheme();
@@ -14,13 +15,56 @@ export default function EarningsScreen() {
   const [loading, setLoading] = useState(true);
   const { t } = useTranslation();
 
-  // Simulating load for premium feel
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+  // BUG 16 FIX: Estado real en vez de hardcodeado
+  const [todayStats, setTodayStats] = useState({ trips: 0, earned: 0.00, rating: user?.avgRating ?? 5.0 });
+  const [weekTrips, setWeekTrips] = useState(0);
+  const [monthTrips, setMonthTrips] = useState(0);
 
-  const todayStats = { trips: 0, earned: 0.00, rating: user?.avgRating ?? 5.0 };
+  // BUG 16 FIX: Fetch real de ganancias desde el backend
+  useEffect(() => {
+    const fetchEarnings = async () => {
+      try {
+        const res = await client.get('/rides/history');
+        if (res.data?.success) {
+          const allRides = res.data.data || [];
+          const completed = allRides.filter((r: any) => r.status === 'COMPLETED');
+
+          const now = new Date();
+          const todayStr = now.toDateString();
+
+          // Viajes de hoy
+          const todayRides = completed.filter((r: any) => {
+            return new Date(r.createdAt).toDateString() === todayStr;
+          });
+
+          // Ganancias de hoy (80% del precio del bid aceptado o propuesto)
+          const earned = todayRides.reduce((sum: number, r: any) => {
+            const bid = r.bids?.find((b: any) => b.status === 'ACCEPTED');
+            return sum + (bid?.price ?? r.proposedPrice ?? 0) * 0.80;
+          }, 0);
+
+          setTodayStats({
+            trips: todayRides.length,
+            earned: Number(earned.toFixed(2)),
+            rating: user?.avgRating ?? 5.0,
+          });
+
+          // Viajes de la semana (últimos 7 días)
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          setWeekTrips(completed.filter((r: any) => new Date(r.createdAt) >= weekAgo).length);
+
+          // Viajes del mes (últimos 30 días)
+          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          setMonthTrips(completed.filter((r: any) => new Date(r.createdAt) >= monthAgo).length);
+        }
+      } catch (e) {
+        console.error('[EarningsScreen] Error fetching earnings:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEarnings();
+  }, []);
 
   // Skeleton Animation
   const opacity = useSharedValue(0.4);
@@ -48,6 +92,8 @@ export default function EarningsScreen() {
     );
   }
 
+  const hasEarnings = todayStats.trips > 0 || weekTrips > 0 || monthTrips > 0;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -72,20 +118,22 @@ export default function EarningsScreen() {
           <Text style={styles.statLabel}>{t('driver.earningsRating')}</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>0</Text>
+          <Text style={styles.statValue}>{weekTrips}</Text>
           <Text style={styles.statLabel}>{t('driver.earningsWeek')}</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>0</Text>
+          <Text style={styles.statValue}>{monthTrips}</Text>
           <Text style={styles.statLabel}>{t('driver.earningsMonth')}</Text>
         </View>
       </View>
 
-      <View style={styles.emptyState}>
-        <Text style={styles.emptyIcon}>💰</Text>
-        <Text style={styles.emptyTitle}>{t('driver.earningsEmptyTitle')}</Text>
-        <Text style={styles.emptyText}>{t('driver.earningsEmptySubtitle')}</Text>
-      </View>
+      {!hasEarnings && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>💰</Text>
+          <Text style={styles.emptyTitle}>{t('driver.earningsEmptyTitle')}</Text>
+          <Text style={styles.emptyText}>{t('driver.earningsEmptySubtitle')}</Text>
+        </View>
+      )}
     </ScrollView>
   );
 }

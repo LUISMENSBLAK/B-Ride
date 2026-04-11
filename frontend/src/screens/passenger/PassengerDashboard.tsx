@@ -28,27 +28,7 @@ import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
-// ─── Utilidad: distancia Haversine (km) ─────────────────────────────────────
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ETA en minutos asumiendo velocidad media de 30 km/h en ciudad
-function etaMinutes(driverLat?: number, driverLng?: number, pickupLat?: number, pickupLng?: number): number | null {
-  if (driverLat == null || pickupLat == null) return null;
-  const km = haversineKm(driverLat, driverLng!, pickupLat, pickupLng!);
-  return Math.max(1, Math.round((km / 30) * 60));
-}
-
-
+import { haversineKm, etaMinutes } from '../../utils/geo';
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function PassengerDashboard() {
@@ -83,9 +63,11 @@ export default function PassengerDashboard() {
         selectedPlace.latitude, selectedPlace.longitude
       );
       setDistanceKm(Number(dist.toFixed(1)));
+      // BUG 5 FIX: Factor determinístico basado en hora del día en vez de Math.random()
+      const hour = new Date().getHours();
+      const trafficMultiplier = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19) ? 1.4 : 1.0;
       const baseEta = Math.max(1, Math.round((dist / 40) * 60)); // 40 km/h avg
-      const trafficFactor = 1.0 + Math.random() * 0.5; // (1.0 - 1.5) Simulate traffic
-      setEstimatedTimeMin(Math.round(baseEta * trafficFactor));
+      setEstimatedTimeMin(Math.round(baseEta * trafficMultiplier));
     } else {
       setDistanceKm(0);
       setEstimatedTimeMin(0);
@@ -244,6 +226,27 @@ export default function PassengerDashboard() {
     Alert.alert('Error', error.message);
     resetFlow();
     setAcceptingBidId(null);
+  }, []));
+
+  // LAUNCH 7 FIX: Escuchar eventos de driver no escuchados previamente
+  useRideSocketEvent('driver_warning', useCallback((data: any) => {
+    Alert.alert(
+      '⚠️ Aviso del conductor',
+      data?.message || 'El conductor reporta un problema en la ruta.'
+    );
+  }, []));
+
+  useRideSocketEvent('driver_disconnected', useCallback((data: any) => {
+    Alert.alert(
+      '📡 Conductor desconectado',
+      'Se perdió la conexión con el conductor. Si persiste, contacta a soporte.',
+      [
+        { text: 'OK', style: 'default' },
+        { text: 'SOS', style: 'destructive', onPress: () => {
+          // Se gestionará cuando el SOS esté integrado en la UI
+        }},
+      ]
+    );
   }, []));
 
   useRideSocketEvent('rating_submitted', useCallback(({ newAvg }) => {
@@ -521,7 +524,12 @@ export default function PassengerDashboard() {
                    </View>
                  </View>
 
-                 {distanceKm > 100 && (
+                  {/* UX 4: Contexto explicativo del precio */}
+                  <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
+                    Precio sugerido basado en {distanceKm} km · {estimatedTimeMin} min
+                  </Text>
+
+                  {distanceKm > 100 && (
                      <Text style={{color: theme.colors.error, marginTop: 8, textAlign: 'center', fontWeight: '600', fontSize: 13}}>
                        {t('errors.outOfRangeMsg')}
                      </Text>
@@ -644,8 +652,12 @@ export default function PassengerDashboard() {
         {isActiveRide && (
           <View style={[styles.statusCard, { paddingHorizontal: theme.spacing.xl }]}>
             <StatusBadge
-              variant={rideStatus === 'IN_PROGRESS' ? 'active' : 'searching'}
-              label={rideStatus === 'ARRIVED' ? t('ride.status.arriving') : rideStatus === 'IN_PROGRESS' ? t('ride.status.inProgress') : t('ride.status.confirmed')}
+              variant={rideStatus === 'IN_PROGRESS' ? 'active' : driverTrackingState === 'RECONNECTING' ? 'offline' : 'searching'}
+              label={
+                driverTrackingState === 'RECONNECTING'
+                  ? t('ride.status.weakSignal', { defaultValue: 'Señal del conductor débil...' })
+                  : rideStatus === 'ARRIVED' ? t('ride.status.arriving') : rideStatus === 'IN_PROGRESS' ? t('ride.status.inProgress') : t('ride.status.confirmed')
+              }
               style={{ marginBottom: 12, alignSelf: 'center' }}
             />
             <Text style={styles.statusTitle}>

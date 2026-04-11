@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import client from '../api/client';
 
 interface User {
     _id: string;
@@ -58,6 +59,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         await AsyncStorage.removeItem('userToken');
         await AsyncStorage.removeItem('refreshToken');
         await AsyncStorage.removeItem('userInfo');
+        // BUG 20 FIX: Limpiar recibo cacheado del usuario anterior
+        await AsyncStorage.removeItem('lastCompletedRideId');
         set({ user: null });
     },
     checkAuth: async () => {
@@ -67,7 +70,21 @@ export const useAuthStore = create<AuthState>((set) => ({
             const userInfoStr = await AsyncStorage.getItem('userInfo');
 
             if (token && userInfoStr) {
-                set({ user: JSON.parse(userInfoStr) });
+                // BUG 18 FIX: Validar token contra el backend antes de restaurar sesión
+                try {
+                    await client.get('/auth/me');
+                    set({ user: JSON.parse(userInfoStr) });
+                } catch (validationError: any) {
+                    if (validationError.response?.status === 401) {
+                        // Token expirado — limpiar sesión silenciosamente
+                        console.warn('[AuthStore] Token expirado, cerrando sesión automáticamente');
+                        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
+                        set({ user: null });
+                    } else {
+                        // Error de red u otro — permitir acceso offline con token cacheado
+                        set({ user: JSON.parse(userInfoStr) });
+                    }
+                }
             } else {
                 set({ user: null });
             }
