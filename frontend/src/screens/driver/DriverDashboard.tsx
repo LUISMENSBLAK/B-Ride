@@ -32,12 +32,15 @@ import ChatSheet from '../../components/ChatSheet';
 import { RatingModal } from '../../components/RatingModal';
 import { haversineKm } from '../../utils/geo';
 import { geohashEncode } from '../../utils/geo';
+import { useCurrency } from '../../hooks/useCurrency';
+import { Ionicons } from '@expo/vector-icons';
 
 // ─── TIPOS ────────────────────────────────────────────────────────────────────
 type TripPhase = 'IDLE' | 'INCOMING' | 'BID_SENT' | 'ACCEPTED' | 'ARRIVED' | 'IN_PROGRESS';
 
 export default function DriverDashboard() {
   const { user, logout } = useAuthStore();
+  const { formatPrice, convertToLocal, convertToUsd } = useCurrency();
 
   // ── Estado de conducción ──────────────────────────────────────────────────
   const [isOnline, setIsOnline]               = useState(false);
@@ -175,17 +178,20 @@ export default function DriverDashboard() {
     socketService.setLastKnownDriverLocation(lat, lng);
   }, [location, isOnline, user?._id, activeRide?.passenger?._id]);
 
-  // ── Stripe Onboarding ─────────────────────────────────────────────────────
+  // ── Bloque 1: Onboarding y Validación de Conductor ────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const res = await stripeFrontendService.checkOnboardingStatus();
-        setOnboardingComplete(res.onboardingComplete);
+        const isApproved = user?.approvalStatus === 'APPROVED' || user?.driverApprovalStatus === 'APPROVED';
+        setOnboardingComplete(isApproved);
+        if (!isApproved) {
+           setIsOnline(false); // Forzar offline si no está aprobado
+        }
       } catch {
-        setOnboardingComplete(true);
+        setOnboardingComplete(false);
       }
     })();
-  }, []);
+  }, [user]);
 
   // ── Heartbeat ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -316,13 +322,18 @@ export default function DriverDashboard() {
   const handleBid = useCallback(async (priceAdditive = 0) => {
     if (!incomingRide) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const finalPrice = Number(incomingRide.proposedPrice) + priceAdditive;
+
+    // Multi-currency: El precio que vemos y operamos está en moneda local. Se debe enviar en USD al server.
+    const baseLocal = convertToLocal(incomingRide.proposedPrice);
+    const newLocalPrice = baseLocal + priceAdditive;
+    const finalPriceUsd = convertToUsd(newLocalPrice);
+
     setPhase('BID_SENT');
     try {
       await socketService.emitWithAck('trip_bid', {
         rideId:      incomingRide._id,
         driverId:    user?._id,
-        price:       finalPrice,
+        price:       finalPriceUsd,
         passengerId: incomingRide.passenger._id,
       });
     } catch (e: any) {
@@ -510,8 +521,7 @@ export default function DriverDashboard() {
                         <Text style={styles.passengerName}>{incomingRide.passenger?.name ?? t('driver.passenger')}</Text>
                       </View>
                       <View style={styles.priceTag}>
-                        <Text style={styles.priceCurrency}>$</Text>
-                        <Text style={styles.priceAmount}>{incomingRide.proposedPrice}</Text>
+                        <Text style={styles.priceAmount}>{formatPrice(incomingRide.proposedPrice)}</Text>
                       </View>
                     </View>
 
@@ -551,7 +561,7 @@ export default function DriverDashboard() {
                       const distToPassenger = (driverLat && pLat) ? haversineKm(driverLat, driverLng!, pLat, pLng) : null;
                       const tripDist = (pLat && dLat) ? haversineKm(pLat, pLng, dLat, dLng) : null;
                       const estTime = tripDist ? Math.max(1, Math.round((tripDist / 35) * 60)) : null;
-                      const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * 0.80).toFixed(2) : null; // 80% para conductor
+                      const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * 0.80) : null; // 80% para conductor
                       return (
                         <View style={styles.tripMetrics}>
                           {distToPassenger != null && (
@@ -574,8 +584,9 @@ export default function DriverDashboard() {
                           )}
                           {estEarnings != null && (
                             <View style={[styles.metricItem, styles.metricItemHighlight]}>
-                              <Text style={styles.metricValueEarnings}>${estEarnings}</Text>
-                              <Text style={styles.metricLabel}>{t('driver.yourEarnings')}</Text>
+                              <Ionicons name="card" size={24} color={theme.colors.success} />
+                              <Text style={styles.metricValueEarnings}>{formatPrice(estEarnings)}</Text>
+                              <Text style={styles.metricLabel}>{t('driver.earnings')}</Text>
                             </View>
                           )}
                         </View>
@@ -591,7 +602,7 @@ export default function DriverDashboard() {
                         style={{ flex: 1, marginRight: 8 }}
                       />
                       <Button
-                        label={`${t('driver.accept')} $${incomingRide.proposedPrice}`}
+                        label={`${t('driver.accept')} ${formatPrice(incomingRide.proposedPrice)}`}
                         variant="success"
                         size="lg"
                         onPress={() => handleBid(0)}
@@ -605,7 +616,7 @@ export default function DriverDashboard() {
                       {[5, 10, 15].map(add => (
                         <Button
                           key={add}
-                          label={`+$${add}`}
+                          label={`+${formatPrice(convertToUsd(add))}`}
                           variant="ghost"
                           size="sm"
                           onPress={() => handleBid(add)}

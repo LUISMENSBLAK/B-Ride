@@ -30,7 +30,7 @@ export default function SOSButton({ rideId, otherUserId, style }: SOSButtonProps
       [
         { text: t('general.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         {
-          text: t('sos.callEmergency', { defaultValue: 'Llamar 911' }),
+          text: t('sos.callEmergency', { defaultValue: 'Llamar 112' }),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -38,21 +38,23 @@ export default function SOSButton({ rideId, otherUserId, style }: SOSButtonProps
               const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
 
               // 2. Enviar evento al backend
-              await client.post('/reports/sos', {
-                rideId,
-                otherUserId,
-                latitude: loc.coords.latitude,
-                longitude: loc.coords.longitude,
+              await client.post(`/rides/${rideId}/sos`, {
+                location: {
+                    latitude: loc.coords.latitude,
+                    longitude: loc.coords.longitude,
+                }
               });
 
-              // 3. Llamar a emergencias
-              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
+              Alert.alert('SOS Enviado', 'Se ha alertado a la otra persona y al centro de emergencias corporativo de B-Ride.');
+
+              // 3. Llamar a emergencias (112 en España)
+              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:112' : 'tel:112';
               Linking.openURL(emergencyNumber);
 
             } catch (e) {
               console.error('[SOS] Error:', e);
               // Aún así intentar llamar a emergencias
-              Linking.openURL('tel:911');
+              Linking.openURL('tel:112');
             }
           },
         },

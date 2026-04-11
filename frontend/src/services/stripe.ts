@@ -58,7 +58,8 @@ export const stripeFrontendService = {
    */
   createPaymentIntent: async (
     rideId: string,
-    bidId: string
+    bidId: string,
+    currency: string = 'USD'
   ): Promise<PaymentResult> => {
     // Double-tap guard
     if (_paymentInFlight) {
@@ -74,6 +75,7 @@ export const stripeFrontendService = {
           rideId,
           bidId,
           idempotencyKey,
+          currency,
         }),
         15000, // 15s timeout
         'createPaymentIntent'

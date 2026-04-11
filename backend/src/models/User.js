@@ -41,29 +41,44 @@ const userSchema = new mongoose.Schema(
             model:    { type: String, default: '' },   // modelo
             year:     { type: Number, default: null },
             color:    { type: String, default: '' },
-            plate:    { type: String, default: '' },   // placa
+            plate:    { type: String, default: '' },   // matrícula
             type:     { type: String, enum: ['SEDAN', 'SUV', 'VAN', 'MOTO', 'OTHER'], default: 'SEDAN' },
             capacity: { type: Number, default: 4 },
         },
 
-        // ─── V1: DOCUMENTOS DEL CONDUCTOR ───────────────────────────────
+        // ─── V1/B1: DOCUMENTOS DEL CONDUCTOR ───────────────────────────────
         documents: {
-            licenseUrl:       { type: String, default: null },
+            licenseUrl:       { type: String, default: null }, // Mantenido por retro
             insuranceUrl:     { type: String, default: null },
             registrationUrl:  { type: String, default: null },
             vehiclePhotoUrl:  { type: String, default: null },
         },
+        driverLicense: {
+            frontPhoto: { type: String, default: null },
+            backPhoto: { type: String, default: null },
+            number: { type: String, default: null },
+            expiryDate: { type: Date, default: null },
+        },
+        vehicleRegistration: {
+            photo: { type: String, default: null },
+            expiryDate: { type: Date, default: null },
+        },
 
-        // ─── V2: APROBACIÓN DE CONDUCTOR ────────────────────────────────
-        approvalStatus: {
+        // ─── V2: APROBACIÓN DE CONDUCTOR (Bloque 1) ────────────────────────────────
+        driverApprovalStatus: { // Solicitado renombrar desde approvalStatus (aunque lo mantendré compatible)
             type: String,
-            enum: ['PENDING_DOCS', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'],
+            enum: ['PENDING_DOCS', 'DOCS_SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'],
             default: 'PENDING_DOCS',
         },
+        approvalStatus: { type: String, enum: ['PENDING_DOCS', 'DOCS_SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'], default: 'PENDING_DOCS' },
         rejectionReason: { type: String, default: null },
 
-        // ─── S2: VERIFICACIÓN ───────────────────────────────────────────
+        // ─── S2/B2: VERIFICACIÓN ───────────────────────────────────────────
         emailVerified: { type: Boolean, default: false },
+        isEmailVerified: { type: Boolean, default: false }, // Compatibilidad requerida en prompt
+        emailVerificationToken: { type: String, select: false },
+        emailVerificationExpires: { type: Date, select: false },
+        
         phoneVerified: { type: Boolean, default: false },
         verificationOTP: { type: String, select: false },
         verificationOTPExpire: { type: Date, select: false },
@@ -94,9 +109,20 @@ const userSchema = new mongoose.Schema(
         // ─── WEEK 4: ACEPTACIÓN DE TÉRMINOS ────────────────────────────
         termsAcceptedAt: { type: Date, default: null },
 
-        // ─── F1: ANTIFRAUDE — DEVICE TRACKING ──────────────────────────
+        // ─── F1/B2: ANTIFRAUDE E IDENTIDAD DE DISPOSITIVO ──────────────────────
         deviceIds: [{ type: String }],
+        knownDevices: [{
+            deviceId: String,
+            deviceName: String,
+            platform: String,
+            firstSeen: { type: Date, default: Date.now },
+            lastSeen: { type: Date, default: Date.now }
+        }],
         lastDeviceId: { type: String, default: null },
+        
+        // Bloqueo de fuerza bruta de Auth
+        loginAttempts: { type: Number, default: 0 },
+        lockUntil: { type: Date, default: null },
 
         // --- DRIVER PRODUCTION STATES ---
         driverStatus: {
@@ -140,6 +166,12 @@ const userSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+// Virtual para saber si la cuenta está bloqueada ahora por intentos fallidos
+userSchema.virtual('isLocked').get(function () {
+    return !!(this.lockUntil && this.lockUntil > Date.now());
+});
+
 
 // B4: Índices clave para rendimiento
 userSchema.index({ lastKnownLocation: '2dsphere' });

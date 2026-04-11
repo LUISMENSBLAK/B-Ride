@@ -9,7 +9,7 @@ class PaymentService {
     /**
      * @desc Valida la oferta y el ride, calcula la comisión base db
      */
-    async createPaymentIntent(rideId, bidId, passengerId, idempotencyKey) {
+    async createPaymentIntent(rideId, bidId, passengerId, idempotencyKey, currency = 'USD') {
         const ride = await Ride.findById(rideId);
         if (!ride) throw new Error('Viaje no encontrado');
         
@@ -47,8 +47,12 @@ class PaymentService {
 
         const passenger = await User.findById(passengerId).select('+stripeCustomerId');
         
-        // 15% Commision calculated safely from DB stored bid price
-        const amountCents = Math.round(bid.price * 100);
+        // Multi-Moneda: Convierte el precio base (USD) a la moneda local de cobro del usuario
+        const pricingService = require('./pricing.service');
+        const convertedPrice = pricingService.convertAmount(bid.price, currency);
+
+        // 15% Commision calculated safely
+        const amountCents = Math.round(convertedPrice * 100);
         const feeCents = Math.round(amountCents * 0.15);
 
         let customerId = passenger.stripeCustomerId;
@@ -64,7 +68,7 @@ class PaymentService {
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount: amountCents,
-            currency: 'usd',
+            currency: currency.toLowerCase(),
             customer: customerId,
             capture_method: 'manual',
             transfer_data: { destination: driver.stripeAccountId },
@@ -76,12 +80,14 @@ class PaymentService {
             }
         }, { idempotencyKey });
 
-        console.log(`[Payment] Intent_CREATE | Ride: ${rideId} | IntentId: ${paymentIntent.id} | Amount: ${bid.price}`);
+        console.log(`[Payment] Intent_CREATE | Ride: ${rideId} | IntentId: ${paymentIntent.id} | Amount (Converted): ${convertedPrice} ${currency}`);
 
         return {
             clientSecret: paymentIntent.client_secret,
             paymentIntentId: paymentIntent.id,
-            amount: bid.price
+            amount: bid.price,
+            convertedAmount: convertedPrice,
+            currency: currency.toUpperCase()
         };
     }
 

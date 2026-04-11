@@ -153,10 +153,13 @@ const rideEvents = (socket) => {
     socket.on('requestRide', async (rideData, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { pickupLocation, dropoffLocation, proposedPrice, eventId } = rideData;
+            if (socket.userRole !== 'PASSENGER' && socket.userRole !== 'USER') {
+                socket.emit('rideError', { message: 'Acceso denegado. Solo pasajeros pueden pedir viajes.' });
+                return;
+            }
             
-            // CORRECCIÓN 10: Extraer passengerId del JWT de forma segura (ignorar el del payload)
-            const passengerId = socket.user?.id;
+            const { pickupLocation, dropoffLocation, proposedPrice, eventId } = rideData;
+            const passengerId = socket.userId;
             if (!passengerId) throw new Error('No autorizado');
 
             if (eventId && await idempotency.isDuplicate(eventId)) {
@@ -184,7 +187,14 @@ const rideEvents = (socket) => {
     socket.on('update_ride_price', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { rideId, passengerId, newPrice } = payload;
+            if (socket.userRole !== 'PASSENGER' && socket.userRole !== 'USER') {
+                socket.emit('rideError', { message: 'Acceso denegado. Solo pasajeros pueden actualizar el precio.' });
+                return;
+            }
+            
+            const { rideId, newPrice } = payload;
+            const passengerId = socket.userId;
+            
             if (!rideId || !newPrice) throw new Error('rideId y newPrice requeridos');
 
             const Ride = require('../models/Ride');
@@ -219,11 +229,13 @@ const rideEvents = (socket) => {
     socket.on('trip_bid', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
+            if (socket.userRole !== 'DRIVER') {
+                socket.emit('rideError', { message: 'Acceso denegado. Solo conductores pueden pujar.' });
+                return;
+            }
+        
             const { rideId, price, passengerId, eventId } = payload;
-            
-            // CORRECCIÓN 10: Extraer driverId del JWT
-            const driverId = socket.user?.id;
-            if (!driverId || socket.user?.role !== 'DRIVER') throw new Error('No autorizado');
+            const driverId = socket.userId;
 
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
@@ -261,11 +273,13 @@ const rideEvents = (socket) => {
     socket.on('trip_accept_bid', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
+            if (socket.userRole !== 'PASSENGER' && socket.userRole !== 'USER') {
+                socket.emit('rideError', { message: 'Acceso denegado. Solo pasajeros pueden aceptar pujas.' });
+                return;
+            }
+        
             const { rideId, bidId, driverId, eventId } = payload;
-            
-            // CORRECCIÓN 10: Validar ownership del pasajero
-            const passengerId = socket.user?.id;
-            if (!passengerId) throw new Error('No autorizado');
+            const passengerId = socket.userId;
 
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
@@ -371,7 +385,13 @@ const rideEvents = (socket) => {
     socket.on('update_trip_state', async (payload, ack) => {
         let isAckRequired = typeof ack === 'function';
         try {
-            const { rideId, driverId, passengerId, nextStatus, eventId } = payload;
+            if (socket.userRole !== 'DRIVER') {
+                socket.emit('rideError', { message: 'Acceso denegado. Solo conductores pueden actualizar el estado en ruta.' });
+                return;
+            }
+            
+            const { rideId, passengerId, nextStatus, eventId } = payload;
+            const driverId = socket.userId;
             
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if (isAckRequired) ack({ success: true, status: 'duplicate_ignored' });

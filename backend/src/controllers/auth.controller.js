@@ -30,18 +30,80 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ success: false, message: error.details[0].message });
         }
 
-        const { email, password } = req.body;
+        const { email, password, deviceId, deviceName, platform } = req.body;
 
-        const result = await authService.login(email, password);
+        const result = await authService.login(email, password, { deviceId, deviceName, platform });
         res.status(200).json({
             success: true,
             data: result,
         });
     } catch (error) {
+        if (error.code === 403 || error.message.includes('NOT_VERIFIED')) {
+             return res.status(403).json({ success: false, message: 'El email no ha sido verificado. Te enviamos un nuevo código.', code: 'NOT_VERIFIED' });
+        }
         res.status(401).json({
             success: false,
             message: error.message,
         });
+    }
+};
+
+const verifyEmail = async (req, res) => {
+    try {
+        const { email, code } = req.body;
+        if (!email || !code) return res.status(400).json({ success: false, message: 'Email and code required' });
+
+        const User = require('../models/User');
+        const user = await User.findOne({ email }).select('+emailVerificationToken +emailVerificationExpires');
+        
+        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        if (user.isEmailVerified || user.emailVerified) return res.status(400).json({ success: false, message: 'Already verified' });
+        
+        if (user.emailVerificationExpires < Date.now()) {
+             return res.status(400).json({ success: false, message: 'Code expired. Please login again to receive a new one.' });
+        }
+
+        const bcrypt = require('bcryptjs');
+        const isMatch = await bcrypt.compare(code, user.emailVerificationToken);
+        
+        if (!isMatch) return res.status(400).json({ success: false, message: 'Invalid code' });
+
+        user.isEmailVerified = true;
+        user.emailVerified = true;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+        await user.save();
+
+        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
+        const RefreshToken = require('../models/RefreshToken');
+        const uuid = require('uuid');
+
+        const accessToken = generateAccessToken(user._id);
+        const rawRefreshToken = generateRefreshToken(user._id);
+
+        const familyId = uuid.v4();
+        await RefreshToken.create({
+            token: rawRefreshToken,
+            user: user._id,
+            familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                approvalStatus: user.driverApprovalStatus || user.approvalStatus,
+                accessToken,
+                refreshToken: rawRefreshToken,
+            }
+        });
+
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
     }
 };
 
@@ -142,33 +204,76 @@ const resetPassword = async (req, res) => {
 const refreshToken = async (req, res) => {
     try {
         const { token } = req.body;
+        if (!token) return res.status(401).json({ success: false, message: 'Refresh token is required' });
 
-        if (!token) {
-            return res.status(401).json({ success: false, message: 'Refresh token is required' });
+        const { verifyRefreshToken, generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
+        const RefreshToken = require('../models/RefreshToken');
+        
+        let decoded;
+        try {
+            decoded = verifyRefreshToken(token);
+        } catch (e) {
+            return res.status(401).json({ success: false, message: 'Invalid or expired token' });
         }
 
-        const { verifyRefreshToken, generateAccessToken } = require('../utils/jwtUtils');
+        // B2: Verificación de familia y blacklisting
+        const dbToken = await RefreshToken.findOne({ token });
+        if (!dbToken) return res.status(401).json({ success: false, message: 'Token not found or invalidated' });
 
-        // Verify refresh token
-        const decoded = verifyRefreshToken(token);
+        if (dbToken.used) {
+            // ALERTA DE RE-USO DE TOKEN ROBADO! Invalidar toda la familia
+            await RefreshToken.updateMany({ familyId: dbToken.familyId }, { $set: { used: true } });
+            console.log(`[Seguridad] Re-uso de token detectado para user ${dbToken.user}. Familia invalidada.`);
+            return res.status(401).json({ success: false, message: 'Token compromise detected. Please login again.' });
+        }
+
+        // Marcar este token como usado (Rotación)
+        dbToken.used = true;
+        await dbToken.save();
 
         const user = await require('../models/User').findById(decoded.id);
+        if (!user || user.isBanned) return res.status(401).json({ success: false, message: 'User not found or banned' });
 
-        if (!user) {
-            return res.status(401).json({ success: false, message: 'User not found' });
-        }
-
-        // Generate new access token
         const newAccessToken = generateAccessToken(user._id);
+        const newRefreshTokenRaw = generateRefreshToken(user._id);
+
+        // Crear el nuevo refresh token asociado a la misma familia
+        await RefreshToken.create({
+            token: newRefreshTokenRaw,
+            user: user._id,
+            familyId: dbToken.familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        });
 
         res.status(200).json({
             success: true,
-            accessToken: newAccessToken
+            accessToken: newAccessToken,
+            refreshToken: newRefreshTokenRaw
         });
     } catch (error) {
-        res.status(401).json({ success: false, message: 'Invalid or expired refresh token' });
+        res.status(401).json({ success: false, message: 'Internal Server Error refreshing token' });
     }
 };
+
+const logoutAll = async (req, res) => {
+    try {
+        const RefreshToken = require('../models/RefreshToken');
+        // Marcar todos los tokens de este usuario como USADOS
+        await RefreshToken.updateMany({ user: req.user._id }, { $set: { used: true } });
+        
+        // B2: Emitir evento por sockets para force logout sincrono 
+        const { getIO } = require('../sockets');
+        try {
+            getIO().to(req.user._id.toString()).emit('force_logout', { message: 'Se cerró sesión desde otro dispositivo.' });
+        } catch (e) {
+            // Puede que el socket io no este inicializado en los tests
+        }
+
+        res.status(200).json({ success: true, message: 'Cerrado en todos los dispositivos.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+}
 
 const updatePushToken = async (req, res) => {
     try {
@@ -216,7 +321,9 @@ module.exports = {
     resetPassword,
     refreshToken,
     updatePushToken,
-    removePushToken
+    removePushToken,
+    verifyEmail,
+    logoutAll
 };
 
 const uploadAvatar = async (req, res) => {

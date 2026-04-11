@@ -31,7 +31,13 @@ export default function LoginScreen({
                 await login(res.data.data);
             }
         } catch (error: any) {
-            Alert.alert(t('auth.loginFailed'), error.response?.data?.message || t('auth.somethingWentWrong'));
+            const data = error.response?.data;
+            if (data?.code === 'NOT_VERIFIED' || error.response?.status === 403) {
+                 Alert.alert('Verificación Requerida', data?.message || 'Revisa tu email por el código.');
+                 navigation.navigate('VerifyEmail', { email });
+                 return;
+            }
+            Alert.alert(t('auth.loginFailed'), data?.message || t('auth.somethingWentWrong'));
         } finally {
             setLoading(false);
         }

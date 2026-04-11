@@ -11,6 +11,13 @@ class PricingService {
         // Geopartitioning Truncation factor: `Math.floor(x * 50) / 50` ~= Grid de 2.22 km
         this.GRID_FACTOR = 50; 
 
+        // Tasas de cambio predeterminadas y helper de formato - Block Multi-Moneda
+        this.CURRENCY_RATES = {
+            USD: 1.0,
+            MXN: 17.5,
+            EUR: 0.92
+        };
+
         // Cache in-memory temporal: { "zoneId": multiplier }
         this.surgeCache = new Map();
         
@@ -146,6 +153,14 @@ class PricingService {
             zoneId,
             distanceEstimatedKm: Math.round(distanceKm * 10) / 10
         };
+    }
+
+    /**
+     * @desc Convierte un monto base en USD a otra moneda utilizando CURRENCY_RATES
+     */
+    convertAmount(amountInUsd, targetCurrency = 'USD') {
+        const rate = this.CURRENCY_RATES[targetCurrency.toUpperCase()] || 1.0;
+        return amountInUsd * rate;
     }
 }
 

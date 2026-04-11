@@ -11,6 +11,9 @@ router.get('/history', protect, getMyRides);
 // Get ride sync state
 router.get('/:id/state', protect, require('../controllers/ride.controller').getRideState);
 
+// SOS (Bloque 7)
+router.post('/:rideId/sos', protect, require('../controllers/ride.controller').sosTrigger);
+
 // Estimate Price con Surge Module (Desacoplado)
 router.post('/estimate', protect, (req, res) => {
     try {

@@ -14,6 +14,10 @@ interface User {
     totalRatings?: number;
     phoneNumber?: string;
     avatarUrl?: string;
+    profilePhoto?: string;
+    approvalStatus?: 'NOT_SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED';
+    driverApprovalStatus?: 'NOT_SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED';
+    rejectionReason?: string;
 }
 
 interface AuthState {

@@ -53,14 +53,14 @@ router.get('/admin/health', protect, async (req, res) => {
 // @access  Private (User/Passenger)
 router.post('/intent', protect, authorize('USER'), async (req, res) => {
     try {
-        const { rideId, bidId, idempotencyKey } = req.body;
+        const { rideId, bidId, idempotencyKey, currency } = req.body;
         if (!rideId || !bidId) return res.status(400).json({ success: false, message: 'Faltan parámetros' });
 
         const ride = await Ride.findById(rideId);
         if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
 
         // Se delega TODA la lógica, importe y validaciones de seguridad a la capa de servicio
-        const result = await paymentService.createPaymentIntent(rideId, bidId, req.user._id, idempotencyKey || uuid.v4());
+        const result = await paymentService.createPaymentIntent(rideId, bidId, req.user._id, idempotencyKey || uuid.v4(), currency);
 
         res.status(200).json({ 
             success: true, 

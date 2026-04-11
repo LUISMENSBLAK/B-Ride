@@ -130,6 +130,26 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleLogoutAll = () => {
+    Alert.alert(
+      'Cerrar sesión global',
+      '¿Estás seguro de cerrar la sesión en TODOS tus dispositivos activos?',
+      [
+        { text: t('settings.cancel'), style: 'cancel' },
+        {
+          text: 'Sí, cerrar en todos', style: 'destructive', onPress: async () => {
+            try {
+              await api.post('/auth/logout-all');
+              logout();
+            } catch (e) {
+              Alert.alert('Error', 'No se pudo cerrar sesión en todos los dispositivos');
+            }
+          }
+        },
+      ]
+    );
+  };
+
   const handleSetLang = async (next: string) => {
     await setLang(next);
     setLangPickerOpen(false);
@@ -380,6 +400,13 @@ export default function SettingsScreen() {
                 label={t('settings.logout')}
                 destructive
                 onPress={handleLogout}
+              />
+              <SectionDivider />
+              <SettingsItem
+                icon={<LogOut size={20} color={theme.colors.danger} />}
+                label="Cerrar sesión en todos los dispositivos"
+                destructive
+                onPress={handleLogoutAll}
               />
             </SettingsSection>
           </View>

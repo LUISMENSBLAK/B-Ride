@@ -6,12 +6,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import { theme } from '../../theme';
 import { useTranslation } from '../../hooks/useTranslation';
+import { useCurrency } from '../../hooks/useCurrency';
 import api from '../../api/client';
 
 export default function PaymentStatusScreen() {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const { t } = useTranslation();
+  const { formatPrice, convertToLocal } = useCurrency();
   // BUG 14 FIX: Destructurar resetFlow del store para que el botón "Volver a inicio" funcione
   const { resetFlow } = useRideFlowStore();
 
@@ -81,7 +83,7 @@ export default function PaymentStatusScreen() {
         <Text style={styles.title}>
           {isCompleted ? t('payment.processed') : t('payment.processing')}
         </Text>
-        <Text style={styles.amount}>${finalPrice}</Text>
+        <Text style={styles.amount}>{formatPrice(convertToLocal(finalPrice))}</Text>
         <Text style={styles.subtitle}>
           {isCompleted
             ? t('payment.chargedOk')
@@ -92,7 +94,7 @@ export default function PaymentStatusScreen() {
         <View style={styles.detailCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('payment.fareCharged')}</Text>
-            <Text style={styles.detailValue}>${finalPrice}</Text>
+            <Text style={styles.detailValue}>{formatPrice(convertToLocal(finalPrice))}</Text>
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t('payment.method')}</Text>
@@ -128,6 +130,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   iconPending: { backgroundColor: theme.colors.primary },
   icon: { fontSize: 40, color: theme.colors.primaryText, fontWeight: '800' },
   title: { ...theme.typography.header, fontSize: 26, marginBottom: theme.spacing.s, textAlign: 'center' },
+  amount: { fontSize: 32, fontWeight: '800', color: theme.colors.primary, textAlign: 'center', marginBottom: theme.spacing.s },
   subtitle: { ...theme.typography.bodyMuted, textAlign: 'center', marginBottom: theme.spacing.xl },
   detailCard: {
     width: '100%',

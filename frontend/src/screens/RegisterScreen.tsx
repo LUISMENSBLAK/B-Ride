@@ -52,7 +52,12 @@ export default function RegisterScreen({ navigation }: any) {
         termsAcceptedAt: new Date().toISOString(), // WEEK 4
       });
       if (res.data.success) {
-        await login(res.data.data);
+        if (res.data.data?.verify_required) {
+            Alert.alert('Registro exitoso', res.data.data.message);
+            navigation.navigate('VerifyEmail', { email });
+        } else {
+            await login(res.data.data);
+        }
       }
     } catch (error: any) {
       Alert.alert('Registro fallido', error.response?.data?.message || t('auth.somethingWentWrong'));
