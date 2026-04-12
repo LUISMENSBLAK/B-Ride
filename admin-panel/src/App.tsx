@@ -5,6 +5,7 @@ import LoginPage from './pages/Login';
 import DashboardPage from './pages/Dashboard';
 import DriversPendingPage from './pages/DriversPending';
 import UsersPage from './pages/Users';
+import RidesPage from './pages/Rides';
 import SOSPage from './pages/SOS';
 import PromosPage from './pages/Promos';
 import AnalyticsPage from './pages/Analytics';
@@ -30,6 +31,7 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="drivers-pending" element={<DriversPendingPage />} />
+          <Route path="rides" element={<RidesPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="sos" element={<SOSPage />} />
           <Route path="promos" element={<PromosPage />} />

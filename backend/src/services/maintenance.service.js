@@ -42,7 +42,7 @@ const startMaintenanceCrons = () => {
             const scheduledRides = await Ride.find({
                 status: 'SCHEDULED',
                 isScheduled: true,
-                scheduledAt: { $lte: in15Mins, $gte: new Date(now.getTime() - 60*60*1000) } // Ignorar cosas superviejas
+                scheduledFor: { $lte: in15Mins, $gte: new Date(now.getTime() - 60*60*1000) } // Ignorar cosas superviejas
             }).populate('passenger', 'name email phoneNumber');
 
             for (const ride of scheduledRides) {
@@ -94,7 +94,7 @@ const startMaintenanceCrons = () => {
             const suspendedDrivers = await User.find({
                  role: 'DRIVER',
                  driverApprovalStatus: 'APPROVED',
-                 'documents.driverLicense.expiryDate': { $lt: today }
+                 'driverLicense.expiryDate': { $lt: today }
             });
 
             for (const driver of suspendedDrivers) {
@@ -105,7 +105,7 @@ const startMaintenanceCrons = () => {
                  await sendEmail({
                      email: driver.email,
                      subject: 'Aviso Importante: Cuenta de B-Ride Suspendida',
-                     message: `Hola ${driver.name},<br/><br/>Su cuenta de conductor ha sido temporalmente suspendida porque su Licencia de Conducir ha vencido el pasado ${driver.documents.driverLicense.expiryDate.toLocaleDateString()}.<br/><br/>Por favor actualice su documentación de inmediato para recuperar el acceso a la plataforma.`
+                     message: `Hola ${driver.name},<br/><br/>Su cuenta de conductor ha sido temporalmente suspendida porque su Licencia de Conducir ha vencido el pasado ${driver.driverLicense?.expiryDate?.toLocaleDateString()}.<br/><br/>Por favor actualice su documentación de inmediato para recuperar el acceso a la plataforma.`
                  });
                  console.log(`[Cron] Conductor ${driver._id} suspendido por licencia vencida.`);
             }

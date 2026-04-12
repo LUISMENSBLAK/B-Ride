@@ -14,7 +14,7 @@ const startDocumentExpiryCron = () => {
             const drivers = await User.find({
                 role: 'DRIVER',
                 $or: [
-                    { 'documents.driverLicense.expiryDate': { $lte: in30Days } },
+                    { 'driverLicense.expiryDate': { $lte: in30Days } },
                     { 'vehicle.insuranceExpiryDate': { $lte: in30Days } }
                 ]
             });
@@ -23,7 +23,7 @@ const startDocumentExpiryCron = () => {
                 const expiredDocs = [];
                 const expiringSoon = [];
 
-                const dlExpiry = driver.documents?.driverLicense?.expiryDate;
+                const dlExpiry = driver.driverLicense?.expiryDate;
                 if (dlExpiry) {
                     if (dlExpiry < today) expiredDocs.push('Licencia de conducir');
                     else if (dlExpiry <= in30Days) expiringSoon.push(`Licencia de conducir (${dlExpiry.toLocaleDateString()})`);

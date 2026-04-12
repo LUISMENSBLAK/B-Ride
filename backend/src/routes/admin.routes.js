@@ -9,6 +9,7 @@ router.use(protect);
 router.use(authorize('ADMIN'));
 
 router.get('/drivers/pending', adminController.getPendingDrivers);
+router.get('/drivers/active-locations', adminController.getActiveDriverLocations);
 router.put('/drivers/:id/approve', adminController.approveDriver);
 router.put('/drivers/:id/reject', adminController.rejectDriver);
 

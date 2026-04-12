@@ -148,10 +148,21 @@ const getStats = async (req, res) => {
     }
 };
 
+const getActiveDriverLocations = async (req, res) => {
+    try {
+        const drivers = await User.find({ role: 'DRIVER', driverStatus: 'AVAILABLE' })
+            .select('name lastKnownLocation vehicle avgRating');
+        res.json({ success: true, data: drivers });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 module.exports = {
     getPendingDrivers,
     approveDriver,
     rejectDriver,
+    getActiveDriverLocations,
     getAllRides,
     getAllUsers,
     banUser,

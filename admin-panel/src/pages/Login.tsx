@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAuthStore } from "../store/authStore";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -23,8 +24,14 @@ export default function Login() {
       if (!res.ok) throw new Error(data.message || "Error al iniciar sesión");
       if (data.data?.role !== "ADMIN")
         throw new Error("Acceso denegado. Se requiere rol ADMIN.");
-      localStorage.setItem("adminToken", data.data.accessToken);
-      window.location.href = "/";
+      const { login } = useAuthStore.getState();
+      login(data.data.accessToken, {
+        _id: data.data._id,
+        name: data.data.name,
+        email: data.data.email,
+        role: data.data.role
+      });
+      window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.message);
     } finally {

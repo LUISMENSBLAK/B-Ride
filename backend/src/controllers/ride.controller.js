@@ -101,8 +101,12 @@ const sosTrigger = async (req, res) => {
 
         // Enviar email a soporte
         const supportEmail = process.env.SUPPORT_EMAIL || 'support@brideapp.com';
-        console.log(`[EMERGENCIA] Correo enviado a ${supportEmail} por botón SOS en viaje ${rideId}. Usuario ID: ${req.user._id}`);
-        // En prod esto usaría una API como SendGrid o AWS SES de alta prioridad.
+        const sendEmail = require('../utils/sendEmail');
+        await sendEmail({
+            email: supportEmail,
+            subject: '🚨 EMERGENCIA SOS — B-Ride',
+            message: `SOS activado por usuario ID: ${req.user._id} en viaje ${rideId}. Coordenadas: ${JSON.stringify(location)}`
+        });
 
         res.status(200).json({ success: true, message: 'SOS registrado. Autoridades notificadas.' });
     } catch(e) {

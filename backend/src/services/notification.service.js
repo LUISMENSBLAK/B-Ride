@@ -63,11 +63,13 @@ const sendSmartPushNotifications = async (notifications) => {
     // Se recomienda implementarlo en un job secundario, pero lo haremos inline básico.
     // getReceipts() sería lo ideal, pero verificar los tickets es un primer filtro:
     let receiptIds = [];
-    for (let ticket of tickets) {
-        // En un caso real iteraríamos mensajes con tickets para buscar el ID usuario.
-        if (ticket.status === 'error') {
-            if (ticket.details && ticket.details.error === 'DeviceNotRegistered') {
-                console.log(`[PushService] DeviceNotRegistered encontrado. Se debería limpiar token.`);
+    for (let i = 0; i < tickets.length; i++) {
+        const ticket = tickets[i];
+        if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
+            const tokenToRemove = messages[i]?.to;
+            if (tokenToRemove) {
+                 await User.updateMany({}, { $pull: { expoPushTokens: tokenToRemove } });
+                 console.log(`[PushService] Token inválido ${tokenToRemove} eliminado.`);
             }
         }
     }

@@ -4,11 +4,12 @@ import styles from './Sidebar.module.css';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { to: '/drivers-pending', label: 'Drivers Pending', icon: '🚗' },
-  { to: '/users', label: 'Users', icon: '👥' },
+  { to: '/drivers-pending', label: 'Conductores Pendientes', icon: '🚗' },
+  { to: '/rides', label: 'Viajes', icon: '🗺️' },
+  { to: '/users', label: 'Usuarios', icon: '👥' },
   { to: '/sos', label: 'SOS', icon: '🚨' },
-  { to: '/promos', label: 'Promos', icon: '🎁' },
-  { to: '/analytics', label: 'Analytics', icon: '📈' },
+  { to: '/promos', label: 'Promociones', icon: '🎁' },
+  { to: '/analytics', label: 'Analíticas', icon: '📈' },
 ];
 
 export default function Sidebar() {
@@ -24,7 +25,7 @@ export default function Sidebar() {
     <aside className={styles.sidebar}>
       {/* Logo */}
       <div className={styles.logoWrap}>
-        <img src="/icon.png" alt="B-Ride" className={styles.logo} />
+        <img src="/ride.png" alt="B-Ride" className={styles.logo} />
         <span className={styles.logoLabel}>B-Ride<span className={styles.logoAdmin}>Admin</span></span>
       </div>
 
