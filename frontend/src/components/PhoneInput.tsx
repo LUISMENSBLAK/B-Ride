@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     gap: 6,
   },
-  flag: { fontSize: 22 },
+  flag: { fontSize: 22, marginTop: Platform.OS === 'ios' ? -2 : 0 },
   dialCode: { fontSize: 15, fontWeight: '600' },
   input: {
     flex: 1,

@@ -47,24 +47,40 @@ class AuthService {
             emailVerificationExpires: Date.now() + 15 * 60 * 1000,
         });
 
-        await sendEmail({
-            email,
-            subject: 'Verifica tu cuenta en B-Ride',
-            message: 'Hola, gracias por registrarte en B-Ride. Utiliza el siguiente código de 6 dígitos para verificar tu cuenta.',
-            code: verifyCode
+        try {
+            await sendEmail({
+                email,
+                subject: 'Bienvenido a B-Ride',
+                message: 'Hola, gracias por registrarte en B-Ride. Tu cuenta ha sido creada exitosamente.',
+                code: verifyCode
+            });
+        } catch (emailError) {
+            console.error('[Auth] Error enviando email de bienvenida:', emailError.message);
+        }
+
+        const accessToken = generateAccessToken(user._id);
+        const refreshTokenStr = generateRefreshToken(user._id);
+
+        const familyId = uuid.v4();
+        await RefreshToken.create({
+            token: refreshTokenStr,
+            user: user._id,
+            familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         });
 
-        // Aunque no esté verificado, podemos devolver success, pero no tokens (o tokens pero no lo dejamos pasar)
-        // El prompt indica "En el login, si isEmailVerified es false devuelve 403" 
-        // por ende sí podemos dar el JWT pero bloquearemos sockets y endpoints, 
-        // o mejor, que se autentique cuando pida login. Devolveré null tokens en el registro para forzar el flujo clásico.
-        
+        // Set emailVerified to true to allow immediate login since we bypass the block as requested
+        user.isEmailVerified = true;
+        user.emailVerified = true;
+        await user.save();
+
         return {
             _id: user.id,
             name: user.name,
             email: user.email,
-            message: 'Requiere verificar email. Revisa tu bandeja de entrada.',
-            verify_required: true
+            role: user.role,
+            accessToken,
+            refreshToken: refreshTokenStr,
         };
     }
 

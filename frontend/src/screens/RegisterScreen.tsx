@@ -62,8 +62,19 @@ export default function RegisterScreen({ navigation }: any) {
       if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
         Alert.alert('Error de red', 'No hay conexión con el servidor. Revisa tu conexión de red o asegura que el servidor esté activo.');
       } else {
-        const backendMessage = error.response?.data?.message;
-        Alert.alert('Error de registro', backendMessage || t('auth.somethingWentWrong'));
+        const backendMessage = error.response?.data?.message || t('auth.somethingWentWrong');
+        if (backendMessage.includes('ya está registrado') || backendMessage.includes('already exists')) {
+          Alert.alert(
+            'Cuenta Existente',
+            'Este correo electrónico ya está registrado. ¿Deseas iniciar sesión?',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              { text: 'Ir a Login', onPress: () => navigation.navigate('Login') }
+            ]
+          );
+        } else {
+          Alert.alert('Error de registro', backendMessage);
+        }
       }
     } finally {
       setLoading(false);
