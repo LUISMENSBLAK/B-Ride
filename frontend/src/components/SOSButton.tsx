@@ -30,7 +30,7 @@ export default function SOSButton({ rideId, otherUserId, style }: SOSButtonProps
       [
         { text: t('general.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
         {
-          text: t('sos.callEmergency', { defaultValue: 'Llamar 112' }),
+          text: t('sos.callEmergency', { defaultValue: 'Llamar 911' }),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -47,14 +47,14 @@ export default function SOSButton({ rideId, otherUserId, style }: SOSButtonProps
 
               Alert.alert('SOS Enviado', 'Se ha alertado a la otra persona y al centro de emergencias corporativo de B-Ride.');
 
-              // 3. Llamar a emergencias (112 en España)
-              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:112' : 'tel:112';
+              // 3. Llamar a emergencias (911 en México)
+              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
               Linking.openURL(emergencyNumber);
 
             } catch (e) {
               console.error('[SOS] Error:', e);
               // Aún así intentar llamar a emergencias
-              Linking.openURL('tel:112');
+              Linking.openURL('tel:911');
             }
           },
         },

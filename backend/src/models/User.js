@@ -173,6 +173,10 @@ const userSchema = new mongoose.Schema(
         // --- PASSWORD RESET ---
         resetPasswordToken: String,
         resetPasswordExpire: Date,
+
+        // --- ACCOUNT DELETION ---
+        deletionRequested: { type: Boolean, default: false },
+        deletionRequestedAt: { type: Date, default: null },
     },
     { timestamps: true }
 );

@@ -29,7 +29,7 @@ export async function registerForPushNotificationsAsync() {
             name: 'default',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#39FF14', // B-Ride green
+            lightColor: '#F5C518', // B-Ride Gold
         });
     }
 

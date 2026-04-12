@@ -17,6 +17,29 @@ router.post('/:id/rate', protect, require('../controllers/ride.controller').rate
 // Phase 14: Public Tracker endpoint
 router.get('/:id/track', require('../controllers/ride.controller').trackRide);
 
+// Scheduled Ride
+router.post('/schedule', protect, async (req, res) => {
+  try {
+    const { pickupLocation, dropoffLocation, proposedPrice, scheduledAt } = req.body;
+    if (!scheduledAt || new Date(scheduledAt) <= new Date()) {
+      return res.status(400).json({ success: false, message: 'Fecha programada debe ser futura' });
+    }
+    const Ride = require('../models/Ride');
+    const ride = await Ride.create({
+      passenger: req.user._id,
+      pickupLocation,
+      dropoffLocation,
+      proposedPrice,
+      isScheduled: true,
+      scheduledAt: new Date(scheduledAt),
+      status: 'SCHEDULED'
+    });
+    res.status(201).json({ success: true, data: ride });
+  } catch(e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // SOS (Bloque 7)
 router.post('/:rideId/sos', protect, require('../controllers/ride.controller').sosTrigger);
 

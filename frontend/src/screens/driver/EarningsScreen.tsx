@@ -26,38 +26,12 @@ export default function EarningsScreen() {
   useEffect(() => {
     const fetchEarnings = async () => {
       try {
-        const res = await client.get('/rides/history');
+        const res = await client.get('/drivers/earnings');
         if (res.data?.success) {
-          const allRides = res.data.data || [];
-          const completed = allRides.filter((r: any) => r.status === 'COMPLETED');
-
-          const now = new Date();
-          const todayStr = now.toDateString();
-
-          // Viajes de hoy
-          const todayRides = completed.filter((r: any) => {
-            return new Date(r.createdAt).toDateString() === todayStr;
-          });
-
-          // Ganancias de hoy (80% del precio del bid aceptado o propuesto)
-          const earned = todayRides.reduce((sum: number, r: any) => {
-            const bid = r.bids?.find((b: any) => b.status === 'ACCEPTED');
-            return sum + (bid?.price ?? r.proposedPrice ?? 0) * 0.80;
-          }, 0);
-
-          setTodayStats({
-            trips: todayRides.length,
-            earned: Number(earned.toFixed(2)),
-            rating: user?.avgRating ?? 5.0,
-          });
-
-          // Viajes de la semana (últimos 7 días)
-          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          setWeekTrips(completed.filter((r: any) => new Date(r.createdAt) >= weekAgo).length);
-
-          // Viajes del mes (últimos 30 días)
-          const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          setMonthTrips(completed.filter((r: any) => new Date(r.createdAt) >= monthAgo).length);
+          const { todayEarnings, weekEarnings, monthEarnings, totalEarnings, todayRides, weekRides, monthRides, avgRating } = res.data;
+          setTodayStats({ trips: todayRides, earned: todayEarnings, rating: avgRating ?? user?.avgRating ?? 5.0 });
+          setWeekTrips(weekRides);
+          setMonthTrips(monthRides);
         }
       } catch (e) {
         console.error('[EarningsScreen] Error fetching earnings:', e);

@@ -42,7 +42,7 @@ const startMaintenanceCrons = () => {
             const scheduledRides = await Ride.find({
                 status: 'SCHEDULED',
                 isScheduled: true,
-                scheduledFor: { $lte: in15Mins, $gte: new Date(now.getTime() - 60*60*1000) } // Ignorar cosas superviejas
+                scheduledAt: { $lte: in15Mins, $gte: new Date(now.getTime() - 60*60*1000) } // Ignorar cosas superviejas
             }).populate('passenger', 'name email phoneNumber');
 
             for (const ride of scheduledRides) {

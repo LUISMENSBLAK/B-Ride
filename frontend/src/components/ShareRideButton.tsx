@@ -20,7 +20,8 @@ export default function ShareRideButton({ rideId, driverName, vehiclePlate, styl
   const handleShare = async () => {
     try {
       // URL de tracking en tiempo real (cuando se implemente web)
-      const trackingUrl = `https://b-ride.app/track/${rideId}`;
+      const API_BASE = process.env.EXPO_PUBLIC_API_URL?.replace('/api', '') || 'https://b-ride-production.up.railway.app';
+      const trackingUrl = `${API_BASE}/track/${rideId}`;
 
       const message = t('share.message', {
         defaultValue: `🚗 Estoy viajando con B-Ride\n` +

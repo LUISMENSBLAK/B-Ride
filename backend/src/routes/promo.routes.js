@@ -16,6 +16,9 @@ router.post('/validate', protect, async (req, res) => {
         if (now < promo.startDate || now > promo.endDate) {
             return res.status(400).json({ success: false, message: 'El código promocional ha expirado o no está activo aún' });
         }
+        if (req.body.rideValue && promo.minRideValue > 0 && req.body.rideValue < promo.minRideValue) {
+            return res.status(400).json({ success: false, message: `Monto mínimo para este código: $${promo.minRideValue}` });
+        }
         if (promo.usageLimit > 0 && promo.usedCount >= promo.usageLimit) {
             return res.status(400).json({ success: false, message: 'El código promocional agotó su límite de usos' });
         }
