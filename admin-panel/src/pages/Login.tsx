@@ -38,62 +38,66 @@ export default function LoginPage() {
 
   return (
     <div className={styles.page}>
-      {/* Background blobs */}
-      <div className={styles.blob1} />
-      <div className={styles.blob2} />
-
-      <div className={styles.card}>
-        {/* Logo */}
-        <div className={styles.logoWrap}>
-          <img src="/icon.png" alt="B-Ride" className={styles.logo} />
-        </div>
-
-        <h1 className={styles.title}>Panel de Administración</h1>
-        <p className={styles.subtitle}>Inicia sesión con tu cuenta ADMIN</p>
-
-        <form onSubmit={handleSubmit} className={styles.form} noValidate>
-          <div className={styles.field}>
-            <label htmlFor="email" className={styles.label}>Email</label>
-            <input
-              id="email"
-              type="email"
-              className={styles.input}
-              placeholder="admin@brideapp.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
+      {/* Lado del Formulario */}
+      <div className={styles.formSide}>
+        <div className={styles.card}>
+          <div className={styles.logoWrap}>
+            <img src="/icon.png" alt="B-Ride Admin" className={styles.logo} />
           </div>
 
-          <div className={styles.field}>
-            <label htmlFor="password" className={styles.label}>Contraseña</label>
-            <input
-              id="password"
-              type="password"
-              className={styles.input}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
+          <h1 className={styles.title}>B-Ride Admin</h1>
+          <p className={styles.subtitle}>Inicia sesión con tu cuenta ADMIN</p>
 
-          {error && (
-            <div className={styles.errorBox}>
-              <span>⚠️</span> {error}
+          <form onSubmit={handleSubmit} className={styles.form} noValidate>
+            <div className={styles.field}>
+              <label htmlFor="email" className={styles.label}>Email</label>
+              <input
+                id="email"
+                type="email"
+                className={styles.input}
+                placeholder="admin@bride.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
             </div>
-          )}
 
-          <button type="submit" className={styles.btn} disabled={loading}>
-            {loading ? (
-              <span className={`${styles.spinner} animate-spin`} />
-            ) : (
-              'Iniciar sesión'
+            <div className={styles.field}>
+              <label htmlFor="password" className={styles.label}>Contraseña</label>
+              <input
+                id="password"
+                type="password"
+                className={styles.input}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className={styles.errorBox}>
+                <span>⚠️</span> {error}
+              </div>
             )}
-          </button>
-        </form>
+
+            <button type="submit" className={styles.btn} disabled={loading}>
+              {loading ? (
+                <span className={styles.spinner} />
+              ) : (
+                'Iniciar sesión'
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Lado Visual Creativo */}
+      <div className={styles.visualSide}>
+        <div className={styles.patternOverlay} />
+        <h2 className={styles.visualText}>Bienvenido al panel de operaciones B-Ride</h2>
       </div>
     </div>
   );

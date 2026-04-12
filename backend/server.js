@@ -52,10 +52,6 @@ app.use(express.json({ limit: '10mb' }));
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
-    keyGenerator: (req) => {
-        // B3 FIX: Rate limit por usuario si está autenticado, sino por IP
-        return req.user?._id?.toString() || req.ip;
-    },
     standardHeaders: true,
     legacyHeaders: false,
 });

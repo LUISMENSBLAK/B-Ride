@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "bride",
-    "extra": {
-      "eas": {
-        "projectId": "REEMPLAZAR_CON_TU_EAS_PROJECT_ID"
-      }
-    },
     "splash": {
       "image": "./assets/icon.png",
       "resizeMode": "contain",
@@ -29,7 +24,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "B-Ride necesita tu ubicación para mostrarte conductores cercanos y calcular rutas.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real.",
-        "NSLocationAlwaysUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real."
+        "NSLocationAlwaysUsageDescription": "B-Ride usa tu ubicación en segundo plano para trackear tu viaje en tiempo real.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -48,7 +44,9 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "predictiveBackGestureEnabled": false
     },
@@ -77,6 +75,11 @@
           "enableGooglePay": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d04032a9-0209-4b64-869e-492ebf5e0d51"
+      }
+    }
   }
 }
