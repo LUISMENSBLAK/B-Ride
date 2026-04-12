@@ -59,7 +59,12 @@ export default function RegisterScreen({ navigation }: any) {
         }
       }
     } catch (error: any) {
-      Alert.alert('Registro fallido', error.response?.data?.message || t('auth.somethingWentWrong'));
+      if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
+        Alert.alert('Error de red', 'No hay conexión con el servidor. Revisa tu conexión de red o asegura que el servidor esté activo.');
+      } else {
+        const backendMessage = error.response?.data?.message;
+        Alert.alert('Error de registro', backendMessage || t('auth.somethingWentWrong'));
+      }
     } finally {
       setLoading(false);
     }
@@ -129,9 +134,10 @@ export default function RegisterScreen({ navigation }: any) {
                 <ActivityIndicator color="#0D0520" size="small" />
               ) : (
                 <>
-                  <View style={styles.googleIconWrap}>
-                    <Text style={styles.googleIcon}>G</Text>
-                  </View>
+                  <Image 
+                    source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+                    style={styles.googleImage} 
+                  />
                   <Text style={styles.googleBtnText}>Continuar con Google</Text>
                 </>
               )}
@@ -290,17 +296,14 @@ const getStyles = (theme: any) => StyleSheet.create({
     elevation: 3,
   },
   googleIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#4285F4',
-    justifyContent: 'center',
-    alignItems: 'center',
+    display: 'none',
   },
   googleIcon: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700' as const,
+    display: 'none',
+  },
+  googleImage: {
+    width: 24,
+    height: 24,
   },
   googleBtnText: {
     color: '#1F1F1F',

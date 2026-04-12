@@ -12,7 +12,7 @@ class AuthService {
 
         const userExists = await User.findOne({ email });
         if (userExists) {
-            throw new Error('User already exists');
+            throw new Error('El correo electrónico ya está registrado.');
         }
 
         const salt = await bcrypt.genSalt(10);
