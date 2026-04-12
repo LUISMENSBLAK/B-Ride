@@ -636,8 +636,80 @@ const googleLogin = async (req, res) => {
     }
 };
 
+const appleLogin = async (req, res) => {
+    try {
+        const { appleUserId, email, name, identityToken } = req.body;
+        if (!appleUserId) {
+            return res.status(400).json({ success: false, message: 'Apple User ID es requerido' });
+        }
+
+        const User = require('../models/User');
+        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
+        const RefreshToken = require('../models/RefreshToken');
+        const uuid = require('uuid');
+
+        // Find by appleId first, then by email
+        let user = await User.findOne({ appleId: appleUserId });
+        if (!user && email) {
+            user = await User.findOne({ email });
+        }
+
+        if (!user) {
+            // Create new user via Apple
+            const crypto = require('crypto');
+            const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+            
+            user = await User.create({
+                name: name || 'Usuario Apple',
+                email: email || `${appleUserId}@privaterelay.appleid.com`,
+                appleId: appleUserId,
+                password: crypto.randomBytes(32).toString('hex'),
+                role: 'USER',
+                isEmailVerified: true,
+                emailVerified: true,
+                referralCode: myReferralCode,
+            });
+        } else {
+            if (!user.appleId) {
+                user.appleId = appleUserId;
+            }
+            user.isEmailVerified = true;
+            user.emailVerified = true;
+            await user.save();
+        }
+
+        const jwtAccessToken = generateAccessToken(user._id);
+        const rawRefreshToken = generateRefreshToken(user._id);
+
+        const familyId = uuid.v4();
+        await RefreshToken.create({
+            token: rawRefreshToken,
+            user: user._id,
+            familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                approvalStatus: user.driverApprovalStatus || user.approvalStatus,
+                accessToken: jwtAccessToken,
+                refreshToken: rawRefreshToken,
+            },
+        });
+    } catch (e) {
+        console.error('[Auth] Apple login error:', e);
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 module.exports.sendPhoneOtp = sendPhoneOtp;
 module.exports.verifyPhoneOtp = verifyPhoneOtp;
 module.exports.deleteAccount = deleteAccount;
 module.exports.getReferral = getReferral;
 module.exports.googleLogin = googleLogin;
+module.exports.appleLogin = appleLogin;

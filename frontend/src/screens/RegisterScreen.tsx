@@ -11,6 +11,7 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { useTranslation } from '../hooks/useTranslation';
 import PhoneInput from '../components/PhoneInput';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
+import { useAppleAuth } from '../hooks/useAppleAuth';
 
 export default function RegisterScreen({ navigation }: any) {
   const theme = useAppTheme();
@@ -27,6 +28,7 @@ export default function RegisterScreen({ navigation }: any) {
 
   const login = useAuthStore(state => state.login);
   const { handleGoogleLogin, loading: googleLoading, ready: googleReady } = useGoogleAuth();
+  const { handleAppleLogin, loading: appleLoading } = useAppleAuth();
 
   const emailRef = React.useRef<TextInput>(null);
   const passRef = React.useRef<TextInput>(null);
@@ -74,6 +76,17 @@ export default function RegisterScreen({ navigation }: any) {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    try {
+      const result = await handleAppleLogin();
+      if (result?.success) {
+        await login(result.data);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Apple');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -86,6 +99,25 @@ export default function RegisterScreen({ navigation }: any) {
           </View>
 
           <View style={styles.formCard}>
+            {/* Apple Sign-In Button */}
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={styles.appleBtn}
+                onPress={handleAppleSignIn}
+                disabled={appleLoading}
+                activeOpacity={0.8}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                    <Text style={styles.appleBtnText}>Continuar con Apple</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
             {/* Google Sign-In Button */}
             <TouchableOpacity
               style={styles.googleBtn}
@@ -220,6 +252,27 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.colors.border,
     shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3,
   },
+  // Apple Button
+  appleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#000000',
+      height: 52,
+      borderRadius: theme.borderRadius.m,
+      marginBottom: theme.spacing.m,
+      gap: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 3,
+  },
+  appleBtnText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600' as const,
+  },
   // Google button
   googleBtn: {
     flexDirection: 'row',
@@ -228,7 +281,7 @@ const getStyles = (theme: any) => StyleSheet.create({
     backgroundColor: '#FFFFFF',
     height: 52,
     borderRadius: theme.borderRadius.m,
-    marginBottom: theme.spacing.m,
+    marginBottom: theme.spacing.l, // more margin since there's an Apple button above potentially
     gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

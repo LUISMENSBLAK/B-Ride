@@ -1,10 +1,12 @@
 import { useAppTheme } from '../hooks/useAppTheme';
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from '../hooks/useTranslation';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
+import { useAppleAuth } from '../hooks/useAppleAuth';
 
 export default function LoginScreen({ navigation }: any) {
   const theme = useAppTheme();
@@ -17,6 +19,7 @@ export default function LoginScreen({ navigation }: any) {
 
     const login = useAuthStore(state => state.login);
     const { handleGoogleLogin, loading: googleLoading, ready: googleReady } = useGoogleAuth();
+    const { handleAppleLogin, loading: appleLoading } = useAppleAuth();
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -54,6 +57,17 @@ export default function LoginScreen({ navigation }: any) {
       }
     };
 
+    const handleAppleSignIn = async () => {
+      try {
+        const result = await handleAppleLogin();
+        if (result?.success) {
+          await login(result.data);
+        }
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Apple');
+      }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView 
@@ -69,6 +83,25 @@ export default function LoginScreen({ navigation }: any) {
                     </View>
 
                     <View style={styles.formCard}>
+                        {/* Apple Sign-In */}
+                        {Platform.OS === 'ios' && (
+                          <TouchableOpacity
+                            style={styles.appleBtn}
+                            onPress={handleAppleSignIn}
+                            disabled={appleLoading}
+                            activeOpacity={0.8}
+                          >
+                            {appleLoading ? (
+                              <ActivityIndicator color="#FFFFFF" size="small" />
+                            ) : (
+                              <>
+                                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                                <Text style={styles.appleBtnText}>Continuar con Apple</Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        )}
+
                         {/* Google Sign-In */}
                         <TouchableOpacity
                           style={styles.googleBtn}
@@ -150,10 +183,10 @@ const getStyles = (theme: any) => StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: theme.spacing.l,
-        paddingTop: theme.spacing.xxxl,
+        paddingTop: theme.spacing.xl,
     },
     headerContainer: {
-        marginBottom: theme.spacing.xxl,
+        marginBottom: theme.spacing.xl,
         alignItems: 'center',
     },
     logo: {
@@ -182,6 +215,27 @@ const getStyles = (theme: any) => StyleSheet.create({
         shadowRadius: 10,
         elevation: 3,
     },
+    // Apple Button
+    appleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#000000',
+        height: 52,
+        borderRadius: theme.borderRadius.m,
+        marginBottom: theme.spacing.m,
+        gap: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    appleBtnText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600' as const,
+    },
     // Google Button
     googleBtn: {
         flexDirection: 'row',
@@ -190,7 +244,7 @@ const getStyles = (theme: any) => StyleSheet.create({
         backgroundColor: '#FFFFFF',
         height: 52,
         borderRadius: theme.borderRadius.m,
-        marginBottom: theme.spacing.m,
+        marginBottom: theme.spacing.l,
         gap: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
