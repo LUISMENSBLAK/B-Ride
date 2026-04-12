@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { View, ActivityIndicator, Text as RNText } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -19,28 +19,39 @@ import {
   CreditCard
 } from 'lucide-react-native';
 
-// ─── Auth ──────────────────────────────────────────────────────────────────
+// ─── Auth (lightweight — no lazy) ───────────────────────────────────────────
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen';
 
-// ─── Driver ────────────────────────────────────────────────────────────────
-import DriverDashboard from '../screens/driver/DriverDashboard';
-import EarningsScreen from '../screens/driver/EarningsScreen';
-import DriverProfileScreen from '../screens/driver/DriverProfileScreen';
+// ─── Screens (Lazy) ─────────────────────────────────────────────────────────
+const DriverDashboard = React.lazy(() => import('../screens/driver/DriverDashboard'));
+const EarningsScreen = React.lazy(() => import('../screens/driver/EarningsScreen'));
+const DriverProfileScreen = React.lazy(() => import('../screens/driver/DriverProfileScreen'));
+const DriverOnboardingScreen = React.lazy(() => import('../screens/driver/DriverOnboardingScreen'));
 
-// ─── Passenger ─────────────────────────────────────────────────────────────
-import PassengerDashboard from '../screens/passenger/PassengerDashboard';
-import PaymentStatusScreen from '../screens/passenger/PaymentStatusScreen';
-import PassengerProfileScreen from '../screens/passenger/PassengerProfileScreen';
-import RideHistory from '../screens/RideHistory';
-import SettingsScreen from '../screens/passenger/SettingsScreen';
+const PassengerDashboard = React.lazy(() => import('../screens/passenger/PassengerDashboard'));
+const PaymentStatusScreen = React.lazy(() => import('../screens/passenger/PaymentStatusScreen'));
+const PassengerProfileScreen = React.lazy(() => import('../screens/passenger/PassengerProfileScreen'));
+const RideHistory = React.lazy(() => import('../screens/RideHistory'));
+const SettingsScreen = React.lazy(() => import('../screens/passenger/SettingsScreen'));
 
-// ─── Legal ─────────────────────────────────────────────────────────────────
+// ─── Legal ──────────────────────────────────────────────────────────────────
 import LegalScreen, { hasAcceptedLegal } from '../screens/LegalScreen';
+
+// ─── Loading fallback para Suspense ─────────────────────────────────────────
+function ScreenLoadingFallback() {
+  const theme = useAppTheme();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+    </View>
+  );
+}
 
 const AuthStack = createNativeStackNavigator();
 const DriverTab = createBottomTabNavigator();
+const DriverStack = createNativeStackNavigator();  // Stack para bloquear onboarding
 const PassengerTab = createBottomTabNavigator();
 
 function useTabBarOptions() {
@@ -49,7 +60,7 @@ function useTabBarOptions() {
     headerShown: false,
     tabBarStyle: {
         backgroundColor: theme.wixarika.navBackground,
-        borderTopWidth: 0, // Remove default border — replaced by gradient
+        borderTopWidth: 0,
         height: 62,
         paddingBottom: 10,
         paddingTop: 6,
@@ -60,22 +71,20 @@ function useTabBarOptions() {
     tabBarLabelStyle: { fontSize: 11, fontWeight: '600' as const },
     tabBarBackground: () => (
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-        {/* Gradient top border */}
         <LinearGradient
           colors={theme.wixarika.borderGradient as unknown as [string, string, ...string[]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={{ height: 2, width: '100%' }}
         />
-        {/* Tab bar background fill */}
         <View style={{ flex: 1, backgroundColor: theme.wixarika.navBackground }} />
       </View>
     ),
   };
 }
 
-// ─── DRIVER NAVIGATOR ───────────────────────────────────────────────────────
-function DriverNavigator() {
+// ─── DRIVER TABS ─────────────────────────────────────────────────────────────
+function DriverTabNavigator() {
     const { t } = useTranslation();
     const theme = useAppTheme();
     const tabBarOptions = useTabBarOptions();
@@ -83,46 +92,77 @@ function DriverNavigator() {
         <DriverTab.Navigator screenOptions={tabBarOptions}>
             <DriverTab.Screen
                 name="DriverHome"
-                component={DriverDashboard}
                 options={{ title: t('nav.home'), tabBarLabel: t('nav.home'), tabBarIcon: ({ color }) => <Map color={color} size={24} /> }}
-            />
+            >
+                {() => <DriverDashboard />}
+            </DriverTab.Screen>
             <DriverTab.Screen
                 name="DriverEarnings"
-                component={EarningsScreen}
                 options={{ title: t('nav.earnings'), tabBarLabel: t('nav.earnings'), tabBarIcon: ({ color }) => <Wallet color={color} size={24} /> }}
-            />
+            >
+                {() => <EarningsScreen />}
+            </DriverTab.Screen>
             <DriverTab.Screen
                 name="DriverHistory"
-                component={RideHistory}
                 options={{ title: t('nav.history'), tabBarLabel: t('nav.history'), tabBarIcon: ({ color }) => <Clock color={color} size={24} /> }}
-            />
+            >
+                {() => <RideHistory />}
+            </DriverTab.Screen>
             <DriverTab.Screen
                 name="DriverProfile"
-                component={DriverProfileScreen}
                 options={{ title: t('nav.profile'), tabBarLabel: t('nav.profile'), tabBarIcon: ({ color }) => <User color={color} size={24} /> }}
-            />
+            >
+                {() => <DriverProfileScreen />}
+            </DriverTab.Screen>
             <DriverTab.Screen
                 name="DriverSettings"
-                component={SettingsScreen}
                 options={{ title: t('nav.settings'), tabBarLabel: t('nav.settings'), tabBarIcon: ({ color, focused }) => <Settings color={focused ? theme.wixarika.navActive : theme.wixarika.navInactive} size={24} /> }}
-            />
+            >
+                {() => <SettingsScreen />}
+            </DriverTab.Screen>
         </DriverTab.Navigator>
     );
 }
 
-// ─── PASSENGER HOME STACK (BUG 19 FIX) ─────────────────────────────────────
+// ─── DRIVER NAVIGATOR (Stack que bloquea según estado de aprobación) ─────────
+function DriverNavigator() {
+    const { user } = useAuthStore();
+
+    // Ambas condiciones deben cumplirse para considerar al conductor APROBADO
+    const isApproved =
+        user?.approvalStatus === 'APPROVED' &&
+        user?.driverApprovalStatus === 'APPROVED';
+
+    return (
+        <DriverStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+            {isApproved ? (
+                <DriverStack.Screen name="DriverTabs" component={DriverTabNavigator} />
+            ) : (
+                <DriverStack.Screen name="DriverOnboarding">
+                    {() => <DriverOnboardingScreen />}
+                </DriverStack.Screen>
+            )}
+        </DriverStack.Navigator>
+    );
+}
+
+// ─── PASSENGER HOME STACK ────────────────────────────────────────────────────
 const PassengerHomeStack = createNativeStackNavigator();
 
 function PassengerHomeStackScreen() {
     return (
         <PassengerHomeStack.Navigator screenOptions={{ headerShown: false }}>
-            <PassengerHomeStack.Screen name="PassengerDashboard" component={PassengerDashboard} />
-            <PassengerHomeStack.Screen name="PassengerPayment" component={PaymentStatusScreen} />
+            <PassengerHomeStack.Screen name="PassengerDashboard">
+                {() => <PassengerDashboard />}
+            </PassengerHomeStack.Screen>
+            <PassengerHomeStack.Screen name="PassengerPayment">
+                {() => <PaymentStatusScreen />}
+            </PassengerHomeStack.Screen>
         </PassengerHomeStack.Navigator>
     );
 }
 
-// ─── PASSENGER NAVIGATOR ────────────────────────────────────────────────────
+// ─── PASSENGER NAVIGATOR ─────────────────────────────────────────────────────
 function PassengerNavigator() {
     const { t } = useTranslation();
     const theme = useAppTheme();
@@ -131,31 +171,35 @@ function PassengerNavigator() {
         <PassengerTab.Navigator screenOptions={tabBarOptions}>
             <PassengerTab.Screen
                 name="PassengerHome"
-                component={PassengerHomeStackScreen}
                 options={{ title: t('nav.home'), tabBarLabel: t('nav.home'), tabBarIcon: ({ color }) => <Map color={color} size={24} /> }}
-            />
+            >
+                {() => <PassengerHomeStackScreen />}
+            </PassengerTab.Screen>
             <PassengerTab.Screen
                 name="PassengerHistory"
-                component={RideHistory}
                 options={{ title: t('nav.history'), tabBarLabel: t('nav.history'), tabBarIcon: ({ color }) => <Clock color={color} size={24} /> }}
-            />
+            >
+                {() => <RideHistory />}
+            </PassengerTab.Screen>
             <PassengerTab.Screen
                 name="PassengerProfile"
-                component={PassengerProfileScreen}
                 options={{ title: t('nav.profile'), tabBarLabel: t('nav.profile'), tabBarIcon: ({ color }) => <User color={color} size={24} /> }}
-            />
+            >
+                {() => <PassengerProfileScreen />}
+            </PassengerTab.Screen>
             <PassengerTab.Screen
                 name="PassengerSettings"
-                component={SettingsScreen}
                 options={{ title: t('nav.settings'), tabBarLabel: t('nav.settings'), tabBarIcon: ({ color, focused }) => <Settings color={focused ? theme.wixarika.navActive : theme.wixarika.navInactive} size={24} /> }}
-            />
+            >
+                {() => <SettingsScreen />}
+            </PassengerTab.Screen>
         </PassengerTab.Navigator>
     );
 }
 
-// ─── ROOT NAVIGATOR ─────────────────────────────────────────────────────────
+// ─── ROOT NAVIGATOR ──────────────────────────────────────────────────────────
 
-// CORRECCIÓN 5: Deep link config para Stripe onboarding return
+// Deep link config para Stripe onboarding return
 const linking = {
   prefixes: ['bride://'],
   config: {
@@ -178,7 +222,6 @@ export default function AppNavigator() {
         checkAuth();
     }, []);
 
-    // CORRECCIÓN 7: Verificar si aceptó los términos legales
     useEffect(() => {
         hasAcceptedLegal().then(setLegalAccepted);
     }, []);
@@ -193,28 +236,29 @@ export default function AppNavigator() {
 
     return (
         <NavigationContainer ref={navigationRef} linking={linking}>
-            <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-                {user ? (
-                    // Si no ha aceptado legal, redirigir a LegalScreen
-                    !legalAccepted ? (
-                        <AuthStack.Screen name="Legal">
-                            {() => <LegalScreen onAccept={() => setLegalAccepted(true)} />}
-                        </AuthStack.Screen>
-                    ) : (
-                        user.role === 'DRIVER' ? (
-                            <AuthStack.Screen name="DriverApp" component={DriverNavigator} />
+            <Suspense fallback={<ScreenLoadingFallback />}>
+                <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+                    {user ? (
+                        !legalAccepted ? (
+                            <AuthStack.Screen name="Legal">
+                                {() => <LegalScreen onAccept={() => setLegalAccepted(true)} />}
+                            </AuthStack.Screen>
                         ) : (
-                            <AuthStack.Screen name="PassengerApp" component={PassengerNavigator} />
+                            user.role === 'DRIVER' ? (
+                                <AuthStack.Screen name="DriverApp" component={DriverNavigator} />
+                            ) : (
+                                <AuthStack.Screen name="PassengerApp" component={PassengerNavigator} />
+                            )
                         )
-                    )
-                ) : (
-                    <>
-                        <AuthStack.Screen name="Login" component={LoginScreen} />
-                        <AuthStack.Screen name="Register" component={RegisterScreen} />
-                        <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
-                    </>
-                )}
-            </AuthStack.Navigator>
+                    ) : (
+                        <>
+                            <AuthStack.Screen name="Login" component={LoginScreen} />
+                            <AuthStack.Screen name="Register" component={RegisterScreen} />
+                            <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+                        </>
+                    )}
+                </AuthStack.Navigator>
+            </Suspense>
         </NavigationContainer>
     );
 }

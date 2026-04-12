@@ -332,7 +332,7 @@ export default function PassengerDashboard() {
         Alert.alert('Error de conexión', error.message);
         setRideStatus('IDLE');
     }
-  }, [selectedPlace, price, location, user]);
+  }, [selectedPlace, price, location, user, convertToUsd, currency, paymentMethod, distanceKm]);
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 

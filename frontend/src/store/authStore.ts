@@ -33,13 +33,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     user: null,
     isLoading: true,
     login: async (userData) => {
-        if (userData.accessToken) {
-            await AsyncStorage.setItem('userToken', userData.accessToken);
-        }
-        if (userData.refreshToken) {
-            await AsyncStorage.setItem('refreshToken', userData.refreshToken);
-        }
-        await AsyncStorage.setItem('userInfo', JSON.stringify(userData));
+        const entries: [string, string][] = [
+            ['userInfo', JSON.stringify(userData)],
+        ];
+        if (userData.accessToken) entries.push(['userToken', userData.accessToken]);
+        if (userData.refreshToken) entries.push(['refreshToken', userData.refreshToken]);
+        await AsyncStorage.multiSet(entries);
         set({ user: userData });
     },
     logout: async () => {
@@ -52,19 +51,22 @@ export const useAuthStore = create<AuthState>((set) => ({
             const projectId = Constants?.expoConfig?.extra?.eas?.projectId 
                               ?? Constants?.easConfig?.projectId;
 
-            const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-            if (tokenData && tokenData.data) {
-                await removeTokenFromBackend(tokenData.data);
+            // Guard: Saltar si el projectId es el placeholder o está indefinido
+            const PLACEHOLDER = 'REEMPLAZAR_CON_TU_EAS_PROJECT_ID';
+            const isValidProjectId = projectId && projectId !== PLACEHOLDER;
+
+            if (isValidProjectId) {
+                const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+                if (tokenData && tokenData.data) {
+                    await removeTokenFromBackend(tokenData.data);
+                }
             }
         } catch (e) {
             console.log('[AuthStore] Error al remover push token al hacer logout:', e);
         }
 
-        await AsyncStorage.removeItem('userToken');
-        await AsyncStorage.removeItem('refreshToken');
-        await AsyncStorage.removeItem('userInfo');
-        // BUG 20 FIX: Limpiar recibo cacheado del usuario anterior
-        await AsyncStorage.removeItem('lastCompletedRideId');
+        // Limpiar todo en un solo round-trip
+        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
         set({ user: null });
     },
     checkAuth: async () => {
@@ -76,8 +78,17 @@ export const useAuthStore = create<AuthState>((set) => ({
             if (token && userInfoStr) {
                 // BUG 18 FIX: Validar token contra el backend antes de restaurar sesión
                 try {
-                    await client.get('/auth/me');
-                    set({ user: JSON.parse(userInfoStr) });
+                    const res = await client.get('/auth/me');
+                    // In case interceptor refreshed the token, read from AsyncStorage again
+                    const freshToken = await AsyncStorage.getItem('userToken');
+                    const freshUserInfo = await AsyncStorage.getItem('userInfo');
+                    const userObj = freshUserInfo ? JSON.parse(freshUserInfo) : JSON.parse(userInfoStr);
+                    
+                    userObj.accessToken = freshToken || userObj.accessToken;
+                    // Mute profile updates from /auth/me
+                    if (res.data && res.data.data) Object.assign(userObj, res.data.data);
+                    
+                    set({ user: userObj });
                 } catch (validationError: any) {
                     if (validationError.response?.status === 401) {
                         // Token expirado — limpiar sesión silenciosamente

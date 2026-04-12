@@ -13,19 +13,54 @@ export type RideStatus =
   | 'REQUESTING'
   | 'REQUESTED';
 
+/** Propuesta de viaje enviada por un conductor */
+export interface Bid {
+  _id: string;
+  driver: {
+    _id: string;
+    name: string;
+    avatarUrl?: string;
+    avgRating?: number;
+    totalRatings?: number;
+    vehicle?: {
+      make?: string;
+      model?: string;
+      licensePlate?: string;
+      color?: string;
+    };
+  };
+  price: number;
+  estimatedTime: number; // minutos estimados hasta el pickup
+  currency?: string;
+}
+
+/** Payload de un viaje activo una vez aceptado */
+export interface ActiveRide {
+  _id: string;
+  passengerId: string;
+  driverId: string;
+  origin: { latitude: number; longitude: number; address?: string };
+  destination: { latitude: number; longitude: number; address?: string };
+  status: string;
+  price?: number;
+  currency?: string;
+  acceptedBid?: Bid;
+}
+
 interface RideFlowState {
     status: RideStatus;
     rideId: string | null;
-    bids: any[];
-    activeRidePayload: any; // Para guardar datos del viaje en curso
+    bids: Bid[];
+    activeRidePayload: ActiveRide | null;
     paymentMethod: 'CASH' | 'CARD' | 'APPLE_PAY';
     
     // Actions
     setStatus: (status: RideStatus) => void;
     setRideContext: (rideId: string) => void;
-    receiveBid: (bid: any) => void;
+    receiveBid: (bid: Bid) => void;
     acceptBid: () => void;
-    setActiveRide: (ride: any) => void;
+    setActiveRide: (ride: ActiveRide) => void;
+    setPaymentMethod: (method: 'CASH' | 'CARD' | 'APPLE_PAY') => void;
     resetFlow: () => void;
 }
 
@@ -56,7 +91,9 @@ export const useRideFlowStore = create<RideFlowState>((set, get) => ({
 
     acceptBid: () => set({ status: 'MAPPED' }),
 
-    setActiveRide: (ride) => set({ activeRidePayload: ride }), // status lo setea el handler explícitamente
+    setActiveRide: (ride) => set({ activeRidePayload: ride }),
+
+    setPaymentMethod: (method) => set({ paymentMethod: method }),
 
     resetFlow: () => set({ 
         status: 'IDLE', 

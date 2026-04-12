@@ -8,6 +8,7 @@ import { useAuthStore } from './src/store/authStore';
 import { initLocale } from './src/services/i18n';
 import AnimatedSplash from './src/components/AnimatedSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import { useSettings } from './src/hooks/useSettings';
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 
@@ -15,6 +16,7 @@ export default function App() {
 
   useEffect(() => {
     initLocale();
+    useSettings.getState().loadSettings();
     const unsubscribe = setupNotificationListeners();
     registerForPushNotificationsAsync();
     return () => {

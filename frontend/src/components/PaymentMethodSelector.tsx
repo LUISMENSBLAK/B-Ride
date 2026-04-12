@@ -20,11 +20,10 @@ export default function PaymentMethodSelector({
 
   const [modalVisible, setModalVisible] = useState(false);
   const paymentMethod = useRideFlowStore(state => state.paymentMethod);
+  const setPaymentMethod = useRideFlowStore(state => state.setPaymentMethod);
 
-  // We don't have a direct setter in the store yet, so let's use the explicit set function from the store if we add it,
-  // or we can just call useRideFlowStore.setState({ paymentMethod });
   const selectMethod = (method: 'CASH' | 'CARD' | 'APPLE_PAY') => {
-    useRideFlowStore.setState({ paymentMethod: method });
+    setPaymentMethod(method);
     setModalVisible(false);
     if (onSelected) onSelected();
   };

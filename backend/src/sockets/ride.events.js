@@ -1,6 +1,7 @@
 const { getIO } = require('./index');
 const rideService = require('../services/ride.service');
 const User = require('../models/User');
+const Ride = require('../models/Ride');
 const idempotency = require('../services/idempotency.service');
 const watchdog = require('../services/watchdog.service');
 const matchingService = require('../services/matching.service');

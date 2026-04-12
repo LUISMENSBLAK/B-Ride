@@ -4,7 +4,7 @@
     "slug": "b-ride",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/ride.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "scheme": "bride",
     "extra": {
@@ -12,16 +12,14 @@
         "projectId": "REEMPLAZAR_CON_TU_EAS_PROJECT_ID"
       }
     },
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/ride.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0A"
     },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bride.app",
-      "backgroundModes": ["location"],
       "entitlements": {
         "com.apple.developer.location.push": true
       },
@@ -59,7 +57,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/ride.png",
+          "icon": "./assets/icon.png",
           "color": "#276EF1"
         }
       ],

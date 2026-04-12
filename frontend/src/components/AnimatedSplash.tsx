@@ -68,12 +68,16 @@ export default function AnimatedSplash({ children, onFinish }: Props) {
       easing: Easing.out(Easing.cubic),
     });
 
+    let fallbackTimer: ReturnType<typeof setTimeout>;
+
     const animTimer = setTimeout(() => {
+      clearTimeout(fallbackTimer); // El animTimer se ejecutó, el fallback ya no es necesario
       setAppReady(true);
       startFadeOut();
     }, SPLASH_DURATION + 300);
 
-    const fallbackTimer = setTimeout(() => {
+    fallbackTimer = setTimeout(() => {
+      // Solo actúa si animTimer nunca disparó (ej. Reanimated tardó demasiado)
       setAppReady(true);
       startFadeOut();
     }, TIMEOUT_FALLBACK);

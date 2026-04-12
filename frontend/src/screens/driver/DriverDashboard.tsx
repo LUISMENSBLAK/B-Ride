@@ -398,6 +398,39 @@ export default function DriverDashboard() {
   const handleSkipRating = useCallback(() => setCompletedRide(null), []);
 
   // ── Computed ──────────────────────────────────────────────────────────────
+  const incomingMetrics = React.useMemo(() => {
+    if (!incomingRide || !location) return { distToPassenger: null, tripDist: null, estTime: null, estEarnings: null };
+    const pickup = incomingRide.pickupLocation;
+    const dropoff = incomingRide.dropoffLocation;
+    const driverLat = location.coords.latitude;
+    const driverLng = location.coords.longitude;
+    const pLat = pickup?.latitude ?? pickup?.lat;
+    const pLng = pickup?.longitude ?? pickup?.lng;
+    const dLat = dropoff?.latitude ?? dropoff?.lat;
+    const dLng = dropoff?.longitude ?? dropoff?.lng;
+    
+    const distToPassenger = (pLat) ? haversineKm(driverLat, driverLng, pLat, pLng) : null;
+    const tripDist = (pLat && dLat) ? haversineKm(pLat, pLng, dLat, dLng) : null;
+    const estTime = tripDist ? Math.max(1, Math.round((tripDist / 35) * 60)) : null;
+    const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * 0.80) : null;
+    
+    return { distToPassenger, tripDist, estTime, estEarnings };
+  }, [incomingRide, location]);
+
+  const activeMetrics = React.useMemo(() => {
+    if (!activeRide || !location || phase === 'IDLE') return { dist: null, eta: null };
+    const target = phase === 'IN_PROGRESS' ? activeRide.dropoffLocation : activeRide.pickupLocation;
+    const tLat = target?.latitude ?? target?.lat;
+    const tLng = target?.longitude ?? target?.lng;
+    const myLat = location.coords.latitude;
+    const myLng = location.coords.longitude;
+    
+    if (!tLat || !myLat) return { dist: null, eta: null };
+    const dist = haversineKm(myLat, myLng, tLat, tLng);
+    const eta = Math.max(1, Math.round((dist / 30) * 60));
+    return { dist, eta };
+  }, [activeRide, location, phase]);
+
   const snapPoints = phase === 'IDLE'
     ? ['10%']
     : phase === 'INCOMING' || phase === 'BID_SENT'
@@ -549,49 +582,33 @@ export default function DriverDashboard() {
                     </View>
 
                     {/* Trip metrics — distance, time, earnings */}
-                    {(() => {
-                      const pickup = incomingRide.pickupLocation;
-                      const dropoff = incomingRide.dropoffLocation;
-                      const driverLat = location?.coords.latitude;
-                      const driverLng = location?.coords.longitude;
-                      const pLat = pickup?.latitude ?? pickup?.lat;
-                      const pLng = pickup?.longitude ?? pickup?.lng;
-                      const dLat = dropoff?.latitude ?? dropoff?.lat;
-                      const dLng = dropoff?.longitude ?? dropoff?.lng;
-                      const distToPassenger = (driverLat && pLat) ? haversineKm(driverLat, driverLng!, pLat, pLng) : null;
-                      const tripDist = (pLat && dLat) ? haversineKm(pLat, pLng, dLat, dLng) : null;
-                      const estTime = tripDist ? Math.max(1, Math.round((tripDist / 35) * 60)) : null;
-                      const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * 0.80) : null; // 80% para conductor
-                      return (
-                        <View style={styles.tripMetrics}>
-                          {distToPassenger != null && (
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricValue}>{distToPassenger.toFixed(1)} km</Text>
-                              <Text style={styles.metricLabel}>{t('driver.toPassenger')}</Text>
-                            </View>
-                          )}
-                          {tripDist != null && (
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricValue}>{tripDist.toFixed(1)} km</Text>
-                              <Text style={styles.metricLabel}>{t('driver.totalTrip')}</Text>
-                            </View>
-                          )}
-                          {estTime != null && (
-                            <View style={styles.metricItem}>
-                              <Text style={styles.metricValue}>{estTime} min</Text>
-                              <Text style={styles.metricLabel}>{t('driver.estTime')}</Text>
-                            </View>
-                          )}
-                          {estEarnings != null && (
-                            <View style={[styles.metricItem, styles.metricItemHighlight]}>
-                              <Ionicons name="card" size={24} color={theme.colors.success} />
-                              <Text style={styles.metricValueEarnings}>{formatPrice(estEarnings)}</Text>
-                              <Text style={styles.metricLabel}>{t('driver.earnings')}</Text>
-                            </View>
-                          )}
+                    <View style={styles.tripMetrics}>
+                      {incomingMetrics.distToPassenger != null && (
+                        <View style={styles.metricItem}>
+                          <Text style={styles.metricValue}>{incomingMetrics.distToPassenger.toFixed(1)} km</Text>
+                          <Text style={styles.metricLabel}>{t('driver.toPassenger')}</Text>
                         </View>
-                      );
-                    })()}
+                      )}
+                      {incomingMetrics.tripDist != null && (
+                        <View style={styles.metricItem}>
+                          <Text style={styles.metricValue}>{incomingMetrics.tripDist.toFixed(1)} km</Text>
+                          <Text style={styles.metricLabel}>{t('driver.totalTrip')}</Text>
+                        </View>
+                      )}
+                      {incomingMetrics.estTime != null && (
+                        <View style={styles.metricItem}>
+                          <Text style={styles.metricValue}>{incomingMetrics.estTime} min</Text>
+                          <Text style={styles.metricLabel}>{t('driver.estTime')}</Text>
+                        </View>
+                      )}
+                      {incomingMetrics.estEarnings != null && (
+                        <View style={[styles.metricItem, styles.metricItemHighlight]}>
+                          <Ionicons name="card" size={24} color={theme.colors.success} />
+                          <Text style={styles.metricValueEarnings}>{formatPrice(incomingMetrics.estEarnings)}</Text>
+                          <Text style={styles.metricLabel}>{t('driver.earnings')}</Text>
+                        </View>
+                      )}
+                    </View>
                     {/* Acción principal — 2 botones grandes */}
                     <View style={styles.mainActions}>
                       <Button
@@ -655,28 +672,18 @@ export default function DriverDashboard() {
                 </Text>
 
                 {/* Live distance + ETA */}
-                {(() => {
-                  const target = phase === 'IN_PROGRESS' ? activeRide.dropoffLocation : activeRide.pickupLocation;
-                  const tLat = target?.latitude ?? target?.lat;
-                  const tLng = target?.longitude ?? target?.lng;
-                  const myLat = location?.coords.latitude;
-                  const myLng = location?.coords.longitude;
-                  if (!tLat || !myLat) return null;
-                  const dist = haversineKm(myLat, myLng!, tLat, tLng);
-                  const eta = Math.max(1, Math.round((dist / 30) * 60));
-                  return (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 24, marginTop: 12, marginBottom: 4 }}>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.primary }}>{dist.toFixed(1)} km</Text>
-                        <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.distance')}</Text>
-                      </View>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text }}>{eta} min</Text>
-                        <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.estTime')}</Text>
-                      </View>
+                {activeMetrics.dist != null && activeMetrics.eta != null && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 24, marginTop: 12, marginBottom: 4 }}>
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.primary }}>{activeMetrics.dist.toFixed(1)} km</Text>
+                      <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.distance')}</Text>
                     </View>
-                  );
-                })()}
+                    <View style={{ alignItems: 'center' }}>
+                      <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text }}>{activeMetrics.eta} min</Text>
+                      <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.estTime')}</Text>
+                    </View>
+                  </View>
+                )}
 
                 {/* Navigate button — opens native maps */}
                 {(phase === 'ACCEPTED' || phase === 'ARRIVED') && (

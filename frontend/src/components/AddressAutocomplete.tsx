@@ -5,7 +5,7 @@ import {
   ActivityIndicator, StyleSheet, Keyboard,
 } from 'react-native';
 import * as Localization from 'expo-localization';
-import { theme } from '../theme';
+
 import useDebounce from '../hooks/useDebounce';
 
 // El hook useDebounce ya existe en el proyecto — lo reutilizamos.
@@ -42,21 +42,24 @@ async function searchNominatim(query: string, userLat?: number, userLng?: number
       `?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`;
 
     if (userLat !== undefined && userLng !== undefined) {
-      // 50km radius roughly equals 0.45 degrees
+      // Prioritize results near user but don't strictly bind or restrict by country
       const minLon = userLng - 0.45;
       const minLat = userLat - 0.45;
       const maxLon = userLng + 0.45;
       const maxLat = userLat + 0.45;
-      const region = Localization.getLocales()[0]?.regionCode?.toLowerCase() || 'es';
-      url += `&viewbox=${minLon},${minLat},${maxLon},${maxLat}&bounded=1&countrycodes=${region}`;
+      url += `&viewbox=${minLon},${minLat},${maxLon},${maxLat}`;
     }
+
+    console.log('[Nominatim] URL:', url);
 
     const res = await fetch(url, {
       headers: {
         'Accept-Language': 'es',
-        'User-Agent': 'BRideApp/1.0',
+        'User-Agent': 'BRideApp/1.0 (contact@bride.com)',
       },
     });
+
+    console.log('[Nominatim] Status:', res.status, res.statusText);
 
     if (!res.ok) return [];
     const data: any[] = await res.json();
@@ -67,9 +70,14 @@ async function searchNominatim(query: string, userLat?: number, userLng?: number
       longitude: parseFloat(item.lon),
     }));
 
+    if (queryCache.size >= 50) {
+      const firstKey = queryCache.keys().next().value;
+      if (firstKey) queryCache.delete(firstKey);
+    }
     queryCache.set(key, results);
     return results;
-  } catch {
+  } catch (error) {
+    console.error('Nominatim search error:', error);
     return [];
   }
 }
@@ -188,7 +196,7 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
   );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   wrapper: {
     flex: 1,
     zIndex: 100, // Encima del mapa y del resto de la UI

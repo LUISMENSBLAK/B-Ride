@@ -69,7 +69,19 @@ client.interceptors.response.use(
 
                 if (res.data.success && res.data.accessToken) {
                     const newAccessToken = res.data.accessToken;
+                    const newRefreshToken = res.data.refreshToken;
+                    
                     await AsyncStorage.setItem('userToken', newAccessToken);
+                    if (newRefreshToken) await AsyncStorage.setItem('refreshToken', newRefreshToken);
+                    
+                    const { useAuthStore } = require('../store/authStore');
+                    if (useAuthStore.getState().user) {
+                        useAuthStore.getState().updateUser({ 
+                            accessToken: newAccessToken,
+                            ...(newRefreshToken && { refreshToken: newRefreshToken })
+                        });
+                    }
+
                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                     return client(originalRequest);
                 }

@@ -3,7 +3,7 @@ import { MapRendererHandle } from '../components/MapRenderer';
 
 export function useDriverTracking(mapRef: React.RefObject<MapRendererHandle | null>) {
   const [driverTrackingState, setDriverTrackingState] = useState<'IDLE' | 'TRACKING' | 'RECONNECTING'>('IDLE');
-  const lastHeartbeatTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastHeartbeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {

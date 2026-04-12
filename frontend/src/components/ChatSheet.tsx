@@ -172,7 +172,7 @@ export default function ChatSheet({
     );
 }
 
-const getStyles = (theme: any) => StyleSheet.create({
+const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     sheetBg: {
         backgroundColor: theme.colors.surface,
         borderRadius:    36,

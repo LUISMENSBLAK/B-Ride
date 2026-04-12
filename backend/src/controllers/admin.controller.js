@@ -5,8 +5,10 @@ const { getIO } = require('../sockets');
 
 const getPendingDrivers = async (req, res) => {
     try {
-        const drivers = await User.find({ driverApprovalStatus: 'DOCS_SUBMITTED', role: 'DRIVER' })
-            .select('-password -__v');
+        const drivers = await User.find({ 
+            driverApprovalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] }, 
+            role: 'DRIVER' 
+        }).select('-password -__v');
         res.status(200).json({ success: true, data: drivers });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

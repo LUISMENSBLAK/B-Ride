@@ -50,8 +50,9 @@ class SocketService {
     }
 
     this.socket = io(SOCKET_URL, {
-      extraHeaders: {
-        Authorization: `Bearer ${token}`
+      auth: (cb) => {
+         const currentUser = useAuthStore.getState().user;
+         cb({ token: currentUser?.accessToken });
       },
       reconnection: true,
       reconnectionAttempts: Infinity,

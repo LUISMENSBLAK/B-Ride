@@ -46,13 +46,15 @@ export default function DriverOnboardingScreen() {
 
   const pickImage = async (setter: (uri: string) => void, aspect: [number, number] = [4, 3]) => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect,
+      mediaTypes: ImagePicker.MediaTypeOptions ? ImagePicker.MediaTypeOptions.Images : ('Images' as any),
+      allowsEditing: false, // OFF to prevent iOS Simulator crop editor crash
       quality: 0.5,
     });
-    if (!result.canceled && result.assets[0]) {
+    console.log('[ImagePicker] Result:', JSON.stringify(result));
+    if (!result.canceled && result.assets && result.assets.length > 0) {
       setter(result.assets[0].uri);
+    } else {
+      console.log('[ImagePicker] Operation canceled or no assets.');
     }
   };
 
@@ -65,9 +67,7 @@ export default function DriverOnboardingScreen() {
       // @ts-ignore
       formData.append(fieldName, { uri, name: filename, type });
 
-      const res = await client.post(endpoint, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await client.post(endpoint, formData);
       return res.data;
   }
 
@@ -76,8 +76,11 @@ export default function DriverOnboardingScreen() {
     try {
       if (step === 'PROFILE_PHOTO') {
         if (!profilePhotoUri) return Alert.alert('Error', 'La foto de perfil es obligatoria.');
-        await uploadPhoto(profilePhotoUri, '/auth/profile/avatar', 'avatar');
-        await checkAuth();
+        const resData = await uploadPhoto(profilePhotoUri, '/auth/profile/avatar', 'avatar');
+        // Update local user softly without triggering global AppNavigator unmount
+        if (resData && resData.data) {
+            useAuthStore.getState().updateUser(resData.data);
+        }
         setStep('VEHICLE');
       } 
       else if (step === 'VEHICLE') {
@@ -105,11 +108,13 @@ export default function DriverOnboardingScreen() {
         if (!registrationPhotoUri) {
           return Alert.alert('Error', 'Foto del registro/matrícula es requerida.');
         }
-        await client.put('/auth/profile', {
+        const res = await client.put('/auth/profile', {
           driverApprovalStatus: 'UNDER_REVIEW', // Cambia estado central
           approvalStatus: 'UNDER_REVIEW'
         });
-        await checkAuth();
+        if (res.data && res.data.data) {
+           useAuthStore.getState().updateUser(res.data.data);
+        }
         setStep('WAITING');
       }
     } catch (e: any) {

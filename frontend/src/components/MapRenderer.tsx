@@ -2,7 +2,7 @@ import React, { memo, forwardRef, useImperativeHandle, useRef, useState, useEffe
 import { StyleSheet, Platform, View, ActivityIndicator, Text } from 'react-native';
 import MapView, { Marker, Region, Polyline } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '../theme';
+import { useAppTheme } from '../hooks/useAppTheme';
 
 import CarMarker from './CarMarker';
 import PassengerLocationMarker from './PassengerLocationMarker';
@@ -105,6 +105,8 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   pickupCoordinate, dropoffCoordinate, driverPhase,
 }, ref) => {
   const insets = useSafeAreaInsets();
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => getStyles(theme), [theme]);
   const mapRef = useRef<MapView>(null);
   const driverMarkerRef = useRef<any>(null);
 
@@ -193,29 +195,33 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   // UX 3: Indicar si la ruta mostrada es fallback (bezier) o real (OSRM)
   const [routeFallback, setRouteFallback] = useState(false);
 
+  // PERF FIX: Only re-fetch OSRM route when destination/phase changes, NOT on every GPS tick.
+  // Use a ref for the current position so the route start point is always fresh without triggering re-fetches.
+  const currentPosRef = useRef<Coordinate>({ latitude, longitude });
+  currentPosRef.current = { latitude, longitude };
+
   useEffect(() => {
-    let start: Coordinate | null = null;
+    let cancelled = false;
     let end: Coordinate | null = null;
 
     if (isDriver) {
       if (driverPhase === 'TO_PICKUP' && isValidCoord(pickupCoordinate)) {
-        start = { latitude, longitude };
         end = pickupCoordinate;
       } else if (driverPhase === 'TO_DESTINATION' && isValidCoord(dropoffCoordinate)) {
-        start = { latitude, longitude };
         end = dropoffCoordinate;
       }
     } else if (isValidCoord(destinationCoordinate)) {
-      start = { latitude, longitude };
       end = destinationCoordinate;
     }
 
-    if (start && end) {
+    if (end) {
+      const start = currentPosRef.current;
       const calculateRoute = async () => {
-        setPolylinePoints(generateCurvedPolyline(start!, end!)); // Immediate visual feedback
+        setPolylinePoints(generateCurvedPolyline(start, end!)); // Immediate visual feedback
         setRouteFallback(true);
         setRouteLoading(true);
-        const realRoute = await fetchOsrmRoute(start!, end!);
+        const realRoute = await fetchOsrmRoute(start, end!);
+        if (cancelled) return;
         setRouteLoading(false);
         if (realRoute) {
           setPolylinePoints(realRoute);
@@ -227,7 +233,9 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       setPolylinePoints(null);
       setRouteFallback(false);
     }
-  }, [latitude, longitude, destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
+
+    return () => { cancelled = true; };
+  }, [destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
 
   // ── Polyline destination marker ──
   const polylineEndpoint = React.useMemo<Coordinate | null>(() => {
@@ -307,7 +315,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   );
 });
 
-const styles = StyleSheet.create({
+const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
