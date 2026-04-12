@@ -1,6 +1,6 @@
 import React, { memo, forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 import { StyleSheet, Platform, View, ActivityIndicator, Text } from 'react-native';
-import MapView, { Marker, Region, Polyline } from 'react-native-maps';
+import MapView, { Marker, Region, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../hooks/useAppTheme';
 
@@ -252,6 +252,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     <>
     <MapView
       ref={mapRef}
+      provider={PROVIDER_GOOGLE}
       style={styles.map}
       initialRegion={initialRegion}
       showsUserLocation={false}

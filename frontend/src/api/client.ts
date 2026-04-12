@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 
 // CORRECCIÓN 4: Warning claro si EXPO_PUBLIC_API_URL no está definida
-const defaultURL = Platform.OS === 'android' ? 'http://10.0.2.2:5001/api' : 'http://localhost:5001/api';
+const defaultURL = Platform.OS === 'android' ? 'https://b-ride-production.up.railway.app/api' : 'https://b-ride-production.up.railway.app/api';
 const baseURL = process.env.EXPO_PUBLIC_API_URL || defaultURL;
 
 if (!process.env.EXPO_PUBLIC_API_URL) {

@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 // Emulador Android → 10.0.2.2
 // Dispositivo físico → EXPO_PUBLIC_SOCKET_URL en .env
 const defaultSocketURL =
-  Platform.OS === 'android' ? 'http://10.0.2.2:5001' : 'http://localhost:5001';
+  Platform.OS === 'android' ? 'https://b-ride-production.up.railway.app' : 'https://b-ride-production.up.railway.app';
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
 

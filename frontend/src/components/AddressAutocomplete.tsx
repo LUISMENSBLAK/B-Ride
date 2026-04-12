@@ -30,54 +30,41 @@ interface AddressAutocompleteProps {
 // Caché en memoria para consultas Nominatim — evita llamadas duplicadas en la sesión.
 const queryCache = new Map<string, PlaceResult[]>();
 
-async function searchNominatim(query: string, userLat?: number, userLng?: number): Promise<PlaceResult[]> {
+const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
+
+async function searchGooglePlaces(query: string, userLat?: number, userLng?: number): Promise<PlaceResult[]> {
   if (!query || query.trim().length < 3) return [];
 
-  const key = query.trim().toLowerCase() + `_${userLat}_${userLng}`;
-  if (queryCache.has(key)) return queryCache.get(key)!;
+  const keyCache = query.trim().toLowerCase() + `_${userLat}_${userLng}`;
+  if (queryCache.has(keyCache)) return queryCache.get(keyCache)!;
 
   try {
-    let url =
-      `https://nominatim.openstreetmap.org/search` +
-      `?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`;
-
+    let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_KEY}`;
+    
     if (userLat !== undefined && userLng !== undefined) {
-      // Prioritize results near user but don't strictly bind or restrict by country
-      const minLon = userLng - 0.45;
-      const minLat = userLat - 0.45;
-      const maxLon = userLng + 0.45;
-      const maxLat = userLat + 0.45;
-      url += `&viewbox=${minLon},${minLat},${maxLon},${maxLat}`;
+      url += `&location=${userLat},${userLng}&radius=50000`; // 50km radius
     }
 
-    console.log('[Nominatim] URL:', url);
-
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'es',
-        'User-Agent': 'BRideApp/1.0 (contact@bride.com)',
-      },
-    });
-
-    console.log('[Nominatim] Status:', res.status, res.statusText);
-
+    const res = await fetch(url);
     if (!res.ok) return [];
-    const data: any[] = await res.json();
+    
+    const data = await res.json();
+    if (!data.results) return [];
 
-    const results: PlaceResult[] = data.map((item) => ({
-      displayName: item.display_name,
-      latitude: parseFloat(item.lat),
-      longitude: parseFloat(item.lon),
+    const results: PlaceResult[] = data.results.slice(0, 5).map((item: any) => ({
+      displayName: item.formatted_address || item.name,
+      latitude: item.geometry.location.lat,
+      longitude: item.geometry.location.lng,
     }));
 
     if (queryCache.size >= 50) {
       const firstKey = queryCache.keys().next().value;
       if (firstKey) queryCache.delete(firstKey);
     }
-    queryCache.set(key, results);
+    queryCache.set(keyCache, results);
     return results;
   } catch (error) {
-    console.error('Nominatim search error:', error);
+    console.error('Google Places search error:', error);
     return [];
   }
 }
@@ -112,7 +99,7 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
     }
 
     setLoading(true);
-    searchNominatim(query, userLat, userLng).then((items) => {
+    searchGooglePlaces(query, userLat, userLng).then((items) => {
       if (id !== searchIdRef.current) return; // respuesta obsoleta, ignorar
       setResults(items);
       setLoading(false);

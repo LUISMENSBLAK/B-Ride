@@ -20,6 +20,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.bride.app",
+      "config": {
+        "googleMapsApiKey": "AIzaSyBZCGxCJOhOIa3KrlAo0IeLHBbyARjdLLI"
+      },
       "entitlements": {
         "com.apple.developer.location.push": true
       },
@@ -31,6 +34,11 @@
     },
     "android": {
       "package": "com.bride.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBZCGxCJOhOIa3KrlAo0IeLHBbyARjdLLI"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/android-icon-foreground.png",
