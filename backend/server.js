@@ -76,9 +76,16 @@ app.use('/api/rides', require('./src/routes/ride.routes'));
 app.use('/api/payment', require('./src/routes/payment.routes'));
 app.use('/api/drivers', require('./src/routes/driver.routes'));
 // A1: Admin routes
+// A1: Admin routes
 app.use('/api/admin', require('./src/routes/admin.routes'));
 // S5 + O1: Reports/support routes
 app.use('/api/reports', require('./src/routes/report.routes'));
+// SOS routes
+app.use('/api/sos', require('./src/routes/sos.routes'));
+// Promos
+app.use('/api/promos', require('./src/routes/promo.routes'));
+// Wallet
+app.use('/api/wallet', require('./src/routes/wallet.routes'));
 
 // Basic Healthcheck Route
 app.get('/api/health', (req, res) => {
@@ -90,6 +97,12 @@ cron.schedule('*/5 * * * *', () => {
     console.log('[System] Corriendo recovery job...');
     paymentService.cronRecoveryJobs().catch(e => console.error('[Cron Error]', e.message));
 });
+
+// A6: Document Expiry
+require('./src/services/documentExpiry.service').startDocumentExpiryCron();
+
+// M1: Maintenance & Dispatcher Service
+require('./src/services/maintenance.service').startMaintenanceCrons();
 
 const PORT = process.env.PORT || 5000;
 

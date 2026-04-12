@@ -11,6 +11,12 @@ router.get('/history', protect, getMyRides);
 // Get ride sync state
 router.get('/:id/state', protect, require('../controllers/ride.controller').getRideState);
 
+// Rate ride
+router.post('/:id/rate', protect, require('../controllers/ride.controller').rateRide);
+
+// Phase 14: Public Tracker endpoint
+router.get('/:id/track', require('../controllers/ride.controller').trackRide);
+
 // SOS (Bloque 7)
 router.post('/:rideId/sos', protect, require('../controllers/ride.controller').sosTrigger);
 

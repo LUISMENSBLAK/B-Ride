@@ -1,13 +1,14 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
+const sendEmail = require('../utils/sendEmail');
 
 const RefreshToken = require('../models/RefreshToken');
 const uuid = require('uuid');
 
 class AuthService {
     async register(userData) {
-        const { name, email, password, role, phoneNumber } = userData;
+        const { name, email, password, role, phoneNumber, referralCode } = userData;
 
         const userExists = await User.findOne({ email });
         if (userExists) {
@@ -21,18 +22,37 @@ class AuthService {
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedCode = await bcrypt.hash(verifyCode, salt);
 
+        // Generar referral code unico
+        const crypto = require('crypto');
+        const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+
+        let referredById = null;
+        if (referralCode) {
+            const referent = await User.findOne({ referralCode });
+            if (referent) {
+                referredById = referent._id;
+            }
+        }
+
         const user = await User.create({
             name,
             email,
             password: hashedPassword,
             role: role || 'USER',
             phoneNumber,
+            referralCode: myReferralCode,
+            referredBy: referredById,
             isEmailVerified: false,
             emailVerificationToken: hashedCode,
             emailVerificationExpires: Date.now() + 15 * 60 * 1000,
         });
 
-        console.log(`[EMAIL SIMULADO] Para ${email}: Tu código de B-Ride es ${verifyCode}`);
+        await sendEmail({
+            email,
+            subject: 'Verifica tu cuenta en B-Ride',
+            message: 'Hola, gracias por registrarte en B-Ride. Utiliza el siguiente código de 6 dígitos para verificar tu cuenta.',
+            code: verifyCode
+        });
 
         // Aunque no esté verificado, podemos devolver success, pero no tokens (o tokens pero no lo dejamos pasar)
         // El prompt indica "En el login, si isEmailVerified es false devuelve 403" 
@@ -76,7 +96,12 @@ class AuthService {
             user.emailVerificationToken = await bcrypt.hash(verifyCode, salt);
             user.emailVerificationExpires = Date.now() + 15 * 60 * 1000;
             await user.save();
-            console.log(`[EMAIL SIMULADO] Para ${email}: Reenvío. Tu nuevo código de B-Ride es ${verifyCode}`);
+            await sendEmail({
+                email,
+                subject: 'Tu nuevo código de verificación - B-Ride',
+                message: 'Hemos generado un nuevo código para ti. Úsalo para verificar tu cuenta en la aplicación.',
+                code: verifyCode
+            });
             const e = new Error('NOT_VERIFIED');
             e.code = 403;
             throw e;
@@ -97,7 +122,15 @@ class AuthService {
                     firstSeen: Date.now(),
                     lastSeen: Date.now()
                 });
-                console.log(`[EMAIL SIMULADO ALERTA] Nuevo inicio de sesión desde ${deviceMeta.deviceName || 'dispositivo nuevo'} en ${new Date().toISOString()}`);
+                await sendEmail({
+                    email,
+                    subject: 'Alerta de Seguridad - Nuevo Dispositivo en B-Ride',
+                    message: `Hemos detectado un nuevo inicio de sesión en tu cuenta de B-Ride desde un nuevo dispositivo.<br/><br/>
+                    <strong>Dispositivo:</strong> ${deviceMeta.deviceName || 'Desconocido'}<br/>
+                    <strong>Plataforma:</strong> ${deviceMeta.platform || 'Unknown'}<br/>
+                    <strong>Fecha:</strong> ${new Date().toISOString()}<br/><br/>
+                    Si no fuiste tú, por favor contacta a soporte inmediatamente.`
+                });
             } else {
                 isKnown.lastSeen = Date.now();
             }

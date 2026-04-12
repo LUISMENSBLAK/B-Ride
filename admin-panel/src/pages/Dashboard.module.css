@@ -1,0 +1,155 @@
+.page {
+  max-width: 1100px;
+  animation: fadeIn 0.3s ease both;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--success-bg);
+  border: 1px solid var(--success);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.18s, transform 0.18s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+.accent_gold { border-left: 3px solid var(--gold); }
+.accent_success { border-left: 3px solid var(--success); }
+.accent_warning { border-left: 3px solid var(--warning); }
+.accent_info { border-left: 3px solid var(--info); }
+
+.cardIcon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cardBody {
+  min-width: 0;
+}
+
+.cardLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cardValue {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+/* Skeleton */
+.skeletonIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.skeletonLabel {
+  width: 80px;
+  height: 12px;
+  margin-bottom: 8px;
+}
+
+.skeletonValue {
+  width: 60px;
+  height: 26px;
+}
+
+/* Info panel */
+.errorBox {
+  background: var(--error-bg);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  color: var(--error);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.infoPanel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  border-left: 3px solid var(--gold);
+}
+
+.infoPanelTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.infoPanelText {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.infoPanelText strong {
+  color: var(--gold);
+}

@@ -1,28 +1,52 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+
+const getEmailTemplate = (title, body) => `
+    <div style="background-color: #0D0520; padding: 40px; font-family: sans-serif; color: #FFFFFF; text-align: center;">
+        <h1 style="color: #F5C518; margin-bottom: 20px; font-size: 32px;">B-Ride</h1>
+        ${title ? `<h2 style="color: #FFFFFF; margin-bottom: 20px; font-size: 24px;">${title}</h2>` : ''}
+        <div style="font-size: 16px; margin-bottom: 30px;">
+            ${body}
+        </div>
+        <hr style="border: none; border-top: 1px solid #3D2478; margin-top: 40px; margin-bottom: 20px;" />
+        <footer style="font-size: 12px; color: #A89BC2;">
+            B-Ride — Nayarit, México<br/>
+            © ${new Date().getFullYear()} Todos los derechos reservados.
+        </footer>
+    </div>
+`;
 
 const sendEmail = async (options) => {
-    // In a real production environment, use SendGrid, Mailgun, or AWS SES
-    // For this MVP, we can use ethereal email for testing or a Gmail account
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
-    const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-        port: process.env.SMTP_PORT || 587,
-        auth: {
-            user: process.env.SMTP_EMAIL || 'test@ethereal.email',
-            pass: process.env.SMTP_PASSWORD || 'password123',
-        },
-    });
+    try {
+        let finalHtml = options.html;
+        
+        if (!finalHtml) {
+            let bodyContent = `<p>${options.message || ''}</p>`;
+            if (options.code) {
+                bodyContent += `<div style="font-size: 48px; font-weight: bold; color: #F5C518; letter-spacing: 4px; margin: 30px 0;">${options.code}</div>`;
+            }
+            finalHtml = getEmailTemplate(options.subject, bodyContent);
+        }
 
-    const message = {
-        from: `${process.env.FROM_NAME || 'B-Ride Admin'} <${process.env.FROM_EMAIL || 'noreply@bride.com'}>`,
-        to: options.email,
-        subject: options.subject,
-        text: options.message,
-    };
+        const { data, error } = await resend.emails.send({
+            from: `${process.env.FROM_NAME || 'B-Ride'} <${process.env.FROM_EMAIL || 'onboarding@resend.dev'}>`,
+            to: options.email,
+            subject: options.subject,
+            html: finalHtml
+        });
 
-    const info = await transporter.sendMail(message);
+        if (error) {
+            console.error('[Resend Error]', error);
+            throw new Error('Error sending email');
+        }
 
-    console.log('Message sent: %s', info.messageId);
+        console.log('Message sent:', data);
+    } catch (error) {
+        console.error('[sendEmail Error]', error);
+        throw error;
+    }
 };
 
+sendEmail.getEmailTemplate = getEmailTemplate;
 module.exports = sendEmail;

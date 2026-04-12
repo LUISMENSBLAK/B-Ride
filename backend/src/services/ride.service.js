@@ -3,7 +3,9 @@ const StateMachine = require('../utils/stateMachine');
 const paymentService = require('./payment.service');
 
 class RideService {
-    async createRideRequest(passengerId, pickupLocation, dropoffLocation, proposedPrice) {
+    async createRideRequest(passengerId, pickupLocation, dropoffLocation, proposedPrice, options = {}) {
+        const { isScheduled = false, scheduledAt = null, promoCode = null } = options;
+        
         // Wrapper de compatibilidad hacia GeoJSON
         const geoPickup = {
              latitude: pickupLocation.latitude,
@@ -22,12 +24,36 @@ class RideService {
         const pricingService = require('./pricing.service');
         const { surgeMultiplier, zoneId } = pricingService.getSurgeForLocation(pickupLocation.latitude, pickupLocation.longitude);
 
+        // Evaluar promo
+        let finalDiscount = 0;
+        let appliedPromoCode = null;
+        if (promoCode) {
+            const Promo = require('../models/Promo');
+            const promo = await Promo.findOne({ code: promoCode.toUpperCase(), isActive: true });
+            if (promo) {
+                // Validación de fecha no necesaria aquí si ya se validó en check/validate pero la haremos segura
+                if (promo.type === 'FIXED_AMOUNT') {
+                    finalDiscount = promo.value;
+                } else if (promo.type === 'PERCENTAGE') {
+                    finalDiscount = (proposedPrice * promo.value) / 100;
+                    if (promo.maxDiscount && finalDiscount > promo.maxDiscount) finalDiscount = promo.maxDiscount;
+                }
+                appliedPromoCode = promo.code;
+                promo.usedCount += 1;
+                await promo.save();
+            }
+        }
+
         const ride = await Ride.create({
             passenger: passengerId,
             pickupLocation: geoPickup,
             dropoffLocation: geoDropoff,
             proposedPrice,
-            status: 'REQUESTED',
+            isScheduled,
+            scheduledAt,
+            promoCode: appliedPromoCode,
+            discountApplied: finalDiscount,
+            status: isScheduled ? 'SCHEDULED' : 'REQUESTED',
             version: 1,
             pricingMeta: {
                 surgeMultiplier,
@@ -160,6 +186,48 @@ class RideService {
 
         // Intercepción Financiera (NO bloquea el Thread actual)
         if (nextStatus === 'COMPLETED') {
+            const User = require('../models/User');
+            // Phase 5: Destinos recientes
+            try {
+                if (rideQuery.dropoffLocation) {
+                    await User.findByIdAndUpdate(rideQuery.passenger, {
+                        $push: {
+                            recentDestinations: {
+                                $each: [{
+                                    address: rideQuery.dropoffLocation.address,
+                                    latitude: rideQuery.dropoffLocation.latitude || rideQuery.dropoffLocation.location?.coordinates[1] || 0,
+                                    longitude: rideQuery.dropoffLocation.longitude || rideQuery.dropoffLocation.location?.coordinates[0] || 0,
+                                    usedAt: Date.now()
+                                }],
+                                $slice: -5
+                            }
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('[RecentDestinations] Error saving:', err.message);
+            }
+            
+            // Phase 7: Referral First Ride Reward
+            try {
+                const p = await User.findById(rideQuery.passenger);
+                if (p && p.referredBy && !p.referralRewardClaimed) {
+                    p.referralRewardClaimed = true;
+                    // Pasajero gana $20 MXN
+                    p.walletBalance += 20;
+                    await p.save();
+                    
+                    // Referidor gana $20 MXN
+                    await User.findByIdAndUpdate(p.referredBy, {
+                         $inc: { referralCount: 1, referralBonusEarned: 20, walletBalance: 20 }
+                    });
+                    
+                    console.log(`[Referral] Bono aplicado: +$20 al pasajero ${p._id} y al referidor ${p.referredBy}`);
+                }
+            } catch (rErr) {
+                 console.error('[Referral Reward Error]', rErr.message);
+            }
+
             paymentService.executeCapture(rideId).catch(console.error);
             require('./chat.service').cleanupChat(rideId);
         } else if (nextStatus === 'CANCELLED') {

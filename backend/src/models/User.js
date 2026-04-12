@@ -139,10 +139,20 @@ const userSchema = new mongoose.Schema(
         avgRating: { type: Number, default: 0, min: 0, max: 5 },
         totalRatings: { type: Number, default: 0 },
         ratings: [{
-            score:   { type: Number, required: true, min: 1, max: 5 },
-            rideId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
-            from:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            rideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
+            from: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+            score: { type: Number, required: true },
         }],
+        
+        // --- SISTEMA DE REFERIDOS (Fase 7) ---
+        referralCode: { type: String, unique: true, sparse: true },
+        referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        referralCount: { type: Number, default: 0 },
+        referralBonusEarned: { type: Number, default: 0 },
+        referralRewardClaimed: { type: Boolean, default: false },
+
+        // --- WALLET SYSTEM (Fase 10 pre-requisito) ---
+        walletBalance: { type: Number, default: 0 },
         acceptanceRate: { type: Number, default: 1.0 },
         avgResponseTimeMs: { type: Number, default: 5000 },
 

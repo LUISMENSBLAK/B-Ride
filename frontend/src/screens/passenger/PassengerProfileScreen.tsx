@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../hooks/useAppTheme';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image, Alert, ActivityIndicator, Share } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import client from '../../api/client';
@@ -20,8 +20,23 @@ export default function PassengerProfileScreen() {
   const { t, lang } = useTranslation();
   // BUG 17 FIX: Conectar Switch al estado real de notificaciones
   const { notificationsEnabled, toggleNotifications, loadSettings } = useSettings();
+  
+  const [referralData, setReferralData] = useState<{code: string, count: number, bonus: number} | null>(null);
 
   useEffect(() => { loadSettings(); }, []);
+  
+  useEffect(() => {
+     client.get('/auth/referral').then(res => setReferralData(res.data.data)).catch(() => {});
+  }, []);
+
+  const handleShareReferral = async () => {
+     if (!referralData?.code) return;
+     try {
+       await Share.share({
+         message: `¡Únete a B-Ride y viaja seguro! Usa mi código ${referralData.code} al registrarte para obtener un descuento especial.`,
+       });
+     } catch (error) {}
+  };
 
   const getLanguageLabel = (l: string) => {
     switch(l) {
@@ -131,6 +146,24 @@ export default function PassengerProfileScreen() {
           />
         </View>
       </View>
+      
+      {/* Referral System */}
+      {referralData && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>CÓDIGO DE REFERIDO</Text>
+          <View style={{ alignItems: 'center', marginVertical: 12 }}>
+             <Text style={{ fontSize: 28, fontWeight: '800', color: theme.colors.primary, letterSpacing: 3 }}>
+                 {referralData.code}
+             </Text>
+             <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 4 }}>
+                 Referidos: {referralData.count} • Ganancias: ${referralData.bonus.toFixed(2)}
+             </Text>
+          </View>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShareReferral}>
+             <Text style={styles.shareBtnText}>Compartir Código</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
         <Text style={styles.logoutText}>{t('settings.logout')}</Text>
@@ -164,6 +197,9 @@ const getStyles = (theme: any) => StyleSheet.create({
   settingValue: { ...theme.typography.bodyMuted },
   logoutBtn: { backgroundColor: theme.colors.error, padding: 16, borderRadius: theme.borderRadius.pill, alignItems: 'center' },
   logoutText: { ...theme.typography.button, color: theme.colors.primaryText },
+  
+  shareBtn: { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.primary, borderWidth: 1, padding: 12, borderRadius: theme.borderRadius.pill, alignItems: 'center', marginTop: 8 },
+  shareBtnText: { ...theme.typography.button, color: theme.colors.primary },
   
   skeletonSection: { width: '100%', height: 160, backgroundColor: theme.colors.surfaceHigh, borderRadius: 20, padding: 24 },
 });

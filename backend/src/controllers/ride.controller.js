@@ -110,8 +110,87 @@ const sosTrigger = async (req, res) => {
     }
 }
 
+const rateRide = async (req, res) => {
+    try {
+        const { rating, feedback } = req.body;
+        const rideId = req.params.id;
+        
+        if (rating === undefined || rating < 1 || rating > 5) {
+            return res.status(400).json({ success: false, message: 'Rating válido entre 1 y 5 es requerido' });
+        }
+
+        const Ride = require('../models/Ride');
+        const User = require('../models/User');
+        const ride = await Ride.findById(rideId);
+        
+        if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
+        if (ride.status !== 'COMPLETED') return res.status(400).json({ success: false, message: 'Solo viajes completados pueden ser calificados' });
+        
+        const isPassenger = ride.passenger.toString() === req.user._id.toString();
+        const isDriver = ride.driver && ride.driver.toString() === req.user._id.toString();
+        
+        if (!isPassenger && !isDriver) return res.status(403).json({ success: false, message: 'No fuiste parte de este viaje' });
+        
+        const targetUserId = isPassenger ? ride.driver : ride.passenger;
+        if (!targetUserId) return res.status(400).json({ success: false, message: 'No hay usuario para calificar' });
+
+        const targetUser = await User.findById(targetUserId);
+        
+        if (!targetUser.ratings) targetUser.ratings = [];
+        targetUser.ratings.push({
+            rideId: ride._id,
+            from: req.user._id,
+            score: rating
+        });
+        
+        targetUser.totalRatings = targetUser.ratings.length;
+        const sum = targetUser.ratings.reduce((acc, curr) => acc + curr.score, 0);
+        targetUser.avgRating = sum / targetUser.totalRatings;
+        
+        await targetUser.save();
+        
+        try {
+            const { getIO } = require('../sockets');
+            getIO().to(targetUser._id.toString()).emit('rating_received', { rideId: ride._id, score: rating, feedback });
+        } catch (e) {}
+
+        res.status(200).json({ success: true, message: 'Rating guardado correctamente' });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
+const trackRide = async (req, res) => {
+    try {
+        const rideId = req.params.id;
+        const Ride = require('../models/Ride');
+        const locationCacheModule = require('../services/locationCache.service');
+
+        const ride = await Ride.findById(rideId).populate('driver', 'name vehicle driverStatus');
+        
+        if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
+        
+        let currentLoc = null;
+        if (ride.driver) currentLoc = locationCacheModule.cache.get(ride.driver._id.toString());
+        
+        res.status(200).json({
+             success: true,
+             data: {
+                  status: ride.status, pickup: ride.pickupLocation.address, dropoff: ride.dropoffLocation.address,
+                  driver: ride.driver ? {
+                       name: ride.driver.name.split(' ')[0], vehicle: ride.driver.vehicle, location: currentLoc || null
+                  } : null
+             }
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 module.exports = {
     getMyRides,
     getRideState,
-    sosTrigger
+    sosTrigger,
+    rateRide,
+    trackRide
 };

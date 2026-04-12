@@ -7,7 +7,15 @@ const router = express.Router();
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.post('/verify-email', require('../controllers/auth.controller').verifyEmail);
+router.post('/resend-verification', require('../controllers/auth.controller').resendVerification);
+
+// V2: SMS OTP
+router.post('/send-phone-otp', protect, require('../controllers/auth.controller').sendPhoneOtp);
+router.post('/verify-phone-otp', protect, require('../controllers/auth.controller').verifyPhoneOtp);
+
 router.post('/logout-all', protect, require('../controllers/auth.controller').logoutAll);
+router.delete('/account', protect, require('../controllers/auth.controller').deleteAccount);
+router.get('/referral', protect, require('../controllers/auth.controller').getReferral);
 router.get('/me', protect, getMe);
 router.post('/forgotpassword', forgotPassword);
 router.put('/resetpassword/:resettoken', resetPassword);

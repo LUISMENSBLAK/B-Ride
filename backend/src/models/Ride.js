@@ -53,9 +53,16 @@ const rideSchema = new mongoose.Schema(
         // ----------------------
         status: {
             type: String,
-            enum: ['REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+            enum: ['SCHEDULED', 'REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
             default: 'REQUESTED',
         },
+        
+        // --- PHASE 8 & 9 (Promos & Scheduled) ---
+        isScheduled: { type: Boolean, default: false },
+        scheduledAt: { type: Date, default: null },
+        promoCode: { type: String, default: null },
+        discountApplied: { type: Number, default: 0 },
+
         version: {
             type: Number,
             default: 1

@@ -140,4 +140,35 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     }
 });
 
+// Conekta Webhook
+router.post('/conekta', express.json(), async (req, res) => {
+    try {
+         const event = req.body;
+         console.log('[Conekta Webhook] Event Received:', event.type);
+         
+         if (event.type === 'order.paid') {
+              const order = event.data.object;
+              const referenceId = order.metadata?.referenceId;
+              if (referenceId) {
+                   // Logica de confirmacion cuando el OXXO/SPEI es pagado
+                   console.log(`[Conekta Webhook] Orden Pagada, liberando viaje ${referenceId}`);
+                   const Ride = require('../models/Ride');
+                   const ride = await Ride.findById(referenceId);
+                   if (ride && ride.paymentStatus === 'HOLD') {
+                        ride.paymentStatus = 'CAPTURED';
+                        await ride.save();
+                        
+                        const { getIO } = require('../sockets');
+                        getIO().to(`ride_${referenceId}`).emit('payment_confirmed', { rideId: referenceId, method: 'CONEKTA' });
+                   }
+              }
+         }
+         
+         res.status(200).send('Webhook Processed');
+    } catch(e) {
+         console.error('[Conekta Webhook Error]', e.message);
+         res.status(500).send('Error processing Conekta webhook');
+    }
+});
+
 module.exports = router;

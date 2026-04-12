@@ -159,7 +159,7 @@ const rideEvents = (socket) => {
                 return;
             }
             
-            const { pickupLocation, dropoffLocation, proposedPrice, eventId } = rideData;
+            const { pickupLocation, dropoffLocation, proposedPrice, eventId, isScheduled, scheduledAt, promoCode } = rideData;
             const passengerId = socket.userId;
             if (!passengerId) throw new Error('No autorizado');
 
@@ -167,11 +167,15 @@ const rideEvents = (socket) => {
                 if(isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
                 return;
             }
-            const newRide = await rideService.createRideRequest(passengerId, pickupLocation, dropoffLocation, proposedPrice);
+            const newRide = await rideService.createRideRequest(
+                 passengerId, pickupLocation, dropoffLocation, proposedPrice, 
+                 { isScheduled, scheduledAt, promoCode }
+            );
 
-            // Delega la emisión algorítmica al Matching Service con Ring Expansion
-            // Esto manejará la propagación inteligente a drivers.
-            matchingService.startMatchingCampaign(newRide, getIO());
+            // Phase 9 rule: si es Scheduled, no se propaga todavía. Se guardará y el cron hará la propagación.
+            if (!isScheduled) {
+                 matchingService.startMatchingCampaign(newRide, getIO());
+            }
 
             // Rebotar al pasajero para avisarle que se creó con éxito
             getIO().to(passengerId).emit('rideRequestCreated', newRide);
@@ -263,6 +267,14 @@ const rideEvents = (socket) => {
             console.log(`[Bidding] Chofer ${driverId} propone $${price}`);
             
             getIO().to(passengerId).emit('trip_bid_received', updatedRide);
+            
+            require('../services/notification.service').sendSmartPushNotifications([{
+                userId: passengerId,
+                title: 'Nueva Oferta',
+                body: 'Un conductor ha hecho una oferta para tu viaje',
+                data: { type: 'trip_bid', rideId: rideId }
+            }]);
+
             if (isAckRequired) ack({ success: true, status: 'processed' });
         } catch (error) {
             if (isAckRequired) ack({ success: false, error: error.message });
@@ -367,6 +379,12 @@ const rideEvents = (socket) => {
                     : cancelledRide.driver.toString();
                 await User.findByIdAndUpdate(driverId, { driverStatus: 'AVAILABLE' });
                 getIO().to(driverId).emit('ride:cancelled', cancelPayload);
+                require('../services/notification.service').sendSmartPushNotifications([{
+                    userId: driverId,
+                    title: 'Viaje Cancelado',
+                    body: 'El pasajero ha cancelado el viaje.',
+                    data: { rideId }
+                }]);
             }
 
             // 5. Broadcast a la ride room y geo-room
@@ -411,6 +429,22 @@ const rideEvents = (socket) => {
 
             // Broadcast to the actual ride room 
             getIO().to(`ride_${rideId}`).emit('trip_state_changed', updatedRide);
+            
+            // Phase 4: Push notifications
+            const notifications = [];
+            if (nextStatus === 'ACCEPTED') {
+                 notifications.push({ userId: passengerId, title: 'Tu conductor está en camino', body: 'El conductor se dirige a tu ubicación.', data: { rideId } });
+            } else if (nextStatus === 'ARRIVED') {
+                 notifications.push({ userId: passengerId, title: 'Tu conductor llegó', body: 'Tu conductor llegó al punto de recogida.', data: { rideId } });
+            } else if (nextStatus === 'IN_PROGRESS') {
+                 notifications.push({ userId: passengerId, title: 'Tu viaje ha comenzado', body: 'El viaje está en curso, ¡disfruta!', data: { rideId } });
+            } else if (nextStatus === 'COMPLETED') {
+                 notifications.push({ userId: passengerId, title: 'Viaje completado', body: 'Viaje completado. ¡Gracias por usar B-Ride!', data: { rideId } });
+                 notifications.push({ userId: driverId, title: 'Viaje completado', body: 'Viaje completado satisfactoriamente.', data: { rideId } });
+            }
+            if (notifications.length > 0) {
+                 require('../services/notification.service').sendSmartPushNotifications(notifications);
+            }
             
             // Fallbacks point-to-point just in case
             getIO().to(passengerId).emit('trip_state_changed', updatedRide);

@@ -15,4 +15,7 @@ router.get('/heat-zones', protect, (req, res) => {
     }
 });
 
+// Agregar Earnings endpoint (Phase 12)
+router.get('/earnings', protect, require('../controllers/driver.controller').getEarnings);
+
 module.exports = router;
