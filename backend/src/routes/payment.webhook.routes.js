@@ -154,7 +154,7 @@ router.post('/conekta', express.json(), async (req, res) => {
                    console.log(`[Conekta Webhook] Orden Pagada, liberando viaje ${referenceId}`);
                    const Ride = require('../models/Ride');
                    const ride = await Ride.findById(referenceId);
-                   if (ride && ride.paymentStatus === 'HOLD') {
+                   if (ride && (ride.paymentStatus === 'HOLD' || ride.paymentStatus === 'PENDING')) {
                         ride.paymentStatus = 'CAPTURED';
                         await ride.save();
                         

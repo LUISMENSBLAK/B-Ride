@@ -66,7 +66,7 @@ class SocketService {
     eventManager.reconnectSocketBindings();
 
     this.socket.on('connect', () => {
-      console.log('[Socket] Connected / Reconnected:', this.socket?.id);
+      if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);
       const userState = useAuthStore.getState().user;
       if (userState) {
         this.socket?.emit('join', userState._id);
@@ -79,14 +79,14 @@ class SocketService {
         // BUG 10 FIX: Re-emitir driver:join tras reconexión si es conductor y hay ubicación conocida
         if (userState.role === 'DRIVER' && _lastKnownDriverLocation) {
           this.socket?.emit('driver:join', _lastKnownDriverLocation);
-          console.log('[Socket] Re-emitted driver:join tras reconexión');
+          if (__DEV__) console.log('[Socket] Re-emitted driver:join tras reconexión');
         }
         
         // WEBSOCKETS RECOVERY: Pedimos el active ride state
         this.socket?.emit('sync_state', { userId: userState._id, role: userState.role }, (res: any) => {
             if (res && res.success && res.activeRide) {
                 // Notificar componente global del recargue (si hay uno)
-                console.log('[Socket] Estado activo recuperado:', res.activeRide._id);
+                if (__DEV__) console.log('[Socket] Estado activo recuperado:', res.activeRide._id);
                 const eventManager = require('./EventManager').default;
                 eventManager.emitLocalRideEvent('trip_state_changed', res.activeRide);
             }
@@ -129,7 +129,7 @@ class SocketService {
            }
            
            if (response && response.status === 'duplicate_ignored') {
-               console.log(`[Socket] ACK: Server Ignored Duplicate (${eventName})`);
+               if (__DEV__) console.log(`[Socket] ACK: Server Ignored Duplicate (${eventName})`);
            }
            
            return response; // Success Validation
@@ -144,7 +144,7 @@ class SocketService {
 
   disconnect() {
     if (this.socket) {
-      console.log('Force closing socket cleanly...');
+      if (__DEV__) console.log('Force closing socket cleanly...');
       this.socket.removeAllListeners(); 
       this.socket.disconnect();
       this.socket = null;

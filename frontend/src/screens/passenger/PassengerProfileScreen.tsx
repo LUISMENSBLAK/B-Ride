@@ -1,6 +1,6 @@
 import { useAppTheme } from '../../hooks/useAppTheme';
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image, Alert, ActivityIndicator, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Switch, Image, Alert, ActivityIndicator, Share, Modal, TextInput } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import client from '../../api/client';
@@ -23,11 +23,47 @@ export default function PassengerProfileScreen() {
   
   const [referralData, setReferralData] = useState<{code: string, count: number, bonus: number} | null>(null);
 
+  // WALLET
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletTx, setWalletTx] = useState<any[]>([]);
+  const [topupModal, setTopupModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState('');
+  const [topupLoading, setTopupLoading] = useState(false);
+
   useEffect(() => { loadSettings(); }, []);
   
   useEffect(() => {
      client.get('/auth/referral').then(res => setReferralData(res.data.data)).catch(() => {});
+     fetchWallet();
   }, []);
+
+  const fetchWallet = async () => {
+     try {
+       const resB = await client.get('/wallet/balance');
+       if (resB.data.success) setWalletBalance(resB.data.data.balance);
+       const resT = await client.get('/wallet/transactions');
+       if (resT.data.success) setWalletTx(resT.data.data);
+     } catch (e) {}
+  };
+
+  const handleTopup = async () => {
+    const amt = Number(topupAmount);
+    if (!amt || amt <= 0) return Alert.alert('Error', 'Monto inválido');
+    setTopupLoading(true);
+    try {
+      const res = await client.post('/wallet/topup', { amount: amt });
+      if (res.data.success) {
+        Alert.alert('Éxito', 'Recarga realizada correctamente');
+        setTopupModal(false);
+        setTopupAmount('');
+        fetchWallet();
+      }
+    } catch(e: any) {
+      Alert.alert('Error', e.response?.data?.message || 'Fallo de recarga');
+    } finally {
+      setTopupLoading(false);
+    }
+  };
 
   const handleShareReferral = async () => {
      if (!referralData?.code) return;
@@ -165,9 +201,57 @@ export default function PassengerProfileScreen() {
         </View>
       )}
 
+      {/* Wallet */}
+      <View style={styles.section}>
+        <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
+           <Text style={styles.sectionLabel}>MI BILLETERA</Text>
+           <TouchableOpacity onPress={() => setTopupModal(true)}>
+             <Text style={{color: theme.colors.primary, fontWeight: 'bold'}}>+ Recargar</Text>
+           </TouchableOpacity>
+        </View>
+        <View style={{ alignItems: 'center', marginBottom: 20 }}>
+           <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Saldo Disponible</Text>
+           <Text style={{ fontSize: 36, fontWeight: '800', color: theme.colors.text }}>${walletBalance?.toFixed(2) || '0.00'}</Text>
+        </View>
+        <Text style={{fontSize: 12, color: theme.colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1}}>Últimos Movimientos</Text>
+        {walletTx.slice(0, 5).map((tx, idx) => (
+          <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
+             <Text style={{ color: theme.colors.text }}>{tx.type === 'TOPUP' ? 'Recarga' : 'Pago de viaje'}</Text>
+             <Text style={{ color: tx.type === 'TOPUP' ? theme.colors.success : theme.colors.text, fontWeight: 'bold' }}>
+               {tx.type === 'TOPUP' ? '+' : '-'}${tx.amount.toFixed(2)}
+             </Text>
+          </View>
+        ))}
+        {walletTx.length === 0 && <Text style={{color: theme.colors.textMuted, fontSize: 13, fontStyle: 'italic'}}>Sin movimientos recientes.</Text>}
+      </View>
+
       <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
         <Text style={styles.logoutText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
+
+      <Modal visible={topupModal} transparent animationType="slide">
+         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: theme.colors.surface, padding: 24, borderRadius: 20 }}>
+               <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 20 }}>Recargar Billetera</Text>
+               <TextInput 
+                  style={{ backgroundColor: theme.colors.inputBackground, padding: 16, borderRadius: 12, color: theme.colors.text, fontSize: 24, textAlign: 'center', marginBottom: 20 }}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textMuted}
+                  keyboardType="numeric"
+                  value={topupAmount}
+                  onChangeText={setTopupAmount}
+               />
+               <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <TouchableOpacity style={[styles.logoutBtn, { flex: 1, backgroundColor: theme.colors.surfaceHigh }]} onPress={() => setTopupModal(false)}>
+                     <Text style={{ color: theme.colors.text, fontWeight: 'bold', textAlign: 'center' }}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.logoutBtn, { flex: 1, backgroundColor: theme.colors.primary }]} onPress={handleTopup} disabled={topupLoading}>
+                     {topupLoading ? <ActivityIndicator color="#000" /> : <Text style={{ color: '#000', fontWeight: 'bold', textAlign: 'center' }}>Abonar</Text>}
+                  </TouchableOpacity>
+               </View>
+            </View>
+         </View>
+      </Modal>
     </ScrollView>
   );
 }

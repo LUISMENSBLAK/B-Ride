@@ -11,18 +11,18 @@ const locationCache = require('../services/locationCache.service');
 const bidRateLimits = new Map();
 
 const rideEvents = (socket) => {
-    console.log(`[Sockets] Usuario Conectado: ${socket.id}`);
+    if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Usuario Conectado: ${socket.id}`);
 
     // Driver/Passenger joins their own private room using their User ID
     socket.on('join', (userId) => {
         socket.join(userId);
-        console.log(`[Sockets] Usuario ${userId} se unió a su room privado.`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Usuario ${userId} se unió a su room privado.`);
     });
 
     socket.on('join_ride_room', (rideId) => {
         if (!rideId) return;
         socket.join(`ride_${rideId}`);
-        console.log(`[Sockets] Usuario ${socket.id} se unió a la room dinámica ride_${rideId}`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Usuario ${socket.id} se unió a la room dinámica ride_${rideId}`);
     });
 
     // UNIRSE A ROOM DE DRIVERS POR GEOHASH
@@ -38,8 +38,8 @@ const rideEvents = (socket) => {
         
         socket.join(room);
         socket.currentGeoRoom = room;
-        console.log(`[SOCKET] Driver Reconectado/Unido Socket: ${socket.id}`);
-        console.log(`[ROOM] Driver se unió a room: ${room}`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[SOCKET] Driver Reconectado/Unido Socket: ${socket.id}`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[ROOM] Driver se unió a room: ${room}`);
     });
 
     // Cambiar estado a AVAILABLE o OFFLINE

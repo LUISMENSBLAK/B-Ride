@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import socketService from '../../services/socket';
+import client from '../../api/client';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useTranslation } from '../../hooks/useTranslation';
 import type { Theme } from '../../theme';
@@ -57,6 +58,12 @@ export default function PassengerDashboard() {
   const [chatVisible, setChatVisible] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
+  
+  // Promos y agendado
+  const [promoCode, setPromoCode] = useState('');
+  const [promoDiscount, setPromoDiscount] = useState<{type: string, value: number} | null>(null);
+  const [promoApplying, setPromoApplying] = useState(false);
+  const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
 
   // Auto-calcular distancia y tarifa sugerida
   useEffect(() => {
@@ -80,11 +87,21 @@ export default function PassengerDashboard() {
   useEffect(() => {
     if (distanceKm > 0) {
       const suggestedPriceUsd = 2 + (1.20 * distanceKm) + (0.25 * estimatedTimeMin);
-      setPrice(convertToLocal(suggestedPriceUsd).toFixed(2));
+      let localPrice = convertToLocal(suggestedPriceUsd);
+      
+      if (promoDiscount) {
+         if (promoDiscount.type === 'PERCENTAGE') {
+             localPrice = localPrice * (1 - promoDiscount.value / 100);
+         } else {
+             localPrice = Math.max(10, localPrice - promoDiscount.value); // minimo 10
+         }
+      }
+      
+      setPrice(localPrice.toFixed(2));
     } else {
       setPrice('');
     }
-  }, [distanceKm, estimatedTimeMin, currency]);
+  }, [distanceKm, estimatedTimeMin, currency, promoDiscount]);
 
   const mapRef = useRef<MapRendererHandle>(null);
   const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);
@@ -326,6 +343,7 @@ export default function PassengerDashboard() {
         proposedPrice: convertToUsd(Number(price)),
         currency: currency,
         paymentMethod,
+        promoCode: promoDiscount ? promoCode : undefined,
       }, 3, 5000);
       // 'rideRequestCreated' socket event will update status
     } catch (error: any) {
@@ -402,8 +420,57 @@ export default function PassengerDashboard() {
     setPrice('');
     setDistanceKm(0);
     setEstimatedTimeMin(0);
+    setPromoCode('');
+    setPromoDiscount(null);
     bottomSheetRef.current?.snapToIndex(1);
   }, [user]);
+
+  const handleApplyPromo = async () => {
+     if (!promoCode) return;
+     setPromoApplying(true);
+     try {
+       const res = await client.post('/promos/validate', { code: promoCode, rideValue: convertToUsd(Number(price)) });
+       if (res.data.success) {
+           setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
+           Alert.alert('Promoción aplicada', 'El descuento ha sido reflejado en el precio.');
+       }
+     } catch(e: any) {
+        Alert.alert('Error promo', e.response?.data?.message || 'Código inválido.');
+        setPromoDiscount(null);
+     } finally {
+        setPromoApplying(false);
+     }
+  };
+
+  const handleScheduleRide = async (hoursAhead: number) => {
+    if (!selectedPlace || !location) return;
+    setScheduleModalVisible(false);
+    
+    const scheduledDate = new Date();
+    scheduledDate.setHours(scheduledDate.getHours() + hoursAhead);
+    
+    try {
+       const res = await client.post('/rides/schedule', {
+          passengerId: user?._id,
+          pickupAddress: 'Mi Ubicación Actual',
+          pickupLat: location.coords.latitude,
+          pickupLng: location.coords.longitude,
+          dropoffAddress: selectedPlace.displayName,
+          dropoffLat: selectedPlace.latitude,
+          dropoffLng: selectedPlace.longitude,
+          proposedPrice: convertToUsd(Number(price)),
+          currency,
+          paymentMethod,
+          scheduledAt: scheduledDate.toISOString()
+       });
+       if (res.data.success) {
+           Alert.alert('Viaje Programado', `Tu viaje ha sido programado para ${scheduledDate.toLocaleString()}`);
+           handleCancelRequest(); // Resetea form
+       }
+    } catch (e: any) {
+       Alert.alert('Error al programar', e.response?.data?.message || 'Algo salió mal');
+    }
+  };
 
   const openNavigation = useCallback(() => {
     if (!selectedPlace) return;
@@ -580,15 +647,44 @@ export default function PassengerDashboard() {
 
             <PaymentMethodSelector />
 
-            <TouchableOpacity
-              style={[styles.requestButton, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
-              onPress={handleRequestRide}
-              disabled={!selectedPlace || distanceKm > 100}
-            >
-              <Text style={styles.requestButtonText}>
-                {selectedPlace ? t('form.searchDriver') : t('form.selectDestination')}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                <TextInput 
+                  style={[styles.inputLocation, { flex: 1, backgroundColor: theme.colors.surfaceHigh }]} 
+                  placeholder="Código Promo (opcional)"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={promoCode}
+                  onChangeText={text => setPromoCode(text.toUpperCase())}
+                  autoCapitalize="characters"
+                />
+                <TouchableOpacity 
+                   style={{ backgroundColor: theme.colors.surfaceHigh, padding: 12, borderRadius: theme.borderRadius.m, borderWidth: 1, borderColor: theme.colors.borderLight, justifyContent: 'center' }}
+                   onPress={handleApplyPromo}
+                   disabled={promoApplying || !promoCode}
+                >
+                   {promoApplying ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Aplicar</Text>}
+                </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  style={[styles.requestButton, { flex: 1, backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.border }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
+                  onPress={() => setScheduleModalVisible(true)}
+                  disabled={!selectedPlace || distanceKm > 100}
+                >
+                  <Text style={[styles.requestButtonText, { color: theme.colors.text }]}>
+                    Programar
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.requestButton, { flex: 2 }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
+                  onPress={handleRequestRide}
+                  disabled={!selectedPlace || distanceKm > 100}
+                >
+                  <Text style={styles.requestButtonText}>
+                    {selectedPlace ? t('form.searchDriver') : t('form.selectDestination')}
+                  </Text>
+                </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -732,6 +828,29 @@ export default function PassengerDashboard() {
         visible={chatVisible}
         onClose={() => setChatVisible(false)}
       />
+
+      <Modal visible={scheduleModalVisible} transparent animationType="slide">
+         <View style={styles.modalOverlay}>
+            <View style={[styles.bottomSheet, { paddingBottom: 40 }]}>
+                 <Text style={[styles.title, { marginBottom: 20 }]}>Programar Viaje</Text>
+                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(1)}>
+                    <Text style={styles.requestButtonText}>En 1 hora</Text>
+                 </TouchableOpacity>
+                 <View style={{ height: 10 }} />
+                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(2)}>
+                    <Text style={styles.requestButtonText}>En 2 horas</Text>
+                 </TouchableOpacity>
+                 <View style={{ height: 10 }} />
+                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(24)}>
+                    <Text style={styles.requestButtonText}>Mañana a esta hora</Text>
+                 </TouchableOpacity>
+                 <View style={{ height: 10 }} />
+                 <TouchableOpacity style={[styles.requestButton, { backgroundColor: theme.colors.surfaceHigh }]} onPress={() => setScheduleModalVisible(false)}>
+                    <Text style={[styles.requestButtonText, { color: theme.colors.text }]}>Cancelar</Text>
+                 </TouchableOpacity>
+            </View>
+         </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }

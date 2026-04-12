@@ -52,7 +52,7 @@ interface RideFlowState {
     rideId: string | null;
     bids: Bid[];
     activeRidePayload: ActiveRide | null;
-    paymentMethod: 'CASH' | 'CARD' | 'APPLE_PAY';
+    paymentMethod: 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET' | 'OXXO' | 'SPEI';
     
     // Actions
     setStatus: (status: RideStatus) => void;
@@ -60,7 +60,7 @@ interface RideFlowState {
     receiveBid: (bid: Bid) => void;
     acceptBid: () => void;
     setActiveRide: (ride: ActiveRide) => void;
-    setPaymentMethod: (method: 'CASH' | 'CARD' | 'APPLE_PAY') => void;
+    setPaymentMethod: (method: 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET' | 'OXXO' | 'SPEI') => void;
     resetFlow: () => void;
 }
 

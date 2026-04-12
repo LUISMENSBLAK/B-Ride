@@ -23,6 +23,7 @@ import {
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // ─── Screens (Lazy) ─────────────────────────────────────────────────────────
 const DriverDashboard = React.lazy(() => import('../screens/driver/DriverDashboard'));
@@ -255,6 +256,7 @@ export default function AppNavigator() {
                             <AuthStack.Screen name="Login" component={LoginScreen} />
                             <AuthStack.Screen name="Register" component={RegisterScreen} />
                             <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+                            <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
                         </>
                     )}
                 </AuthStack.Navigator>

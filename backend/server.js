@@ -48,14 +48,26 @@ app.use('/uploads', express.static(uploadsDir));
 
 app.use(express.json({ limit: '10mb' }));
 
-// Rate limiting — B3: por IP + por usuario autenticado
+// Rate limiting — 300 reqs / 15min global
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
+    message: { success: false, message: 'Demasiadas solicitudes, intenta más tarde.' },
 });
 app.use('/api/', limiter);
+
+// Auth routes stricter limit — 20 attempts / 15min
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Demasiados intentos de autenticación, intenta más tarde.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 
 // Create HTTP Server
 const server = http.createServer(app);

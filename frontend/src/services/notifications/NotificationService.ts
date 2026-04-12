@@ -41,7 +41,7 @@ export async function registerForPushNotificationsAsync() {
             finalStatus = status;
         }
         if (finalStatus !== 'granted') {
-            console.log('Fallo al obtener permisos para notificaciones push');
+            if (__DEV__) console.log('Fallo al obtener permisos para notificaciones push');
             return null;
         }
         
@@ -63,7 +63,7 @@ export async function registerForPushNotificationsAsync() {
             console.error('Error al obtener Expo push token:', e);
         }
     } else {
-        console.log('Se requiere dispositivo físico para Notificaciones Push (Expo)');
+        if (__DEV__) console.log('Se requiere dispositivo físico para Notificaciones Push (Expo)');
     }
 
     return token;
@@ -75,7 +75,7 @@ export async function registerForPushNotificationsAsync() {
 async function uploadTokenToBackend(token: string) {
     try {
         await client.put('/auth/push-token', { token });
-        console.log('[NotificationService] Push token registrado en backend:', token);
+        if (__DEV__) console.log('[NotificationService] Push token registrado en backend:', token);
     } catch (error) {
         console.error('[NotificationService] Error enviando token al backend:', error);
     }
@@ -87,7 +87,7 @@ async function uploadTokenToBackend(token: string) {
 export async function removeTokenFromBackend(token: string) {
     try {
         await client.delete('/auth/push-token', { data: { token } });
-        console.log('[NotificationService] Push token removido del backend:', token);
+        if (__DEV__) console.log('[NotificationService] Push token removido del backend:', token);
     } catch (error) {
         console.error('[NotificationService] Error removiendo token del backend:', error);
     }
@@ -99,7 +99,7 @@ export async function removeTokenFromBackend(token: string) {
 export function setupNotificationListeners() {
     // 1. Escuchar notificaciones MIENTRAS la app está abierta
     const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-        console.log('[NotificationService] Notificación recibida en foreground:', notification.request.content.data);
+        if (__DEV__) console.log('[NotificationService] Notificación recibida en foreground:', notification.request.content.data);
         // Podrías manejar lógicas extra aquí (refrescar pantallas), aunque los Sockets
         // ya están haciendo ese trabajo en tiempo real para B-Ride.
     });
@@ -107,7 +107,7 @@ export function setupNotificationListeners() {
     // 2. Escuchar la interacción (tap en la notificación) en TODO momento (foreground/background/cierra app)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
         const data = response.notification.request.content.data;
-        console.log('[NotificationService] Tap en Notificación. Navegando con Payload:', data);
+        if (__DEV__) console.log('[NotificationService] Tap en Notificación. Navegando con Payload:', data);
         
         // DEEP LINKING: Lógica de ruteo
         if (data && data.screen) {

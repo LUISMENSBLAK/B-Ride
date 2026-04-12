@@ -20,6 +20,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [password, setPassword] = useState('');
   // LAUNCH 9: Campo de teléfono
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState('USER');
   const [loading, setLoading] = useState(false);
   // WEEK 4: Checkbox de términos
@@ -32,6 +33,7 @@ export default function RegisterScreen({ navigation }: any) {
   const emailRef = React.useRef<TextInput>(null);
   const phoneRef = React.useRef<TextInput>(null);
   const passRef = React.useRef<TextInput>(null);
+  const referralRef = React.useRef<TextInput>(null);
 
   const handleRegister = async () => {
     if (!name || !email || !password) {
@@ -49,6 +51,7 @@ export default function RegisterScreen({ navigation }: any) {
       const res = await client.post('/auth/register', {
         name, email, password, role,
         phoneNumber: phoneNumber || undefined,  // LAUNCH 9
+        referralCode: referralCode || undefined,
         termsAcceptedAt: new Date().toISOString(), // WEEK 4
       });
       if (res.data.success) {
@@ -121,6 +124,17 @@ export default function RegisterScreen({ navigation }: any) {
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
+                returnKeyType="next"
+                onSubmitEditing={() => referralRef.current?.focus()}
+              />
+              <TextInput
+                ref={referralRef}
+                style={styles.input}
+                placeholder={t('auth.referralPlaceholder', { defaultValue: 'Código de Referido (opcional)' })}
+                placeholderTextColor={theme.colors.inputPlaceholder}
+                value={referralCode}
+                onChangeText={text => setReferralCode(text.toUpperCase())}
+                autoCapitalize="characters"
                 returnKeyType="done"
               />
             </View>

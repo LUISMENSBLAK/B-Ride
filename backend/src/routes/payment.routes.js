@@ -38,7 +38,7 @@ router.get('/onboard-status', protect, authorize('DRIVER'), async (req, res) => 
 // @route   GET /api/payment/admin/health
 // @desc    Obtener monitor de observabilidad y métricas financieras en BD
 // @access  Private (Intervención de operador)
-router.get('/admin/health', protect, async (req, res) => {
+router.get('/admin/health', protect, authorize('ADMIN'), async (req, res) => {
     try {
         const health = await obs.getFinancialHealth();
         res.status(200).json({ success: true, ...health });
@@ -77,8 +77,7 @@ router.post('/intent', protect, authorize('USER'), async (req, res) => {
 // @route   GET /api/payment/admin/reconcile/:rideId
 // @desc    Reconciliación manual (Solo administradores)
 // @access  Private (Intervención manual en caso de fallback)
-// NOTA: Reemplazar authorize('USER') por tu rol 'ADMIN' cuando se tenga el RBAC general.
-router.get('/admin/reconcile/:rideId', protect, async (req, res) => {
+router.get('/admin/reconcile/:rideId', protect, authorize('ADMIN'), async (req, res) => {
     try {
         const { rideId } = req.params;
         const data = await paymentService.reconcilePaymentStatus(rideId);
@@ -97,7 +96,7 @@ router.get('/admin/reconcile/:rideId', protect, async (req, res) => {
 // @route   POST /api/payment/admin/refund/:rideId
 // @desc    Lanzar un Refund (Parcial o Total) (Solo administradores)
 // @access  Private 
-router.post('/admin/refund/:rideId', protect, async (req, res) => {
+router.post('/admin/refund/:rideId', protect, authorize('ADMIN'), async (req, res) => {
     try {
         const { rideId } = req.params;
         const { amount, reason, idempotencyKey } = req.body;

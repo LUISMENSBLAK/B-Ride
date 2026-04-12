@@ -62,7 +62,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 }
             }
         } catch (e) {
-            console.log('[AuthStore] Error al remover push token al hacer logout:', e);
+            if (__DEV__) console.log('[AuthStore] Error al remover push token al hacer logout:', e);
         }
 
         // Limpiar todo en un solo round-trip

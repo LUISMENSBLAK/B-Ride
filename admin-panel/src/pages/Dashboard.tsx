@@ -10,6 +10,16 @@ interface Stats {
   estimatedTotalIncome: number;
 }
 
+interface DriverLocation {
+  _id: string;
+  name: string;
+  avgRating: number;
+  currentLocation: {
+    latitude: number;
+    longitude: number;
+  }
+}
+
 interface StatCardProps {
   label: string;
   value: string | number;
@@ -45,6 +55,7 @@ function SkeletonCard() {
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [activeLocations, setActiveLocations] = useState<DriverLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -54,6 +65,8 @@ export default function DashboardPage() {
         setLoading(true);
         const res = await apiClient.get('/admin/stats');
         setStats(res.data.data);
+        const locRes = await apiClient.get('/admin/drivers/active-locations');
+        if (locRes.data.success) setActiveLocations(locRes.data.data);
       } catch (e: any) {
         setError(e.response?.data?.message ?? 'Error cargando estadísticas');
       } finally {
@@ -62,6 +75,51 @@ export default function DashboardPage() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    
+    const loadLeaflet = () => {
+      return new Promise<void>((resolve) => {
+        if ((window as any).L) { resolve(); return; }
+        
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+      });
+    };
+
+    loadLeaflet().then(() => {
+      const L = (window as any).L;
+      const mapElem = document.getElementById('driversMap');
+      if (mapElem && L) {
+         if ((window as any).leafletMapInstance) {
+             (window as any).leafletMapInstance.remove();
+         }
+         // Start in MX City
+         const map = L.map('driversMap').setView([19.4326, -99.1332], 11);
+         (window as any).leafletMapInstance = map;
+
+         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+         }).addTo(map);
+
+         activeLocations.forEach(d => {
+             if (d.currentLocation?.latitude && d.currentLocation?.longitude) {
+                 const marker = L.marker([d.currentLocation.latitude, d.currentLocation.longitude]).addTo(map);
+                 marker.bindPopup(`<b>${d.name}</b><br/>Rating: ⭐ ${d.avgRating?.toFixed(1) || 5.0}`);
+             }
+         });
+      }
+    });
+
+  }, [loading, activeLocations]);
 
   const formatCurrency = (n: number) =>
     new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n);
@@ -102,6 +160,11 @@ export default function DashboardPage() {
         <p className={styles.infoPanelText}>
           Usa el menú lateral para navegar entre las secciones. En <strong>Drivers Pending</strong> puedes aprobar o rechazar conductores. En <strong>Users</strong> puedes gestionar y bloquear cuentas.
         </p>
+      </div>
+
+      <div style={{ marginTop: 24, background: 'var(--surface)', padding: 20, borderRadius: 16, border: '1px solid var(--border)' }}>
+        <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text)' }}>Conductores activos ahora</h2>
+        <div id="driversMap" style={{ height: 350, width: '100%', borderRadius: 12, backgroundColor: '#eee' }}></div>
       </div>
     </div>
   );

@@ -13,8 +13,9 @@ import useDebounce from '../hooks/useDebounce';
 
 export interface PlaceResult {
   displayName: string;
-  latitude: number;
-  longitude: number;
+  placeId: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface AddressAutocompleteProps {
@@ -39,7 +40,7 @@ async function searchGooglePlaces(query: string, userLat?: number, userLng?: num
   if (queryCache.has(keyCache)) return queryCache.get(keyCache)!;
 
   try {
-    let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_KEY}`;
+    let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&language=es&key=${GOOGLE_MAPS_KEY}`;
     
     if (userLat !== undefined && userLng !== undefined) {
       url += `&location=${userLat},${userLng}&radius=50000`; // 50km radius
@@ -49,12 +50,11 @@ async function searchGooglePlaces(query: string, userLat?: number, userLng?: num
     if (!res.ok) return [];
     
     const data = await res.json();
-    if (!data.results) return [];
+    if (!data.predictions) return [];
 
-    const results: PlaceResult[] = data.results.slice(0, 5).map((item: any) => ({
-      displayName: item.formatted_address || item.name,
-      latitude: item.geometry.location.lat,
-      longitude: item.geometry.location.lng,
+    const results: PlaceResult[] = data.predictions.slice(0, 5).map((item: any) => ({
+      displayName: item.description,
+      placeId: item.place_id,
     }));
 
     if (queryCache.size >= 50) {
@@ -64,8 +64,24 @@ async function searchGooglePlaces(query: string, userLat?: number, userLng?: num
     queryCache.set(keyCache, results);
     return results;
   } catch (error) {
-    console.error('Google Places search error:', error);
     return [];
+  }
+}
+
+async function fetchPlaceDetails(placeId: string): Promise<{latitude: number, longitude: number} | null> {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry&key=${GOOGLE_MAPS_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.result?.geometry?.location) {
+      return {
+        latitude: data.result.geometry.location.lat,
+        longitude: data.result.geometry.location.lng,
+      };
+    }
+    return null;
+  } catch (e) {
+    return null;
   }
 }
 
@@ -112,12 +128,24 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
     setSelected(false); // reset selección si el usuario vuelve a escribir
   }, []);
 
-  const handleSelect = useCallback((place: PlaceResult) => {
+  const handleSelect = useCallback(async (place: PlaceResult) => {
     setInputText(place.displayName);
     setResults([]);
     setSelected(true);
     Keyboard.dismiss();
-    onSelect(place);
+    
+    if (place.latitude && place.longitude) {
+      onSelect(place);
+    } else {
+      setLoading(true);
+      const coords = await fetchPlaceDetails(place.placeId);
+      setLoading(false);
+      if (coords) {
+         onSelect({ ...place, latitude: coords.latitude, longitude: coords.longitude });
+      } else {
+         onSelect(place); // Fallback aunque falten coords
+      }
+    }
   }, [onSelect]);
 
   const handleClear = useCallback(() => {

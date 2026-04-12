@@ -50,11 +50,11 @@ export default function DriverOnboardingScreen() {
       allowsEditing: false, // OFF to prevent iOS Simulator crop editor crash
       quality: 0.5,
     });
-    console.log('[ImagePicker] Result:', JSON.stringify(result));
+    if (__DEV__) console.log('[ImagePicker] Result:', JSON.stringify(result));
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setter(result.assets[0].uri);
     } else {
-      console.log('[ImagePicker] Operation canceled or no assets.');
+      if (__DEV__) console.log('[ImagePicker] Operation canceled or no assets.');
     }
   };
 

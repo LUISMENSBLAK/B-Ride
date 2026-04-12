@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import client from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
@@ -11,9 +11,19 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
     
     const [code, setCode] = useState(['', '', '', '', '', '']);
     const [loading, setLoading] = useState(false);
+    const [resendLoading, setResendLoading] = useState(false);
+    const [countdown, setCountdown] = useState(0);
     const login = useAuthStore(state => state.login);
     
     const inputs = useRef<Array<TextInput | null>>([]);
+    
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (countdown > 0) {
+            timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+        }
+        return () => clearTimeout(timer);
+    }, [countdown]);
 
     const handleChange = (text: string, index: number) => {
         const newCode = [...code];
@@ -55,6 +65,22 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         }
     };
 
+    const handleResend = async () => {
+        if (countdown > 0) return;
+        setResendLoading(true);
+        try {
+            const res = await client.post('/auth/resend-verification', { email });
+            if (res.data.success) {
+                Alert.alert('Enviado', 'Se ha enviado un nuevo código a tu correo.');
+                setCountdown(60);
+            }
+        } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.message || 'No se pudo reenviar.');
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -88,6 +114,12 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
                     </View>
 
                     <View style={styles.footer}>
+                        <TouchableOpacity onPress={handleResend} disabled={countdown > 0 || resendLoading}>
+                            <Text style={[styles.linkText, (countdown > 0 || resendLoading) && { color: theme.colors.textMuted }]}>
+                                {resendLoading ? 'Enviando...' : countdown > 0 ? `Reenviar código en ${countdown}s` : 'Reenviar código'}
+                            </Text>
+                        </TouchableOpacity>
+                        <View style={{height: 15}} />
                         <TouchableOpacity onPress={() => navigation.goBack()}>
                             <Text style={styles.linkText}>¿No eres tú? Volver</Text>
                         </TouchableOpacity>
@@ -125,6 +157,6 @@ const getStyles = (theme: any) => StyleSheet.create({
         shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
     },
     buttonText: { ...theme.typography.button },
-    footer: { flexDirection: 'row', justifyContent: 'center', marginTop: theme.spacing.xxl },
+    footer: { flexDirection: 'column', alignItems: 'center', marginTop: theme.spacing.xxl },
     linkText: { ...theme.typography.body, color: theme.colors.link, fontWeight: '600' },
 });

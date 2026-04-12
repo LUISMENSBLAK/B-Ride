@@ -148,7 +148,7 @@ export default function DriverDashboard() {
       lastGeoHashRef.current = currentHash;
       const socket = socketService.getSocket();
       if (socket) {
-        console.log("[SOCKET] Emitting driver:join (celda cambió)");
+        if (__DEV__) console.log("[SOCKET] Emitting driver:join (celda cambió)");
         socket.emit('driver:join', { lat, lng });
       }
     }
@@ -162,7 +162,7 @@ export default function DriverDashboard() {
     const lng = location.coords?.longitude;
     if (lat == null || lng == null) return;
 
-    console.log("[LOCATION]", lat, lng);
+    if (__DEV__) console.log("[LOCATION]", lat, lng);
 
     const socket = socketService.getSocket();
     if (socket) {
@@ -208,7 +208,7 @@ export default function DriverDashboard() {
   // ── Socket Events ─────────────────────────────────────────────────────────
   // [MODIFICADO] Escuchar 'ride:incoming' y devolver el ACK al backend para la métrica
   useRideSocketEvent('ride:incoming', useCallback((ride, ack) => {
-    console.log(`[FRONTEND] Recibido evento 'ride:incoming' para ride: ${ride?._id}`);
+    if (__DEV__) console.log(`[FRONTEND] Recibido evento 'ride:incoming' para ride: ${ride?._id}`);
     
     // Responder el ACK al backend
     if (typeof ack === 'function') {
@@ -267,7 +267,7 @@ export default function DriverDashboard() {
   // Dedicated cancellation listener — PRODUCTION FIX
   // Ensures driver IMMEDIATELY clears state even if trip_state_changed is delayed
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
-    console.log(`[DRIVER] ride:cancelled recibido para ride: ${rideId}`);
+    if (__DEV__) console.log(`[DRIVER] ride:cancelled recibido para ride: ${rideId}`);
     animateIncomingOut(() => {
       setIncomingRide(null);
       setActiveRide(null);

@@ -50,7 +50,7 @@ class EventManager {
     const payload = args[0];
     if (payload && typeof payload === 'object' && payload.eventId) {
         if (this.processedEvents.has(payload.eventId)) {
-            console.log(`[EventManager] Ignorando evento repetido en Frontend: ${payload.eventId}`);
+            if (__DEV__) console.log(`[EventManager] Ignorando evento repetido en Frontend: ${payload.eventId}`);
             return;
         }
         

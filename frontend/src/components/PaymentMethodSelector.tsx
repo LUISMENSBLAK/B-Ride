@@ -3,8 +3,9 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
 import { theme } from '../theme';
 import { useRideFlowStore } from '../store/useRideFlowStore';
-import { CreditCard, Banknote, Apple } from 'lucide-react-native';
+import { CreditCard, Banknote, Apple, Wallet, Building2, Store } from 'lucide-react-native';
 import { useTranslation } from '../hooks/useTranslation';
+import client from '../api/client';
 
 const { width } = Dimensions.get('window');
 
@@ -21,8 +22,17 @@ export default function PaymentMethodSelector({
   const [modalVisible, setModalVisible] = useState(false);
   const paymentMethod = useRideFlowStore(state => state.paymentMethod);
   const setPaymentMethod = useRideFlowStore(state => state.setPaymentMethod);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
-  const selectMethod = (method: 'CASH' | 'CARD' | 'APPLE_PAY') => {
+  React.useEffect(() => {
+    if (modalVisible) {
+      client.get('/wallet/balance').then(res => {
+        if (res.data.success) setWalletBalance(res.data.data.balance);
+      }).catch(() => {});
+    }
+  }, [modalVisible]);
+
+  const selectMethod = (method: 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET' | 'OXXO' | 'SPEI') => {
     setPaymentMethod(method);
     setModalVisible(false);
     if (onSelected) onSelected();
@@ -33,6 +43,9 @@ export default function PaymentMethodSelector({
       case 'CASH': return t('payment.cash');
       case 'CARD': return t('payment.creditCard');
       case 'APPLE_PAY': return 'Apple Pay';
+      case 'WALLET': return 'Billetera (Wallet)';
+      case 'OXXO': return 'OXXO Pay';
+      case 'SPEI': return 'Transferencia SPEI';
       default: return t('payment.selectPayment');
     }
   };
@@ -42,6 +55,9 @@ export default function PaymentMethodSelector({
       case 'CASH': return <Banknote size={20} color={theme.colors.success} />;
       case 'CARD': return <CreditCard size={20} color={theme.colors.primary} />;
       case 'APPLE_PAY': return <Apple size={20} color={theme.colors.text} />;
+      case 'WALLET': return <Wallet size={20} color={theme.colors.gold || '#F5C518'} />;
+      case 'OXXO': return <Store size={20} color="#EA2027" />;
+      case 'SPEI': return <Building2 size={20} color="#0652DD" />;
       default: return <CreditCard size={20} color={theme.colors.textSecondary} />;
     }
   };
@@ -72,6 +88,31 @@ export default function PaymentMethodSelector({
               <CreditCard size={24} color={theme.colors.primary} />
               <Text style={styles.methodText}>{t('payment.creditCard')}</Text>
               {paymentMethod === 'CARD' && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('WALLET')}>
+              <Wallet size={24} color={theme.colors.gold || '#F5C518'} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.methodText, { marginLeft: 0 }]}>B-Ride Wallet</Text>
+                {walletBalance !== null && (
+                  <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>
+                    Saldo: ${walletBalance.toFixed(2)}
+                  </Text>
+                )}
+              </View>
+              {paymentMethod === 'WALLET' && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('OXXO')}>
+              <Store size={24} color="#EA2027" />
+              <Text style={styles.methodText}>OXXO Pay</Text>
+              {paymentMethod === 'OXXO' && <View style={styles.activeDot} />}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('SPEI')}>
+              <Building2 size={24} color="#0652DD" />
+              <Text style={styles.methodText}>Transferencia SPEI</Text>
+              {paymentMethod === 'SPEI' && <View style={styles.activeDot} />}
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.methodOption, styles.applePayOption]} onPress={() => selectMethod('APPLE_PAY')}>
