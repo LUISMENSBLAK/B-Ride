@@ -3,11 +3,10 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
-import { theme } from '../theme';
 import { useTranslation } from '../hooks/useTranslation';
+import { useGoogleAuth } from '../hooks/useGoogleAuth';
 
-export default function LoginScreen({
- navigation }: any) {
+export default function LoginScreen({ navigation }: any) {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
@@ -17,6 +16,7 @@ export default function LoginScreen({
     const { t } = useTranslation();
 
     const login = useAuthStore(state => state.login);
+    const { handleGoogleLogin, loading: googleLoading, ready: googleReady } = useGoogleAuth();
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -43,6 +43,17 @@ export default function LoginScreen({
         }
     };
 
+    const handleGoogleSignIn = async () => {
+      try {
+        const result = await handleGoogleLogin();
+        if (result?.success) {
+          await login(result.data);
+        }
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Google');
+      }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <KeyboardAvoidingView 
@@ -58,6 +69,32 @@ export default function LoginScreen({
                     </View>
 
                     <View style={styles.formCard}>
+                        {/* Google Sign-In */}
+                        <TouchableOpacity
+                          style={styles.googleBtn}
+                          onPress={handleGoogleSignIn}
+                          disabled={googleLoading || !googleReady}
+                          activeOpacity={0.8}
+                        >
+                          {googleLoading ? (
+                            <ActivityIndicator color="#0D0520" size="small" />
+                          ) : (
+                            <>
+                              <View style={styles.googleIconWrap}>
+                                <Text style={styles.googleIcon}>G</Text>
+                              </View>
+                              <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+
+                        {/* Divider */}
+                        <View style={styles.dividerRow}>
+                          <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                          <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>o usa tu email</Text>
+                          <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+                        </View>
+
                         <View style={styles.inputContainer}>
                             <TextInput
                                 style={styles.input}
@@ -80,10 +117,7 @@ export default function LoginScreen({
                                 onSubmitEditing={handleLogin}
                             />
                             
-                            <TouchableOpacity onPress={() => Alert.alert(
-                              t('auth.recoverPassword', { defaultValue: 'Recuperar contraseña' }),
-                              t('auth.recoverPasswordMsg', { defaultValue: 'Contacta a soporte en soporte@b-ride.com para restablecer tu contraseña.' })
-                            )}>
+                            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
                                 <Text style={styles.forgotPassword}>{t('auth.forgotPassword')}</Text>
                             </TouchableOpacity>
                         </View>
@@ -148,6 +182,49 @@ const getStyles = (theme: any) => StyleSheet.create({
         shadowRadius: 10,
         elevation: 3,
     },
+    // Google Button
+    googleBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFFFFF',
+        height: 52,
+        borderRadius: theme.borderRadius.m,
+        marginBottom: theme.spacing.m,
+        gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    googleIconWrap: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#4285F4',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    googleIcon: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '700' as const,
+    },
+    googleBtnText: {
+        color: '#1F1F1F',
+        fontSize: 15,
+        fontWeight: '600' as const,
+    },
+    // Divider
+    dividerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: theme.spacing.m,
+        gap: 12,
+    },
+    dividerLine: { flex: 1, height: 1 },
+    dividerText: { fontSize: 12 },
     inputContainer: {
         marginBottom: theme.spacing.xl,
     },

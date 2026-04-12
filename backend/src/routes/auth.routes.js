@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/google', require('../controllers/auth.controller').googleLogin);
 router.post('/verify-email', require('../controllers/auth.controller').verifyEmail);
 router.post('/resend-verification', require('../controllers/auth.controller').resendVerification);
 

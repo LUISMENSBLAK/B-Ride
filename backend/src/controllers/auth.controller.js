@@ -551,8 +551,93 @@ const getReferral = async (req, res) => {
     }
 };
 
+const googleLogin = async (req, res) => {
+    try {
+        const { email, name, googleId, avatarUrl, accessToken } = req.body;
+        if (!email || !googleId) {
+            return res.status(400).json({ success: false, message: 'Email y Google ID son requeridos' });
+        }
+
+        // Verify the Google token is real by fetching userinfo
+        const fetch = require('node-fetch');
+        const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!googleRes.ok) {
+            return res.status(401).json({ success: false, message: 'Token de Google inválido' });
+        }
+        const googleUser = await googleRes.json();
+        if (googleUser.email !== email) {
+            return res.status(401).json({ success: false, message: 'Email no coincide con el token' });
+        }
+
+        const User = require('../models/User');
+        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
+        const RefreshToken = require('../models/RefreshToken');
+        const uuid = require('uuid');
+
+        let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+        if (!user) {
+            // Create new user via Google
+            const crypto = require('crypto');
+            const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+            
+            user = await User.create({
+                name: name || googleUser.name,
+                email,
+                googleId,
+                avatarUrl: avatarUrl || googleUser.picture,
+                password: crypto.randomBytes(32).toString('hex'), // random password (won't be used)
+                role: 'USER',
+                isEmailVerified: true,
+                emailVerified: true,
+                referralCode: myReferralCode,
+            });
+        } else {
+            // Link Google ID if not already linked
+            if (!user.googleId) {
+                user.googleId = googleId;
+            }
+            if (avatarUrl && !user.avatarUrl) {
+                user.avatarUrl = avatarUrl;
+            }
+            user.isEmailVerified = true;
+            user.emailVerified = true;
+            await user.save();
+        }
+
+        const jwtAccessToken = generateAccessToken(user._id);
+        const rawRefreshToken = generateRefreshToken(user._id);
+
+        const familyId = uuid.v4();
+        await RefreshToken.create({
+            token: rawRefreshToken,
+            user: user._id,
+            familyId,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                _id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                approvalStatus: user.driverApprovalStatus || user.approvalStatus,
+                accessToken: jwtAccessToken,
+                refreshToken: rawRefreshToken,
+            },
+        });
+    } catch (e) {
+        console.error('[Auth] Google login error:', e);
+        res.status(500).json({ success: false, message: e.message });
+    }
+};
+
 module.exports.sendPhoneOtp = sendPhoneOtp;
 module.exports.verifyPhoneOtp = verifyPhoneOtp;
 module.exports.deleteAccount = deleteAccount;
 module.exports.getReferral = getReferral;
-
+module.exports.googleLogin = googleLogin;

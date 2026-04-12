@@ -26,6 +26,11 @@ const userSchema = new mongoose.Schema(
             enum: ['USER', 'DRIVER', 'ADMIN'],
             default: 'USER',
         },
+        googleId: {
+            type: String,
+            default: null,
+            sparse: true,
+        },
         phoneNumber: {
             type: String,
             required: false,

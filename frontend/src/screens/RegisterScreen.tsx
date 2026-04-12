@@ -7,9 +7,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
-import { theme } from '../theme';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useTranslation } from '../hooks/useTranslation';
+import PhoneInput from '../components/PhoneInput';
+import { useGoogleAuth } from '../hooks/useGoogleAuth';
 
 export default function RegisterScreen({ navigation }: any) {
   const theme = useAppTheme();
@@ -18,29 +19,23 @@ export default function RegisterScreen({ navigation }: any) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // LAUNCH 9: Campo de teléfono
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [referralCode, setReferralCode] = useState('');
   const [role, setRole] = useState('USER');
   const [loading, setLoading] = useState(false);
-  // WEEK 4: Checkbox de términos
   const [termsAccepted, setTermsAccepted] = useState(false);
   const { t } = useTranslation();
 
   const login = useAuthStore(state => state.login);
+  const { handleGoogleLogin, loading: googleLoading, ready: googleReady } = useGoogleAuth();
 
-  // Refs para WEEK 3 — encadenar inputs
   const emailRef = React.useRef<TextInput>(null);
-  const phoneRef = React.useRef<TextInput>(null);
   const passRef = React.useRef<TextInput>(null);
-  const referralRef = React.useRef<TextInput>(null);
 
   const handleRegister = async () => {
     if (!name || !email || !password) {
       Alert.alert(t('auth.wait'), t('auth.fillAllFields'));
       return;
     }
-    // WEEK 4: Validar términos
     if (!termsAccepted) {
       Alert.alert(t('auth.wait'), t('auth.acceptTerms', { defaultValue: 'Debes aceptar los términos y condiciones' }));
       return;
@@ -50,9 +45,8 @@ export default function RegisterScreen({ navigation }: any) {
     try {
       const res = await client.post('/auth/register', {
         name, email, password, role,
-        phoneNumber: phoneNumber || undefined,  // LAUNCH 9
-        referralCode: referralCode || undefined,
-        termsAcceptedAt: new Date().toISOString(), // WEEK 4
+        phoneNumber: phoneNumber || undefined,
+        termsAcceptedAt: new Date().toISOString(),
       });
       if (res.data.success) {
         if (res.data.data?.verify_required) {
@@ -69,6 +63,17 @@ export default function RegisterScreen({ navigation }: any) {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      const result = await handleGoogleLogin();
+      if (result?.success) {
+        await login(result.data);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Google');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -81,6 +86,32 @@ export default function RegisterScreen({ navigation }: any) {
           </View>
 
           <View style={styles.formCard}>
+            {/* Google Sign-In Button */}
+            <TouchableOpacity
+              style={styles.googleBtn}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading || !googleReady}
+              activeOpacity={0.8}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#0D0520" size="small" />
+              ) : (
+                <>
+                  <View style={styles.googleIconWrap}>
+                    <Text style={styles.googleIcon}>G</Text>
+                  </View>
+                  <Text style={styles.googleBtnText}>Continuar con Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+              <Text style={[styles.dividerText, { color: theme.colors.textMuted }]}>o regístrate con email</Text>
+              <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
+            </View>
+
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
@@ -102,20 +133,17 @@ export default function RegisterScreen({ navigation }: any) {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 returnKeyType="next"
-                onSubmitEditing={() => phoneRef.current?.focus()}
-              />
-              {/* LAUNCH 9: Campo de teléfono */}
-              <TextInput
-                ref={phoneRef}
-                style={styles.input}
-                placeholder={t('auth.phonePlaceholder', { defaultValue: 'Teléfono (opcional)' })}
-                placeholderTextColor={theme.colors.inputPlaceholder}
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
-                returnKeyType="next"
                 onSubmitEditing={() => passRef.current?.focus()}
               />
+
+              {/* Phone Input with country selector */}
+              <PhoneInput
+                value={phoneNumber}
+                onChangePhone={setPhoneNumber}
+                placeholder={t('auth.phonePlaceholder', { defaultValue: 'Número de teléfono' })}
+              />
+              <View style={{ height: 12 }} />
+
               <TextInput
                 ref={passRef}
                 style={styles.input}
@@ -124,17 +152,6 @@ export default function RegisterScreen({ navigation }: any) {
                 secureTextEntry
                 value={password}
                 onChangeText={setPassword}
-                returnKeyType="next"
-                onSubmitEditing={() => referralRef.current?.focus()}
-              />
-              <TextInput
-                ref={referralRef}
-                style={styles.input}
-                placeholder={t('auth.referralPlaceholder', { defaultValue: 'Código de Referido (opcional)' })}
-                placeholderTextColor={theme.colors.inputPlaceholder}
-                value={referralCode}
-                onChangeText={text => setReferralCode(text.toUpperCase())}
-                autoCapitalize="characters"
                 returnKeyType="done"
               />
             </View>
@@ -155,7 +172,7 @@ export default function RegisterScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-            {/* WEEK 4: Checkbox de términos y condiciones */}
+            {/* Terms checkbox */}
             <TouchableOpacity
               style={styles.termsRow}
               onPress={() => setTermsAccepted(!termsAccepted)}
@@ -203,6 +220,49 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.colors.border,
     shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 3,
   },
+  // Google button
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    height: 52,
+    borderRadius: theme.borderRadius.m,
+    marginBottom: theme.spacing.m,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  googleIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#4285F4',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  googleIcon: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700' as const,
+  },
+  googleBtnText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '600' as const,
+  },
+  // Divider
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.m,
+    gap: 12,
+  },
+  dividerLine: { flex: 1, height: 1 },
+  dividerText: { fontSize: 12 },
   inputContainer: { marginBottom: theme.spacing.m },
   input: {
     backgroundColor: theme.colors.background, padding: 16, borderRadius: theme.borderRadius.m,
@@ -217,7 +277,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   roleButtonActive: { backgroundColor: theme.colors.primaryLight, borderColor: theme.colors.primary },
   roleText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
   roleTextActive: { color: theme.colors.primary },
-  // WEEK 4: Términos
+  // Terms
   termsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.l, paddingHorizontal: 4 },
   checkbox: {
     width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: theme.colors.border,
