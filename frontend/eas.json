@@ -27,6 +27,11 @@
       },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://b-ride-production.up.railway.app/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://b-ride-production.up.railway.app",
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyBZCGxCJOhOIa3KrlAo0IeLHBbyARjdLLI"
       }
     },
     "production": {
