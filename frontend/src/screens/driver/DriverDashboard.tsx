@@ -509,7 +509,7 @@ export default function DriverDashboard() {
           }}
           activeOpacity={0.85}
         >
-          <Text style={styles.stripeBannerText}>⚡ Configura tu cuenta bancaria para recibir viajes →</Text>
+          <Text style={styles.stripeBannerText}>⚡ {t('driver.financialRequiredMsg')} →</Text>
         </TouchableOpacity>
       )}
 

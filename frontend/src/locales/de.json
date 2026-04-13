@@ -252,5 +252,21 @@
     "tryAgainLater": "Versuch es in ein paar Minuten nochmal",
     "tripsCompleted_one": "{{count}} Fahrt abgeschlossen",
     "tripsCompleted_other": "{{count}} Fahrten abgeschlossen"
+  },
+  "profile": {
+    "referralCode": "EMPFEHLUNGSCODE",
+    "referrals": "Empfehlungen:",
+    "earnings": "Einnahmen:",
+    "shareCode": "Code Teilen",
+    "myWallet": "MEINE GELDBÖRSE",
+    "topup": "+ Aufladen",
+    "availableBalance": "Verfügbares Guthaben",
+    "latestMovements": "Letzte Transaktionen",
+    "topupTx": "Aufladen",
+    "ridePaymentTx": "Fahrtzahlung",
+    "noMovements": "Keine aktuellen Transaktionen.",
+    "topupWallet": "Geldbörse Aufladen",
+    "cancel": "Abbrechen",
+    "pay": "Bezahlen"
   }
 }

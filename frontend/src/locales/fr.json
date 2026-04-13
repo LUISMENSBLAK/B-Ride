@@ -252,5 +252,21 @@
     "tryAgainLater": "Réessayez dans quelques minutes",
     "tripsCompleted_one": "{{count}} trajet terminé",
     "tripsCompleted_other": "{{count}} trajets terminés"
+  },
+  "profile": {
+    "referralCode": "CODE DE PARRAINAGE",
+    "referrals": "Parrainages:",
+    "earnings": "Gains:",
+    "shareCode": "Partager le Code",
+    "myWallet": "MON PORTEFEUILLE",
+    "topup": "+ Recharger",
+    "availableBalance": "Solde Disponible",
+    "latestMovements": "Dernières Transactions",
+    "topupTx": "Recharge",
+    "ridePaymentTx": "Paiement de trajet",
+    "noMovements": "Aucune transaction récente.",
+    "topupWallet": "Recharger le Portefeuille",
+    "cancel": "Annuler",
+    "pay": "Payer"
   }
 }

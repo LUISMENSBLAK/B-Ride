@@ -252,5 +252,21 @@
     "tryAgainLater": "Riprova tra qualche minuto",
     "tripsCompleted_one": "{{count}} corsa completata",
     "tripsCompleted_other": "{{count}} corse completate"
+  },
+  "profile": {
+    "referralCode": "CODICE DI RIFERIMENTO",
+    "referrals": "Riferimenti:",
+    "earnings": "Guadagni:",
+    "shareCode": "Condividi Codice",
+    "myWallet": "IL MIO PORTAFOGLIO",
+    "topup": "+ Ricarica",
+    "availableBalance": "Saldo Disponibile",
+    "latestMovements": "Ultimi Movimenti",
+    "topupTx": "Ricarica",
+    "ridePaymentTx": "Pagamento Viaggio",
+    "noMovements": "Nessun movimento recente.",
+    "topupWallet": "Ricarica Portafoglio",
+    "cancel": "Annulla",
+    "pay": "Paga"
   }
 }

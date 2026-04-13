@@ -559,7 +559,7 @@ export default function PassengerDashboard() {
           ref={mapRef}
           latitude={location.coords.latitude}
           longitude={location.coords.longitude}
-          title="Tú estás aquí"
+          title={t('general.locating')}
           destinationCoordinate={selectedPlace ? { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude } : undefined}
         />
       ) : (
@@ -568,19 +568,19 @@ export default function PassengerDashboard() {
             <View style={{alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: theme.colors.surface, borderRadius: 20, marginHorizontal: 20}}>
                 <Ionicons name="location-off" size={48} color={theme.colors.error} style={{marginBottom: 10}} />
                 <Text style={{...theme.typography.title, color: theme.colors.text, textAlign: 'center', marginBottom: 8}}>
-                   {errorMsg === 'GPS_DISABLED' ? 'Ubicación Desactivada' : 
-                    errorMsg === 'PERMISSION_DENIED' ? 'Permiso Denegado' : 'Error de Ubicación'}
+                   {errorMsg === 'GPS_DISABLED' ? t('errors.locationNotReady') : 
+                    errorMsg === 'PERMISSION_DENIED' ? t('general.locationDenied') : t('general.locationFailed')}
                 </Text>
                 <Text style={{...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 20}}>
-                   {errorMsg === 'GPS_DISABLED' ? 'Activa el GPS de tu dispositivo para poder pedir viajes y ver el mapa.' : 
-                    errorMsg === 'PERMISSION_DENIED' ? 'Otorga permisos de ubicación a B-Ride desde los ajustes de tu dispositivo.' : 
-                    'No se pudo obtener tu ubicación actual.'}
+                   {errorMsg === 'GPS_DISABLED' ? t('errors.locationNotReadyMsg') : 
+                    errorMsg === 'PERMISSION_DENIED' ? t('general.locationDenied') : 
+                    t('general.locationFailed')}
                 </Text>
                 <TouchableOpacity 
                    style={{backgroundColor: theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: theme.borderRadius.full}}
                    onPress={checkLocationStatus}
                 >
-                   <Text style={{color: theme.colors.primaryText, fontWeight: '700', fontSize: 16}}>Reintentar</Text>
+                   <Text style={{color: theme.colors.primaryText, fontWeight: '700', fontSize: 16}}>{t('history.retry')}</Text>
                 </TouchableOpacity>
             </View>
           ) : (
@@ -591,7 +591,7 @@ export default function PassengerDashboard() {
 
       {showDriverBanner && (
         <View style={styles.topDriverBanner}>
-          <Text style={styles.topDriverBannerText}>¡Hay conductores cerca! Revisando tu oferta...</Text>
+          <Text style={styles.topDriverBannerText}>{t('general.bidsReceived', { count: '' }).replace('0 ', '').replace('1 ', '')}...</Text>
         </View>
       )}
 

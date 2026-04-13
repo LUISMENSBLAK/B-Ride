@@ -186,17 +186,17 @@ export default function PassengerProfileScreen() {
       {/* Referral System */}
       {referralData && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>CÓDIGO DE REFERIDO</Text>
+          <Text style={styles.sectionLabel}>{t('profile.referralCode')}</Text>
           <View style={{ alignItems: 'center', marginVertical: 12 }}>
              <Text style={{ fontSize: 28, fontWeight: '800', color: theme.colors.primary, letterSpacing: 3 }}>
                  {referralData.code}
              </Text>
              <Text style={{ fontSize: 13, color: theme.colors.textMuted, marginTop: 4 }}>
-                 Referidos: {referralData.count} • Ganancias: ${referralData.bonus.toFixed(2)}
+                 {t('profile.referrals')} {referralData.count} • {t('profile.earnings')} ${referralData.bonus.toFixed(2)}
              </Text>
           </View>
           <TouchableOpacity style={styles.shareBtn} onPress={handleShareReferral}>
-             <Text style={styles.shareBtnText}>Compartir Código</Text>
+             <Text style={styles.shareBtnText}>{t('profile.shareCode')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -204,25 +204,25 @@ export default function PassengerProfileScreen() {
       {/* Wallet */}
       <View style={styles.section}>
         <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16}}>
-           <Text style={styles.sectionLabel}>MI BILLETERA</Text>
+           <Text style={styles.sectionLabel}>{t('profile.myWallet')}</Text>
            <TouchableOpacity onPress={() => setTopupModal(true)}>
-             <Text style={{color: theme.colors.primary, fontWeight: 'bold'}}>+ Recargar</Text>
+             <Text style={{color: theme.colors.primary, fontWeight: 'bold'}}>{t('profile.topup')}</Text>
            </TouchableOpacity>
         </View>
         <View style={{ alignItems: 'center', marginBottom: 20 }}>
-           <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>Saldo Disponible</Text>
+           <Text style={{ fontSize: 13, color: theme.colors.textMuted }}>{t('profile.availableBalance')}</Text>
            <Text style={{ fontSize: 36, fontWeight: '800', color: theme.colors.text }}>${walletBalance?.toFixed(2) || '0.00'}</Text>
         </View>
-        <Text style={{fontSize: 12, color: theme.colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1}}>Últimos Movimientos</Text>
+        <Text style={{fontSize: 12, color: theme.colors.textSecondary, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1}}>{t('profile.latestMovements')}</Text>
         {walletTx.slice(0, 5).map((tx, idx) => (
           <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-             <Text style={{ color: theme.colors.text }}>{tx.type === 'TOPUP' ? 'Recarga' : 'Pago de viaje'}</Text>
+             <Text style={{ color: theme.colors.text }}>{tx.type === 'TOPUP' ? t('profile.topupTx') : t('profile.ridePaymentTx')}</Text>
              <Text style={{ color: tx.type === 'TOPUP' ? theme.colors.success : theme.colors.text, fontWeight: 'bold' }}>
                {tx.type === 'TOPUP' ? '+' : '-'}${tx.amount.toFixed(2)}
              </Text>
           </View>
         ))}
-        {walletTx.length === 0 && <Text style={{color: theme.colors.textMuted, fontSize: 13, fontStyle: 'italic'}}>Sin movimientos recientes.</Text>}
+        {walletTx.length === 0 && <Text style={{color: theme.colors.textMuted, fontSize: 13, fontStyle: 'italic'}}>{t('profile.noMovements')}</Text>}
       </View>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
@@ -232,7 +232,7 @@ export default function PassengerProfileScreen() {
       <Modal visible={topupModal} transparent animationType="slide">
          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 20 }}>
             <View style={{ backgroundColor: theme.colors.surface, padding: 24, borderRadius: 20 }}>
-               <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 20 }}>Recargar Billetera</Text>
+               <Text style={{ fontSize: 20, fontWeight: 'bold', color: theme.colors.text, marginBottom: 20 }}>{t('profile.topupWallet')}</Text>
                <TextInput 
                   style={{ backgroundColor: theme.colors.inputBackground, padding: 16, borderRadius: 12, color: theme.colors.text, fontSize: 24, textAlign: 'center', marginBottom: 20 }}
                   placeholder="0.00"
@@ -243,10 +243,10 @@ export default function PassengerProfileScreen() {
                />
                <View style={{ flexDirection: 'row', gap: 10 }}>
                   <TouchableOpacity style={[styles.logoutBtn, { flex: 1, backgroundColor: theme.colors.surfaceHigh }]} onPress={() => setTopupModal(false)}>
-                     <Text style={{ color: theme.colors.text, fontWeight: 'bold', textAlign: 'center' }}>Cancelar</Text>
+                     <Text style={{ color: theme.colors.text, fontWeight: 'bold', textAlign: 'center' }}>{t('profile.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.logoutBtn, { flex: 1, backgroundColor: theme.colors.primary }]} onPress={handleTopup} disabled={topupLoading}>
-                     {topupLoading ? <ActivityIndicator color="#000" /> : <Text style={{ color: '#000', fontWeight: 'bold', textAlign: 'center' }}>Abonar</Text>}
+                     {topupLoading ? <ActivityIndicator color="#000" /> : <Text style={{ color: '#000', fontWeight: 'bold', textAlign: 'center' }}>{t('profile.pay')}</Text>}
                   </TouchableOpacity>
                </View>
             </View>

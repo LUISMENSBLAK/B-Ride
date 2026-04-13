@@ -3,6 +3,7 @@ import { StyleSheet, Platform, View, ActivityIndicator, Text, TouchableOpacity, 
 import MapView, { Marker, Region, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../hooks/useAppTheme';
+import { useTranslation } from '../hooks/useTranslation';
 import * as Location from 'expo-location';
 import { LocateFixed } from 'lucide-react-native';
 
@@ -101,13 +102,18 @@ async function fetchOsrmRoute(start: Coordinate, end: Coordinate): Promise<Coord
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
-  latitude, longitude, title = "Tú estás aquí",
+  latitude,
+  longitude,
+  title = "Tú estás aquí",
   isDriver = false,
   destinationCoordinate,
-  pickupCoordinate, dropoffCoordinate, driverPhase,
+  pickupCoordinate,
+  dropoffCoordinate,
+  driverPhase
 }, ref) => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
+  const { t } = useTranslation();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
   const [isLocating, setIsLocating] = useState(false);
@@ -257,7 +263,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       setIsLocating(true);
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permiso denegado', 'Otorga permisos de ubicación para centrar el mapa.');
+        Alert.alert(t('general.locationDenied'), t('errors.locationNotReadyMsg'));
         setIsLocating(false);
         return;
       }
@@ -276,7 +282,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
         }, 1000);
       }
     } catch (error) {
-      Alert.alert('Error', 'No se pudo obtener tu ubicación actual.');
+      Alert.alert('Error', t('general.locationFailed'));
     } finally {
       setIsLocating(false);
     }
@@ -318,7 +324,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       {polylineEndpoint && (
         <Marker
           coordinate={polylineEndpoint}
-          title={isDriver && driverPhase === 'TO_PICKUP' ? 'Pasajero' : 'Destino'}
+          title={isDriver && driverPhase === 'TO_PICKUP' ? t('driver.passenger') : t('history.destination')}
           pinColor={isDriver && driverPhase === 'TO_PICKUP' ? theme.wixarika.mapPinOrigen : theme.wixarika.mapPinDestino}
         />
       )}
@@ -328,7 +334,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
         <Marker
           ref={driverMarkerRef}
           coordinate={firstDriverPing}
-          title="Conductor"
+          title={t('auth.roleDriver')}
           anchor={{ x: 0.5, y: 0.5 }}
         >
           <CarMarker heading={heading} size={28} />
@@ -338,7 +344,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     {routeLoading && (
       <View style={[styles.routingOverlay, { top: insets.top + 8 }]}>
         <ActivityIndicator size="small" color={theme.colors.primary} />
-        <Text style={styles.routingText}>Trazando ruta...</Text>
+        <Text style={styles.routingText}>{t('history.loading')}</Text>
       </View>
     )}
     {!routeLoading && routeFallback && polylinePoints && (

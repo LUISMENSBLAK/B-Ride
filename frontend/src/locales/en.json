@@ -252,5 +252,21 @@
     "tryAgainLater": "Try again in a few minutes",
     "tripsCompleted_one": "{{count}} ride completed",
     "tripsCompleted_other": "{{count}} rides completed"
+  },
+  "profile": {
+    "referralCode": "REFERRAL CODE",
+    "referrals": "Referrals:",
+    "earnings": "Earnings:",
+    "shareCode": "Share Code",
+    "myWallet": "MY WALLET",
+    "topup": "+ Top up",
+    "availableBalance": "Available Balance",
+    "latestMovements": "Latest Transactions",
+    "topupTx": "Top up",
+    "ridePaymentTx": "Ride Payment",
+    "noMovements": "No recent transactions.",
+    "topupWallet": "Top up Wallet",
+    "cancel": "Cancel",
+    "pay": "Pay"
   }
 }

@@ -252,5 +252,21 @@
     "tryAgainLater": "Vuelve a intentar en unos minutos",
     "tripsCompleted_one": "{{count}} viaje completado",
     "tripsCompleted_other": "{{count}} viajes completados"
+  },
+  "profile": {
+    "referralCode": "CÓDIGO DE REFERIDO",
+    "referrals": "Referidos:",
+    "earnings": "Ganancias:",
+    "shareCode": "Compartir Código",
+    "myWallet": "MI BILLETERA",
+    "topup": "+ Recargar",
+    "availableBalance": "Saldo Disponible",
+    "latestMovements": "Últimos Movimientos",
+    "topupTx": "Recarga",
+    "ridePaymentTx": "Pago de viaje",
+    "noMovements": "Sin movimientos recientes.",
+    "topupWallet": "Recargar Billetera",
+    "cancel": "Cancelar",
+    "pay": "Abonar"
   }
 }
