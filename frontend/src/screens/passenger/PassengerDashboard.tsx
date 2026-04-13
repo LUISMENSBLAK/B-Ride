@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
 import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, AppState, Linking
+  TextInput, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, AppState, Linking,
+  ActivityIndicator, Image
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
