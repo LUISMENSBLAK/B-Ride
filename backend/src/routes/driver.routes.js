@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, requireVerified } = require('../middlewares/auth.middleware');
+const { protect } = require('../middlewares/auth.middleware');
 const driverIncentiveService = require('../services/driverIncentive.service');
 
 const router = express.Router();

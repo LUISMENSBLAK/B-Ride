@@ -1,23 +1,24 @@
 import { useAppTheme } from '../hooks/useAppTheme';
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
-import { theme } from '../theme';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Platform } from 'react-native';
 import { useRideFlowStore } from '../store/useRideFlowStore';
-import { CreditCard, Banknote, Apple, Wallet, Building2, Store } from 'lucide-react-native';
+import { CreditCard, Banknote, Wallet, Check } from 'lucide-react-native';
 import { useTranslation } from '../hooks/useTranslation';
 import client from '../api/client';
-
-const { width } = Dimensions.get('window');
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface PaymentMethodSelectorProps {
   onSelected?: () => void;
 }
+
+type PaymentMethodType = 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET';
 
 export default function PaymentMethodSelector({
  onSelected }: PaymentMethodSelectorProps) {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [modalVisible, setModalVisible] = useState(false);
   const paymentMethod = useRideFlowStore(state => state.paymentMethod);
@@ -32,7 +33,7 @@ export default function PaymentMethodSelector({
     }
   }, [modalVisible]);
 
-  const selectMethod = (method: 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET' | 'OXXO' | 'SPEI') => {
+  const selectMethod = (method: PaymentMethodType) => {
     setPaymentMethod(method);
     setModalVisible(false);
     if (onSelected) onSelected();
@@ -43,9 +44,7 @@ export default function PaymentMethodSelector({
       case 'CASH': return t('payment.cash');
       case 'CARD': return t('payment.creditCard');
       case 'APPLE_PAY': return 'Apple Pay';
-      case 'WALLET': return 'Billetera (Wallet)';
-      case 'OXXO': return 'OXXO Pay';
-      case 'SPEI': return 'Transferencia SPEI';
+      case 'WALLET': return 'B-Ride Wallet';
       default: return t('payment.selectPayment');
     }
   };
@@ -54,12 +53,37 @@ export default function PaymentMethodSelector({
     switch (method) {
       case 'CASH': return <Banknote size={20} color={theme.colors.success} />;
       case 'CARD': return <CreditCard size={20} color={theme.colors.primary} />;
-      case 'APPLE_PAY': return <Apple size={20} color={theme.colors.text} />;
+      case 'APPLE_PAY': return <Text style={{ fontSize: 20, color: theme.colors.text, fontWeight: '700' }}></Text>;
       case 'WALLET': return <Wallet size={20} color={theme.colors.gold || '#F5C518'} />;
-      case 'OXXO': return <Store size={20} color="#EA2027" />;
-      case 'SPEI': return <Building2 size={20} color="#0652DD" />;
       default: return <CreditCard size={20} color={theme.colors.textSecondary} />;
     }
+  };
+
+  const renderMethodRow = (
+    method: PaymentMethodType,
+    icon: React.ReactNode,
+    label: string,
+    subtitle?: string,
+  ) => {
+    const isActive = paymentMethod === method;
+    return (
+      <TouchableOpacity
+        style={[styles.methodOption, isActive && styles.methodOptionActive]}
+        onPress={() => selectMethod(method)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.methodIconWrap}>{icon}</View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.methodText}>{label}</Text>
+          {subtitle ? <Text style={styles.methodSubtext}>{subtitle}</Text> : null}
+        </View>
+        {isActive && (
+          <View style={styles.checkWrap}>
+            <Check size={16} color={theme.colors.primaryText} strokeWidth={3} />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -74,54 +98,37 @@ export default function PaymentMethodSelector({
 
       <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
-          <View style={styles.bottomSheet}>
+          <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}
+            onStartShouldSetResponder={() => true}
+          >
             <View style={styles.dragHandle} />
             <Text style={styles.sheetTitle}>{t('payment.methodSelectTitle')}</Text>
 
-            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('CASH')}>
-              <Banknote size={24} color={theme.colors.success} />
-              <Text style={styles.methodText}>{t('payment.cash')}</Text>
-              {paymentMethod === 'CASH' && <View style={styles.activeDot} />}
-            </TouchableOpacity>
+            {renderMethodRow(
+              'CASH',
+              <Banknote size={22} color={theme.colors.success} />,
+              t('payment.cash'),
+            )}
 
-            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('CARD')}>
-              <CreditCard size={24} color={theme.colors.primary} />
-              <Text style={styles.methodText}>{t('payment.creditCard')}</Text>
-              {paymentMethod === 'CARD' && <View style={styles.activeDot} />}
-            </TouchableOpacity>
+            {renderMethodRow(
+              'CARD',
+              <CreditCard size={22} color={theme.colors.primary} />,
+              t('payment.creditCard'),
+              'Visa, Mastercard, Amex',
+            )}
 
-            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('WALLET')}>
-              <Wallet size={24} color={theme.colors.gold || '#F5C518'} />
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={[styles.methodText, { marginLeft: 0 }]}>B-Ride Wallet</Text>
-                {walletBalance !== null && (
-                  <Text style={{ fontSize: 11, color: theme.colors.textMuted }}>
-                    Saldo: ${walletBalance.toFixed(2)}
-                  </Text>
-                )}
-              </View>
-              {paymentMethod === 'WALLET' && <View style={styles.activeDot} />}
-            </TouchableOpacity>
+            {renderMethodRow(
+              'WALLET',
+              <Wallet size={22} color={theme.colors.gold || '#F5C518'} />,
+              'B-Ride Wallet',
+              walletBalance !== null ? `Saldo: $${walletBalance.toFixed(2)}` : undefined,
+            )}
 
-            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('OXXO')}>
-              <Store size={24} color="#EA2027" />
-              <Text style={styles.methodText}>OXXO Pay</Text>
-              {paymentMethod === 'OXXO' && <View style={styles.activeDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.methodOption} onPress={() => selectMethod('SPEI')}>
-              <Building2 size={24} color="#0652DD" />
-              <Text style={styles.methodText}>Transferencia SPEI</Text>
-              {paymentMethod === 'SPEI' && <View style={styles.activeDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.methodOption, styles.applePayOption]} onPress={() => selectMethod('APPLE_PAY')}>
-              <View style={styles.applePayInner}>
-                <Apple size={24} color={theme.colors.text} />
-                <Text style={styles.applePayText}>Pay</Text>
-              </View>
-              {paymentMethod === 'APPLE_PAY' && <View style={[styles.activeDot, { backgroundColor: theme.colors.text }]} />}
-            </TouchableOpacity>
+            {Platform.OS === 'ios' && renderMethodRow(
+              'APPLE_PAY',
+              <Text style={{ fontSize: 24, color: theme.colors.text, fontWeight: '700' }}></Text>,
+              'Apple Pay',
+            )}
           </View>
         </TouchableOpacity>
       </Modal>
@@ -164,8 +171,8 @@ const getStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: theme.spacing.xl,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
   dragHandle: {
     width: 40,
@@ -173,49 +180,51 @@ const getStyles = (theme: any) => StyleSheet.create({
     backgroundColor: theme.colors.border,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: theme.spacing.l,
+    marginBottom: 20,
   },
   sheetTitle: {
     ...theme.typography.title,
-    marginBottom: theme.spacing.l,
+    marginBottom: 16,
   },
   methodOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     backgroundColor: theme.colors.surfaceHigh,
     borderRadius: theme.borderRadius.m,
-    marginBottom: 12,
-    borderWidth: 1,
+    marginBottom: 10,
+    borderWidth: 1.5,
     borderColor: theme.colors.borderLight,
+  },
+  methodOptionActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: `${theme.colors.primary}15`,
+  },
+  methodIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   methodText: {
     ...theme.typography.body,
     fontWeight: '600',
-    marginLeft: 12,
-    flex: 1,
   },
-  activeDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  methodSubtext: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    marginTop: 1,
+  },
+  checkWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: theme.colors.primary,
-  },
-  applePayOption: {
-    backgroundColor: theme.colors.surfaceHigh,
-    borderColor: theme.colors.border,
-  },
-  applePayInner: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    flex: 1,
-  },
-  applePayText: {
-    color: theme.colors.text,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    marginLeft: 2,
   },
 });
