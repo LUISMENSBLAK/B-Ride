@@ -135,13 +135,13 @@ const forgotPassword = async (req, res) => {
             { $set: { resetPasswordToken: user.resetPasswordToken, resetPasswordExpire: user.resetPasswordExpire } }
         );
 
-        // Create reset URL
-        const resetUrl = `${req.protocol}://${req.get('host')}/api/auth/resetpassword/${resetToken}`;
+        // Build reset URL from env to prevent header injection via X-Forwarded-Host
+        const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+        const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
         const message = `Alguien ha solicitado restablecer la contraseña para tu cuenta de B-Ride.<br/><br/>
             Por favor haz clic en el siguiente enlace para continuar:<br/><br/>
             <a href="${resetUrl}" style="background-color: #F5C518; color: #0D0520; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>`;
-        console.log(`[DEV ONLY] Reset URL: ${resetUrl}`);
 
         try {
             await require('../utils/sendEmail')({
@@ -152,11 +152,12 @@ const forgotPassword = async (req, res) => {
 
             res.status(200).json({ success: true, data: 'Email sent' });
         } catch (err) {
-            console.error(err);
-            // user.resetPasswordToken = undefined;
-            // user.resetPasswordExpire = undefined;
-
-            await user.save({ validateBeforeSave: false });
+            console.error('[Auth] forgotPassword email send failed:', err.message);
+            // Token cleanup: revoke token if email could not be sent
+            await require('../models/User').updateOne(
+                { _id: user._id },
+                { $unset: { resetPasswordToken: '', resetPasswordExpire: '' } }
+            );
 
             return res.status(500).json({ success: false, message: 'Email could not be sent' });
         }
@@ -364,7 +365,7 @@ const uploadAvatar = async (req, res) => {
     }
 };
 
-module.exports.uploadAvatar = uploadAvatar;
+// uploadAvatar exported at bottom of file
 
 /**
  * V1/V2/S4/UX-B: Actualizar perfil del usuario.
@@ -419,7 +420,7 @@ const updateProfile = async (req, res) => {
     }
 };
 
-module.exports.updateProfile = updateProfile;
+// updateProfile exported at bottom of file
 
 const resendVerification = async (req, res) => {
     try {
@@ -442,12 +443,6 @@ const resendVerification = async (req, res) => {
 
         const sendEmail = require('../utils/sendEmail');
         try {
-            console.log(`\n=========================================`);
-            console.log(`🛂 [B-RIDE] REENVÍO DE CÓDIGO (OTP) `);
-            console.log(`📧 Email: ${email}`);
-            console.log(`🔑 Código: ${verifyCode}`);
-            console.log(`=========================================\n`);
-            
             await sendEmail({
                 email,
                 subject: 'Reenvío de código de verificación - B-Ride',
@@ -455,7 +450,8 @@ const resendVerification = async (req, res) => {
                 code: verifyCode
             });
         } catch (emailError) {
-            console.error('\n⚠️ [Auth] Aviso: No se pudo reenviar el correo real por restricciones de Resend (Modo Dev). El código es:', verifyCode, '\n');
+            // Do NOT log the OTP code in production — it would appear in log aggregators
+            console.error('[Auth] resendVerification: email send failed:', emailError.message);
         }
 
         res.status(200).json({ success: true, message: 'Código reenviado correctamente' });
@@ -465,7 +461,7 @@ const resendVerification = async (req, res) => {
     }
 };
 
-module.exports.resendVerification = resendVerification;
+// resendVerification exported at bottom of file
 
 const sendPhoneOtp = async (req, res) => {
     try {
@@ -513,10 +509,9 @@ const verifyPhoneOtp = async (req, res) => {
         const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(otp, user.verificationOTP);
         
-        // [DEV MODE BYPASS] Permitir cualquier código SMS para pruebas si no estamos en producción
-        if (!isMatch && process.env.NODE_ENV !== 'production') {
-            console.log(`[DEV BYPASS] Código SMS '${otp}' aceptado incondicionalmente para pruebas.`);
-        } else if (!isMatch) {
+        // Security: No dev bypass — any environment must pass the real OTP check.
+        // If testing locally, read the actual OTP from the sendSMS utility logs.
+        if (!isMatch) {
             return res.status(400).json({ success: false, message: 'Código SMS inválido.' });
         }
         
@@ -733,6 +728,11 @@ const appleLogin = async (req, res) => {
     }
 };
 
+// Exports for functions defined after the first module.exports block
+// (consolidated here to prevent fragmented export trap)
+module.exports.uploadAvatar = uploadAvatar;
+module.exports.updateProfile = updateProfile;
+module.exports.resendVerification = resendVerification;
 module.exports.sendPhoneOtp = sendPhoneOtp;
 module.exports.verifyPhoneOtp = verifyPhoneOtp;
 module.exports.deleteAccount = deleteAccount;
@@ -750,12 +750,13 @@ const firebaseSync = async (req, res) => {
     const user = req.user; // Ya resuelto por el middleware protect
     
     // Actualizar datos del perfil si vienen en el body (primer login con OAuth)
-    const { name, avatarUrl, phoneNumber, role } = req.body;
+    const { name, avatarUrl, phoneNumber } = req.body;
+    // NOTE: role is intentionally NOT accepted from the client body here.
+    // Role escalation must go through the admin panel or onboarding approval flow.
     
     if (name && !user.name) user.name = name;
     if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
     if (phoneNumber && !user.phoneNumber) user.phoneNumber = phoneNumber;
-    if (role && user.role === 'USER') user.role = role;
     
     await user.save();
 

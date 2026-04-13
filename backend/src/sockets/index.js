@@ -31,7 +31,11 @@ function isUserConnected(userId) {
 module.exports = {
     init: (httpServer) => {
         io = require('socket.io')(httpServer, {
-            cors: { origin: '*', methods: ['GET', 'POST'] }
+            cors: {
+                origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+                methods: ['GET', 'POST'],
+                credentials: true,
+            }
         });
 
         // CORRECCIÓN 10 / BLOQUE 5: Validación de JWT en Sockets y Baneo

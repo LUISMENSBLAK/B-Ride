@@ -1,7 +1,10 @@
 node_modules/
 .expo/
 dist/
+# Environment files — NEVER commit real credentials
 .env
+.env.*
+!.env.example
 .DS_Store
 *.log
 backend/npm_server.log

@@ -42,11 +42,7 @@ const userSchema = new mongoose.Schema(
             default: null,
             sparse: true,
         },
-        firebaseUid: {
-            type: String,
-            sparse: true,
-            index: true,
-        },
+
         phoneNumber: {
             type: String,
             required: false,

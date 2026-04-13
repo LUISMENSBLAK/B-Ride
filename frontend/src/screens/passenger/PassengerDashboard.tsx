@@ -105,35 +105,44 @@ export default function PassengerDashboard() {
           const res = await client.get('/rides/quote', {
             params: {
               originLat: location.coords.latitude,
-              pickupLng: location.coords.longitude,
-              dropoffLat: selectedPlace.latitude,
-              dropoffLng: selectedPlace.longitude
+              originLng: location.coords.longitude,
+              destLat: selectedPlace.latitude,
+              destLng: selectedPlace.longitude,
             }
           });
           if (!active) return;
           if (res.data?.success) {
-            setPricingMetadata(res.data.data.categories);
-            const usdPrice = res.data.data.categories[vehicleCategory]?.recommendedPrice || 2;
-            let localPrice = convertToLocal(usdPrice);
-            if (promoDiscount) {
-              if (promoDiscount.type === 'PERCENTAGE') {
-                localPrice = localPrice * (1 - promoDiscount.value / 100);
-              } else {
-                localPrice = Math.max(10, localPrice - promoDiscount.value);
+            // Feed categories into PriceInputSheet via setCategoryOptions
+            const cats = res.data.data?.categories ?? res.data.data ?? null;
+            setCategoryOptions(cats);
+            // Set a sensible default price from selected category
+            const catData = cats?.[vehicleCategory];
+            const suggestedMXN = catData?.priceMXN ?? catData?.recommendedPrice ?? 0;
+            if (suggestedMXN > 0) {
+              let localPrice = suggestedMXN;
+              if (promoDiscount) {
+                if (promoDiscount.type === 'PERCENTAGE') {
+                  localPrice = localPrice * (1 - promoDiscount.value / 100);
+                } else {
+                  localPrice = Math.max(10, localPrice - promoDiscount.value);
+                }
               }
+              setPrice(localPrice.toFixed(2));
             }
-            setPrice(localPrice.toFixed(2));
           }
         } catch (e) {
-          console.warn('Error fetching estimate:', e);
+          console.warn('Error fetching quote:', e);
+        } finally {
+          if (active) setLoadingQuotes(false);
         }
       } else {
+        setCategoryOptions(null);
         setPrice('');
       }
     };
     fetchPrice();
     return () => { active = false; };
-  }, [distanceKm, selectedPlace, location, vehicleCategory, currency, promoDiscount, convertToLocal]);
+  }, [distanceKm, selectedPlace, location, vehicleCategory, promoDiscount]);
 
   const mapRef = useRef<MapRendererHandle>(null);
   const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);

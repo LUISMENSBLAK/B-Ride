@@ -7,10 +7,19 @@
  */
 
 const User = require('../models/User');
+const { haversineKm } = require('../utils/geo'); // DRY: single haversine source
 
 // M3: Cooldown entre solicitudes (por pasajero)
 const requestCooldowns = new Map();
 const COOLDOWN_MS = 30 * 1000;
+
+// ── Memory leak fix: clean expired cooldowns every 5 minutes ──────────────────
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, ts] of requestCooldowns) {
+        if (now - ts > COOLDOWN_MS * 2) requestCooldowns.delete(id);
+    }
+}, 5 * 60 * 1000);
 
 class MatchingService {
     constructor() {
@@ -53,7 +62,7 @@ class MatchingService {
 
         const ranked = drivers.map(driver => {
             const driverCoords = driver.lastKnownLocation?.coordinates || [0, 0];
-            const distKm = this._haversine(latitude, longitude, driverCoords[1], driverCoords[0]);
+            const distKm = haversineKm(latitude, longitude, driverCoords[1], driverCoords[0]);
 
             const distScore = distKm > 0 ? 1 / distKm : 10;
             const ratingScore = (driver.avgRating || 3) / 5;
@@ -84,16 +93,6 @@ class MatchingService {
         return { drivers: results, expandedRadius: true, radius: 20, noDrivers: results.length === 0 };
     }
 
-    _haversine(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    }
-
     abortCampaign(rideId) {
         const rid = rideId.toString();
         if (this.activeCampaigns.has(rid)) {
@@ -115,7 +114,6 @@ class MatchingService {
             const { drivers, noDrivers } = await this.findWithFallback(lat, lng);
 
             if (noDrivers || !drivers || drivers.length === 0) {
-                // CORRECCIÓN 9: Emitir evento si no hay conductores
                 io.to(rideObj.passenger.toString()).emit('no_drivers_available', {
                     rideId: rideObj._id,
                     message: "Lo sentimos, no hay conductores disponibles cerca de ti en este momento. Intenta de nuevo más tarde."
@@ -123,7 +121,7 @@ class MatchingService {
                 return;
             }
 
-            // Si no está populado, popularlo aquí:
+            // Populate passenger once before emitting
             let rideWithPassenger = rideObj;
             if (typeof rideObj.passenger === 'string' || rideObj.passenger instanceof require('mongoose').Types.ObjectId) {
                 const Ride = require('../models/Ride');
@@ -132,17 +130,20 @@ class MatchingService {
                     .lean();
             }
 
-            // Emitir evento a los conductores encontrados
-            const { getDriverRoom } = require('../utils/getDriverRoom');
+            // ── FIX: emit ONLY to personal driver room (prevents double-delivery) ──
+            // Previously the code also emitted to geoHash room which caused duplicate
+            // events when multiple drivers share the same geohash cell.
             for (const { driver } of drivers) {
-                 io.to(driver._id.toString()).emit('ride:incoming', rideWithPassenger);
-                 
-                 // Fallback: emitir también por geohash room por si el personal falló
-                 if (rideObj.pickupLocation?.latitude && rideObj.pickupLocation?.longitude) {
-                   const geoRoom = getDriverRoom(rideObj.pickupLocation.latitude, rideObj.pickupLocation.longitude);
-                   io.to(geoRoom).emit('ride:incoming', rideWithPassenger);
-                 }
+                io.to(driver._id.toString()).emit('ride:incoming', rideWithPassenger);
             }
+
+            // ── FIX: store the campaign timeout so abortCampaign() can cancel it ──
+            const campaignTimeout = setTimeout(() => {
+                this.activeCampaigns.delete(rideObj._id.toString());
+            }, 45 * 1000); // Campaign lifetime: 45s
+
+            this.activeCampaigns.set(rideObj._id.toString(), campaignTimeout);
+
         } catch (error) {
             console.error('[MatchingService] Error en campaign:', error.message);
         }

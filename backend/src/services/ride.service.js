@@ -268,9 +268,14 @@ class RideService {
         return ride;
     }
 
-    async getRideHistory(userId, role) {
+    async getRideHistory(userId, role, page = 1, limit = 50) {
         const query = role === 'DRIVER' ? { driver: userId } : { passenger: userId };
-        const rides = await Ride.find(query).sort({ createdAt: -1 }).populate('passenger driver', 'name email');
+        const skip = (page - 1) * limit;
+        const rides = await Ride.find(query)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate('passenger driver', 'name email avatarUrl');
         return rides;
     }
 }

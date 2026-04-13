@@ -35,11 +35,12 @@ class PricingService {
         // Geopartitioning Truncation factor: `Math.floor(x * 50) / 50` ~= Grid de 2.22 km
         this.GRID_FACTOR = 50; 
 
-        // Tasas de cambio predeterminadas y helper de formato - Block Multi-Moneda
+        // Currency rates — override via env or use conservative defaults.
+        // TODO: Replace with an ExchangeRate-API / Fixer.io call cached 1h for production.
         this.CURRENCY_RATES = {
             USD: 1.0,
-            MXN: 17.5,
-            EUR: 0.92
+            MXN: parseFloat(process.env.RATE_MXN) || 17.5,
+            EUR: parseFloat(process.env.RATE_EUR) || 0.92,
         };
 
         // Cache in-memory temporal: { "zoneId": multiplier }
@@ -49,10 +50,11 @@ class PricingService {
         this.rawDemandMap = new Map();
         this.rawSupplyMap = new Map();
 
-        // Arrancar Cron Engine Interno
+        // Cron: recalculate market state every 5 minutes (was 15s — too aggressive).
+        // Only runs while the server is alive; no cleanup needed beyond process exit.
         setInterval(() => {
             this.calculateMarketState().catch(e => console.error('[Pricing] Crash cron:', e.message));
-        }, 15000);
+        }, 5 * 60 * 1000);
     }
 
     /**

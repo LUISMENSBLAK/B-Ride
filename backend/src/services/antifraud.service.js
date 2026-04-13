@@ -7,9 +7,20 @@
  */
 
 const User = require('../models/User');
+const { haversineKm } = require('../utils/geo'); // DRY: single haversine source
 
 // F3: Historial de ubicaciones por driver (en memoria)
 const locationHistory = new Map(); // driverId → [{ lat, lng, timestamp }]
+const LOCATION_HISTORY_TTL_MS = 30 * 60 * 1000; // 30 min
+
+// Memory leak fix: purge inactive drivers every 10 minutes
+setInterval(() => {
+    const cutoff = Date.now() - LOCATION_HISTORY_TTL_MS;
+    for (const [id, history] of locationHistory) {
+        const last = history[history.length - 1];
+        if (!last || last.timestamp < cutoff) locationHistory.delete(id);
+    }
+}, 10 * 60 * 1000);
 
 class AntiFraudService {
 
@@ -110,13 +121,7 @@ class AntiFraudService {
     }
 
     _haversine(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return haversineKm(lat1, lon1, lat2, lon2);
     }
 }
 
