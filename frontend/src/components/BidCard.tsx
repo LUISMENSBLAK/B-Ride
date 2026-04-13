@@ -122,16 +122,18 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
 
       <View style={bidStyles.row}>
         {/* Avatar */}
-        {bid.driver?.avatarUrl || bid.driver?.profilePhoto ? (
-          <Image
-            source={{ uri: bid.driver.avatarUrl || bid.driver.profilePhoto }}
-            style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest, { borderWidth: 2, borderColor: isBest ? theme.colors.primary : theme.colors.surfaceHigh }]}
-          />
-        ) : (
-          <View style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest]}>
-            <Text style={bidStyles.avatarText}>{initial}</Text>
-          </View>
-        )}
+        <View style={[bidStyles.avatarContainer]}>
+          {bid.driver?.profilePhoto || bid.driver?.avatarUrl ? (
+            <Image
+              source={{ uri: bid.driver.profilePhoto || bid.driver.avatarUrl }}
+              style={[bidStyles.avatarImg, isBest && !expired && bidStyles.avatarImgBest]}
+            />
+          ) : (
+            <View style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest]}>
+              <Text style={bidStyles.avatarText}>{initial}</Text>
+            </View>
+          )}
+        </View>
 
         {/* Info conductor + V3: vehículo */}
         <View style={bidStyles.info}>
@@ -241,13 +243,21 @@ const getBidStyles = (theme: Theme) => StyleSheet.create({
     alignItems:       'center',
     gap:              10,
   },
+  avatarContainer: { position: 'relative' },
+  avatarImg: {
+    width: 42, height: 42, borderRadius: 21,
+    borderWidth: 2, borderColor: theme.colors.border,
+  },
+  avatarImgBest: { borderColor: theme.colors.primary },
   avatar: {
     width:            42,
     height:           42,
     borderRadius:     21,
     backgroundColor:  theme.colors.surfaceHigh,
-    justifyContent:   'center',
     alignItems:       'center',
+    justifyContent:   'center',
+    borderWidth:      1,
+    borderColor:      theme.colors.border,
   },
   avatarBest: { backgroundColor: theme.colors.primary },
   avatarText: { fontSize: 18, fontWeight: '700', color: theme.colors.primaryText },

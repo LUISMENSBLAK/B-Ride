@@ -61,30 +61,49 @@ router.get('/estimate', protect, async (req, res) => {
   }
 });
 
+// Cotización por categoría — llamada antes de solicitar el viaje
+router.get('/quote', protect, async (req, res) => {
+  try {
+    const { originLat, originLng, destLat, destLng } = req.query;
+    if (!originLat || !originLng || !destLat || !destLng) {
+      return res.status(400).json({ success: false, message: 'Faltan coordenadas.' });
+    }
+    const pricingService = require('../services/pricing.service');
+    const data = await pricingService.getPricesByCategory(
+      parseFloat(originLat), parseFloat(originLng),
+      parseFloat(destLat),   parseFloat(destLng)
+    );
+    res.json({ success: true, data });
+  } catch (e) {
+    const status = e.code === 'DISTANCE_EXCEEDED' ? 400 : 500;
+    res.status(status).json({ success: false, message: e.message });
+  }
+});
+
 router.post('/:rideId/comment', protect, async (req, res) => {
   try {
-    const { text, tags } = req.body;
-    const ride = await require('../models/Ride').findById(req.params.rideId);
+    const { comment } = req.body;
+    if (!comment || comment.trim().length < 2 || comment.length > 300) {
+      return res.status(400).json({ success: false, message: 'Comentario inválido (2-300 caracteres).' });
+    }
+    const Ride = require('../models/Ride');
+    const ride = await Ride.findById(req.params.rideId);
+    if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado.' });
+    if (ride.status !== 'COMPLETED') return res.status(400).json({ success: false, message: 'Solo viajes completados.' });
     
-    if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
-    if (ride.status !== 'COMPLETED') return res.status(400).json({ success: false, message: 'Solo puedes comentar viajes completados' });
+    const isDriver = ride.driver?.toString() === req.user._id.toString();
+    const isPassenger = ride.passenger?.toString() === req.user._id.toString();
+    if (!isDriver && !isPassenger) return res.status(403).json({ success: false, message: 'No eres parte de este viaje.' });
 
-    const userId = req.user._id.toString();
-    const isPassenger = ride.passenger.toString() === userId;
-    const isDriver    = ride.driver?.toString() === userId;
-
-    if (!isPassenger && !isDriver) {
-      return res.status(403).json({ success: false, message: 'No eres parte de este viaje' });
-    }
-
-    if (isPassenger) {
-      ride.passengerComment = { text, tags: tags || [], postedAt: new Date() };
+    if (isDriver) {
+      ride.driverComment = comment.trim();
+      ride.driverCommentAt = new Date();
     } else {
-      ride.driverComment = { text, tags: tags || [], postedAt: new Date() };
+      ride.passengerComment = comment.trim();
+      ride.passengerCommentAt = new Date();
     }
-
     await ride.save();
-    res.json({ success: true, message: 'Comentario guardado' });
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }

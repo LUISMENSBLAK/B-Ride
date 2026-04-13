@@ -32,6 +32,7 @@ import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
+import PriceInputSheet from '../../components/PriceInputSheet';
 import { haversineKm, etaMinutes } from '../../utils/geo';
 import { useCurrency } from '../../hooks/useCurrency';
 
@@ -61,6 +62,11 @@ export default function PassengerDashboard() {
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
   
+  // PriceInputSheet states
+  const [priceSheetVisible, setPriceSheetVisible] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<any>(null);
+  const [loadingQuotes, setLoadingQuotes] = useState(false);
+  
   // Promos y agendado
   const [promoCode, setPromoCode] = useState('');
   const [promoDiscount, setPromoDiscount] = useState<{type: string, value: number} | null>(null);
@@ -87,17 +93,17 @@ export default function PassengerDashboard() {
     }
   }, [selectedPlace, location]);
 
-  const [vehicleCategory, setVehicleCategory] = useState('ECONOMY');
-  const [pricingMetadata, setPricingMetadata] = useState<any>(null);
+  const [vehicleCategory, setVehicleCategory] = useState<any>('ECONOMY');
 
   useEffect(() => {
     let active = true;
     const fetchPrice = async () => {
       if (distanceKm > 0 && selectedPlace && location) {
+        setLoadingQuotes(true);
         try {
-          const res = await client.get('/rides/estimate', {
+          const res = await client.get('/rides/quote', {
             params: {
-              pickupLat: location.coords.latitude,
+              originLat: location.coords.latitude,
               pickupLng: location.coords.longitude,
               dropoffLat: selectedPlace.latitude,
               dropoffLng: selectedPlace.longitude
@@ -344,7 +350,7 @@ export default function PassengerDashboard() {
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleRequestRide = useCallback(async () => {
+  const handleRequestRide = useCallback(async (finalPrice: number, finalCategory: any) => {
     if (!user?.avatarUrl && !user?.profilePhoto) {
         Alert.alert(
             'Foto Obligatoria',
@@ -365,15 +371,14 @@ export default function PassengerDashboard() {
       Alert.alert(t('errors.selectDestination'), t('errors.selectDestinationMsg'));
       return;
     }
-    if (!price || isNaN(Number(price)) || Number(price) <= 0) {
-      Alert.alert(t('errors.invalidFare'), t('errors.invalidFareMsg'));
-      return;
-    }
     if (!location) {
       Alert.alert(t('errors.locationNotReady'), t('errors.locationNotReadyMsg'));
       return;
     }
 
+    setPrice(String(finalPrice));
+    setVehicleCategory(finalCategory);
+    setPriceSheetVisible(false);
     setRideStatus('REQUESTING');
     try {
       await socketService.emitWithAck('requestRide', {
@@ -388,18 +393,18 @@ export default function PassengerDashboard() {
           longitude: selectedPlace.longitude,
           address: selectedPlace.displayName,
         },
-        proposedPrice: convertToUsd(Number(price)),
+        proposedPrice: convertToUsd(finalPrice),
         currency: currency,
         paymentMethod,
         promoCode: promoDiscount ? promoCode : undefined,
-        vehicleCategory,
+        vehicleCategory: finalCategory,
       }, 3, 5000);
       // 'rideRequestCreated' socket event will update status
     } catch (error: any) {
         Alert.alert('Error de conexión', error.message);
         setRideStatus('IDLE');
     }
-  }, [selectedPlace, price, location, user, convertToUsd, currency, paymentMethod, distanceKm]);
+  }, [selectedPlace, location, user, convertToUsd, currency, paymentMethod, distanceKm, promoDiscount, promoCode]);
 
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
@@ -596,6 +601,8 @@ export default function PassengerDashboard() {
         onSkip={handleSkipRating}
       />
 
+
+
       {/* Header flotante superior */}
       <View style={styles.floatingHeader}>
         {/* Avatar del usuario */}
@@ -725,77 +732,6 @@ export default function PassengerDashboard() {
               </View>
             </View>
 
-            {selectedPlace && distanceKm > 0 && (
-              <View style={styles.pricingSection}>
-                <View style={styles.pricingCard}>
-                 <View style={styles.pricingMainRow}>
-                   <View style={styles.pricingInfo}>
-                     <Text style={styles.suggestedPriceLabel}>{t('form.suggestedPrice')}</Text>
-                     <Text style={styles.suggestedPriceValue}>{formatPrice(convertToUsd(price))}</Text>
-                   </View>
-                   <View style={styles.pricingDetails}>
-                     <Text style={styles.tripDataText}>{distanceKm} km</Text>
-                     <Text style={styles.tripDataText}>{estimatedTimeMin} min</Text>
-                   </View>
-                 </View>
-
-                 <View style={styles.pricingInputRow}>
-                   <Text style={styles.adjustPriceLabel}>{t('form.adjustLabel')}</Text>
-                   <View style={styles.priceRowCompact}>
-                     <Text style={styles.currencyCompact}>{currency}</Text>
-                     <TextInput
-                       style={styles.priceInputCompact}
-                       placeholder="0.00"
-                       placeholderTextColor={theme.colors.inputPlaceholder}
-                       keyboardType="numeric"
-                       value={price}
-                       onChangeText={setPrice}
-                       onFocus={() => setPrice('')}
-                     />
-                   </View>
-                 </View>
-
-                  {/* UX 4: Contexto explicativo del precio */}
-                  <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary, textAlign: 'center', marginTop: 6 }}>
-                    Precio sugerido basado en {distanceKm} km · {estimatedTimeMin} min
-                  </Text>
-
-                  {distanceKm > 100 && (
-                     <Text style={{color: theme.colors.error, marginTop: 8, textAlign: 'center', fontWeight: '600', fontSize: 13}}>
-                       {t('errors.outOfRangeMsg')}
-                     </Text>
-                 )}
-                </View>
-              </View>
-            )}
-
-            {/* Category Selector */}
-            {pricingMetadata && (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
-                {['ECONOMY', 'STANDARD', 'COMFORT', 'PREMIUM'].map(cat => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={{
-                      flex: 1, padding: 8, marginHorizontal: 4, borderRadius: theme.borderRadius.m,
-                      alignItems: 'center',
-                      backgroundColor: vehicleCategory === cat ? theme.colors.primaryLight : theme.colors.surface,
-                      borderWidth: 1, borderColor: vehicleCategory === cat ? theme.colors.primary : theme.colors.border
-                    }}
-                    onPress={() => setVehicleCategory(cat)}
-                  >
-                    <Ionicons 
-                      name={pricingMetadata[cat]?.icon || 'car'} 
-                      size={24} 
-                      color={vehicleCategory === cat ? theme.colors.primary : theme.colors.textMuted} 
-                    />
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: vehicleCategory === cat ? theme.colors.primary : theme.colors.textMuted, marginTop: 4 }}>
-                      {pricingMetadata[cat]?.label || cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
             <PaymentMethodSelector />
 
             {/* UX Improvement: Discretely toggle promo input instead of occupying 100% space by default */}
@@ -842,14 +778,13 @@ export default function PassengerDashboard() {
                 )}
             </View>
 
-            <View style={{ flexDirection: 'column', gap: 12 }}>
                 <TouchableOpacity
                   style={[styles.requestButton, { width: '100%' }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
-                  onPress={handleRequestRide}
+                  onPress={() => setPriceSheetVisible(true)}
                   disabled={!selectedPlace || distanceKm > 100}
                 >
                   <Text style={styles.requestButtonText}>
-                    {selectedPlace ? t('form.searchDriver', {defaultValue: 'Buscar conductor'}) : t('form.selectDestination', {defaultValue: 'Selecciona un destino'})}
+                    {selectedPlace ? t('form.searchDriver', {defaultValue: 'Ofrecer tarifa y buscar conductor'}) : t('form.selectDestination', {defaultValue: 'Selecciona un destino'})}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1042,6 +977,14 @@ export default function PassengerDashboard() {
             </View>
          </View>
       </Modal>
+      <PriceInputSheet
+        visible={priceSheetVisible}
+        onClose={() => setPriceSheetVisible(false)}
+        onConfirm={handleRequestRide}
+        categoryOptions={categoryOptions}
+        loadingQuotes={loadingQuotes}
+        destAddress={selectedPlace?.displayName || selectedPlace?.address}
+      />
     </KeyboardAvoidingView>
   );
 }

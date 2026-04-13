@@ -128,7 +128,7 @@ class MatchingService {
             if (typeof rideObj.passenger === 'string' || rideObj.passenger instanceof require('mongoose').Types.ObjectId) {
                 const Ride = require('../models/Ride');
                 rideWithPassenger = await Ride.findById(rideObj._id)
-                    .populate('passenger', 'name avatarUrl profilePhoto avgRating')
+                    .populate('passenger', 'name avatarUrl profilePhoto avgRating totalRatings')
                     .lean();
             }
 

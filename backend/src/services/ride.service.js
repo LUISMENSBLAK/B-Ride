@@ -7,9 +7,13 @@ class RideService {
         const { isScheduled = false, scheduledAt = null, promoCode = null, vehicleCategory = 'ECONOMY' } = options;
         
         const pricingService = require('./pricing.service');
-        const MIN_ALLOWED_USD = 1.00; // $17.5 MXN mínimo absoluto
-        if (proposedPrice < MIN_ALLOWED_USD) {
-            throw new Error(`El precio mínimo es ${pricingService.convertAmount(MIN_ALLOWED_USD, 'MXN').toFixed(0)} MXN. Por favor ofrece un precio justo.`);
+        const minFare = pricingService.CATEGORY_MIN_MXN?.[vehicleCategory] ?? 45;
+        
+        if (proposedPrice < minFare) {
+            throw new Error(
+                `El precio mínimo para categoría ${vehicleCategory} es $${minFare} MXN. ` +
+                `Tu oferta de $${proposedPrice} es demasiado baja para que algún conductor la acepte.`
+            );
         }
 
         // Wrapper de compatibilidad hacia GeoJSON
@@ -27,7 +31,6 @@ class RideService {
         };
 
         // Integración con Pricing Machine
-        const pricingService = require('./pricing.service');
         const { surgeMultiplier, zoneId } = pricingService.getSurgeForLocation(pickupLocation.latitude, pickupLocation.longitude);
 
         // Evaluar promo

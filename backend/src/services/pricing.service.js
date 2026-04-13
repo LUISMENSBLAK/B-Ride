@@ -10,18 +10,26 @@ class PricingService {
         this.FARE_PER_MINUTE  = parseFloat(process.env.FARE_PER_MINUTE) || 0.06;
         this.MAX_SURGE = parseFloat(process.env.MAX_SURGE) || 2.5;
 
-        this.CATEGORY_MULTIPLIERS = {
-            ECONOMY:  1.0,
-            STANDARD: 1.25,
-            COMFORT:  1.60,
-            PREMIUM:  2.10,
-        };
+        // Tarifas base en MXN (mercado LATAM — Nayarit/Jalisco)
+        this.BASE_MXN        = 12;     // cargo de arranque
+        this.PER_KM_MXN      = 5.50;   // por kilómetro
+        this.PER_MIN_MXN     = 0.80;   // por minuto
+        this.MAX_DIST_KM     = 500;    // distancia máxima por viaje
 
-        this.CATEGORY_CONFIG = {
-            ECONOMY:  { label: 'Económico', description: 'Viajes accesibles', icon: 'car-outline',    capacity: 4 },
-            STANDARD: { label: 'Estándar',  description: 'Comodidad estándar', icon: 'car-sport-outline', capacity: 4 },
-            COMFORT:  { label: 'Confort',   description: 'Autos más nuevos',  icon: 'car-sharp',       capacity: 4 },
-            PREMIUM:  { label: 'Premium',   description: 'Servicio exclusivo', icon: 'diamond-outline', capacity: 4 },
+        this.CATEGORY_MULTIPLIERS = {
+          ECONOMY: 1.0,
+          COMFORT: 1.35,
+          PREMIUM: 1.80,
+        };
+        this.CATEGORY_MIN_MXN = {
+          ECONOMY: 45,
+          COMFORT: 65,
+          PREMIUM: 120,
+        };
+        this.CATEGORY_LABELS = {
+          ECONOMY: { label: 'Viaje',   description: 'Económico · hasta 4 personas' },
+          COMFORT: { label: 'Confort', description: 'Autos más nuevos · comodidad extra' },
+          PREMIUM: { label: 'Premium', description: 'Vehículo de lujo · servicio VIP' },
         };
 
         // Geopartitioning Truncation factor: `Math.floor(x * 50) / 50` ~= Grid de 2.22 km
@@ -191,7 +199,7 @@ class PricingService {
       for (const [cat, mult] of Object.entries(this.CATEGORY_MULTIPLIERS)) {
         const price = Math.round(base.recommendedPrice * mult * 10) / 10;
         categories[cat] = {
-          ...this.CATEGORY_CONFIG[cat],
+          ...this.CATEGORY_LABELS[cat],
           recommendedPrice: price,
           surgeMultiplier: base.surgeMultiplier,
           highDemand: base.highDemand,
@@ -199,6 +207,48 @@ class PricingService {
         };
       }
       return { base, categories };
+    }
+
+    async getPricesByCategory(originLat, originLng, destLat, destLng) {
+      // Haversine
+      const R = 6371;
+      const dLat = (destLat - originLat) * Math.PI / 180;
+      const dLng = (destLng - originLng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2
+        + Math.cos(originLat * Math.PI/180) * Math.cos(destLat * Math.PI/180) * Math.sin(dLng/2)**2;
+      const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      if (distKm > this.MAX_DIST_KM) {
+        const err = new Error(`La distancia máxima es ${this.MAX_DIST_KM} km.`);
+        err.code = 'DISTANCE_EXCEEDED';
+        throw err;
+      }
+
+      const hour = new Date().getHours();
+      const trafficMult = ((hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19)) ? 1.3 : 1.0;
+      const etaMin = Math.max(1, Math.round((distKm / 40) * 60 * trafficMult));
+
+      // Surge del cache
+      const zoneId = this.getZoneId(originLat, originLng);
+      const surge = this.surgeCache.get(zoneId) || 1.0;
+
+      const baseMXN = this.BASE_MXN + (this.PER_KM_MXN * distKm) + (this.PER_MIN_MXN * etaMin);
+
+      const result = {};
+      for (const [cat, mult] of Object.entries(this.CATEGORY_MULTIPLIERS)) {
+        const raw = baseMXN * mult * surge;
+        const minMXN = this.CATEGORY_MIN_MXN[cat];
+        result[cat] = {
+          category:   cat,
+          ...this.CATEGORY_LABELS[cat],
+          priceMXN:   Math.max(minMXN, Math.round(raw)),
+          minFareMXN: minMXN,
+          distKm:     Number(distKm.toFixed(1)),
+          etaMin,
+          surgeMultiplier: Number(surge.toFixed(2)),
+        };
+      }
+      return result;
     }
 }
 
