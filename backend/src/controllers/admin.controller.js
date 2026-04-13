@@ -6,7 +6,10 @@ const { getIO } = require('../sockets');
 const getPendingDrivers = async (req, res) => {
     try {
         const drivers = await User.find({ 
-            driverApprovalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] }, 
+            $or: [
+                { driverApprovalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] } },
+                { approvalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] } }
+            ],
             role: 'DRIVER' 
         }).select('-password -__v');
         res.status(200).json({ success: true, data: drivers });
@@ -117,7 +120,12 @@ const banUser = async (req, res) => {
 const getStats = async (req, res) => {
     try {
         const totalUsers = await User.countDocuments();
-        const pendingDriversCount = await User.countDocuments({ driverApprovalStatus: 'DOCS_SUBMITTED' });
+        const pendingDriversCount = await User.countDocuments({ 
+            $or: [
+                { driverApprovalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] } },
+                { approvalStatus: { $in: ['DOCS_SUBMITTED', 'UNDER_REVIEW'] } }
+            ]
+        });
         const activeDriversCount = await User.countDocuments({ driverStatus: 'AVAILABLE' });
 
         const now = new Date();
