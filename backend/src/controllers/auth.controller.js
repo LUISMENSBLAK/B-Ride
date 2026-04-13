@@ -66,7 +66,12 @@ const verifyEmail = async (req, res) => {
         const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(code, user.emailVerificationToken);
         
-        if (!isMatch) return res.status(400).json({ success: false, message: 'Invalid code' });
+        // [DEV MODE BYPASS] Permitir cualquier código para pruebas si no estamos en producción
+        if (!isMatch && process.env.NODE_ENV !== 'production') {
+            console.log(`[DEV BYPASS] Código de email '${code}' aceptado incondicionalmente para pruebas.`);
+        } else if (!isMatch) {
+            return res.status(400).json({ success: false, message: 'Invalid code' });
+        }
 
         user.isEmailVerified = true;
         user.emailVerified = true;
@@ -502,7 +507,13 @@ const verifyPhoneOtp = async (req, res) => {
         
         const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(otp, user.verificationOTP);
-        if (!isMatch) return res.status(400).json({ success: false, message: 'Código SMS inválido.' });
+        
+        // [DEV MODE BYPASS] Permitir cualquier código SMS para pruebas si no estamos en producción
+        if (!isMatch && process.env.NODE_ENV !== 'production') {
+            console.log(`[DEV BYPASS] Código SMS '${otp}' aceptado incondicionalmente para pruebas.`);
+        } else if (!isMatch) {
+            return res.status(400).json({ success: false, message: 'Código SMS inválido.' });
+        }
         
         user.phoneVerified = true;
         user.verificationOTP = undefined;
