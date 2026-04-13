@@ -25,6 +25,8 @@ import BidCard from '../../components/BidCard';
 import { stripeFrontendService } from '../../services/stripe';
 import Button from '../../components/Button';
 import Loader from '../../components/Loader';
+import CarMarker from '../../components/CarMarker';
+import SOSButton from '../../components/SOSButton';
 import StatusBadge from '../../components/StatusBadge';
 import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
@@ -85,24 +87,46 @@ export default function PassengerDashboard() {
     }
   }, [selectedPlace, location]);
 
+  const [vehicleCategory, setVehicleCategory] = useState('ECONOMY');
+  const [pricingMetadata, setPricingMetadata] = useState<any>(null);
+
   useEffect(() => {
-    if (distanceKm > 0) {
-      const suggestedPriceUsd = 2 + (1.20 * distanceKm) + (0.25 * estimatedTimeMin);
-      let localPrice = convertToLocal(suggestedPriceUsd);
-      
-      if (promoDiscount) {
-         if (promoDiscount.type === 'PERCENTAGE') {
-             localPrice = localPrice * (1 - promoDiscount.value / 100);
-         } else {
-             localPrice = Math.max(10, localPrice - promoDiscount.value); // minimo 10
-         }
+    let active = true;
+    const fetchPrice = async () => {
+      if (distanceKm > 0 && selectedPlace && location) {
+        try {
+          const res = await client.get('/rides/estimate', {
+            params: {
+              pickupLat: location.coords.latitude,
+              pickupLng: location.coords.longitude,
+              dropoffLat: selectedPlace.latitude,
+              dropoffLng: selectedPlace.longitude
+            }
+          });
+          if (!active) return;
+          if (res.data?.success) {
+            setPricingMetadata(res.data.data.categories);
+            const usdPrice = res.data.data.categories[vehicleCategory]?.recommendedPrice || 2;
+            let localPrice = convertToLocal(usdPrice);
+            if (promoDiscount) {
+              if (promoDiscount.type === 'PERCENTAGE') {
+                localPrice = localPrice * (1 - promoDiscount.value / 100);
+              } else {
+                localPrice = Math.max(10, localPrice - promoDiscount.value);
+              }
+            }
+            setPrice(localPrice.toFixed(2));
+          }
+        } catch (e) {
+          console.warn('Error fetching estimate:', e);
+        }
+      } else {
+        setPrice('');
       }
-      
-      setPrice(localPrice.toFixed(2));
-    } else {
-      setPrice('');
-    }
-  }, [distanceKm, estimatedTimeMin, currency, promoDiscount]);
+    };
+    fetchPrice();
+    return () => { active = false; };
+  }, [distanceKm, selectedPlace, location, vehicleCategory, currency, promoDiscount, convertToLocal]);
 
   const mapRef = useRef<MapRendererHandle>(null);
   const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);
@@ -368,6 +392,7 @@ export default function PassengerDashboard() {
         currency: currency,
         paymentMethod,
         promoCode: promoDiscount ? promoCode : undefined,
+        vehicleCategory,
       }, 3, 5000);
       // 'rideRequestCreated' socket event will update status
     } catch (error: any) {
@@ -485,6 +510,7 @@ export default function PassengerDashboard() {
           proposedPrice: convertToUsd(Number(price)),
           currency,
           paymentMethod,
+          vehicleCategory,
           scheduledAt: scheduledDate.toISOString()
        });
        if (res.data.success) {
@@ -498,13 +524,37 @@ export default function PassengerDashboard() {
 
   const openNavigation = useCallback(() => {
     if (!selectedPlace) return;
-    const url = Platform.OS === 'ios'
-      ? `http://maps.apple.com/?daddr=${selectedPlace.latitude},${selectedPlace.longitude}`
-      : `google.navigation:q=${selectedPlace.latitude},${selectedPlace.longitude}`;
-    Linking.openURL(url);
+    const lat = selectedPlace.latitude;
+    const lng = selectedPlace.longitude;
+    const label = selectedPlace.displayName;
+    const schemes = [
+      `waze://?ll=${lat},${lng}&navigate=yes`,
+      `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`,
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,
+    ];
+
+    Alert.alert(
+      'Navegar',
+      `¿Con qué app quieres navegar a ${label}?`,
+      [
+        {
+          text: 'Waze',
+          onPress: () => Linking.openURL(schemes[0]).catch(() =>
+            Linking.openURL(schemes[2])
+          ),
+        },
+        {
+          text: 'Google Maps',
+          onPress: () => Linking.openURL(schemes[1]).catch(() =>
+            Linking.openURL(schemes[2])
+          ),
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    );
   }, [selectedPlace]);
 
-  const handleRateDriver = useCallback(async (score: number) => {
+  const handleRateDriver = useCallback(async (score: number, comment: string) => {
     if (completedRide) {
        try {
            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -514,6 +564,9 @@ export default function PassengerDashboard() {
              fromUserId: user?._id,
              score,
            });
+           if (comment) {
+             await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
+           }
        } catch (error: any) {
            Alert.alert('Error Calificando', error.message);
        }
@@ -543,14 +596,39 @@ export default function PassengerDashboard() {
         onSkip={handleSkipRating}
       />
 
-      {/* Header */}
-      <View style={styles.headerOverlay}>
-        <View>
-          <Text style={styles.subtitle}>{t('general.greeting', { name: user?.name })}</Text>
-          <Text style={styles.title}>B-Ride</Text>
+      {/* Header flotante superior */}
+      <View style={styles.floatingHeader}>
+        {/* Avatar del usuario */}
+        <TouchableOpacity
+          style={styles.headerAvatar}
+          onPress={() => navigation.navigate('PassengerProfile')}
+          activeOpacity={0.8}
+        >
+          {user?.profilePhoto || user?.avatarUrl ? (
+            <Image
+              source={{ uri: user.profilePhoto || user.avatarUrl }}
+              style={styles.headerAvatarImg}
+            />
+          ) : (
+            <View style={styles.headerAvatarFallback}>
+              <Text style={styles.headerAvatarInitials}>
+                {user?.name?.charAt(0)?.toUpperCase() ?? 'U'}
+              </Text>
+            </View>
+          )}
+          {/* Indicador online */}
+          <View style={styles.headerOnlineDot} />
+        </TouchableOpacity>
+
+        {/* Saludo */}
+        <View style={styles.headerGreeting}>
+          <Text style={styles.headerGreetingText}>Hola, {user?.name?.split(' ')[0] ?? 'Usuario'}</Text>
+          <Text style={styles.headerGreetingSubtext}>¿A dónde vas hoy?</Text>
         </View>
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-          <Text style={styles.logoutText}>{t('general.exit')}</Text>
+
+        {/* Notificaciones placeholder */}
+        <TouchableOpacity style={styles.headerIconBtn}>
+          <Ionicons name="notifications-outline" size={22} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -672,6 +750,7 @@ export default function PassengerDashboard() {
                        keyboardType="numeric"
                        value={price}
                        onChangeText={setPrice}
+                       onFocus={() => setPrice('')}
                      />
                    </View>
                  </View>
@@ -687,6 +766,33 @@ export default function PassengerDashboard() {
                      </Text>
                  )}
                 </View>
+              </View>
+            )}
+
+            {/* Category Selector */}
+            {pricingMetadata && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                {['ECONOMY', 'STANDARD', 'COMFORT', 'PREMIUM'].map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={{
+                      flex: 1, padding: 8, marginHorizontal: 4, borderRadius: theme.borderRadius.m,
+                      alignItems: 'center',
+                      backgroundColor: vehicleCategory === cat ? theme.colors.primaryLight : theme.colors.surface,
+                      borderWidth: 1, borderColor: vehicleCategory === cat ? theme.colors.primary : theme.colors.border
+                    }}
+                    onPress={() => setVehicleCategory(cat)}
+                  >
+                    <Ionicons 
+                      name={pricingMetadata[cat]?.icon || 'car'} 
+                      size={24} 
+                      color={vehicleCategory === cat ? theme.colors.primary : theme.colors.textMuted} 
+                    />
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: vehicleCategory === cat ? theme.colors.primary : theme.colors.textMuted, marginTop: 4 }}>
+                      {pricingMetadata[cat]?.label || cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             )}
 
@@ -857,36 +963,50 @@ export default function PassengerDashboard() {
 
         {/* ── ACTIVE: viaje en curso ── */}
         {isActiveRide && (
-          <View style={[styles.statusCard, { paddingHorizontal: theme.spacing.xl }]}>
-            <StatusBadge
-              variant={rideStatus === 'IN_PROGRESS' ? 'active' : driverTrackingState === 'RECONNECTING' ? 'offline' : 'searching'}
-              label={
-                driverTrackingState === 'RECONNECTING'
-                  ? t('ride.status.weakSignal', { defaultValue: 'Señal del conductor débil...' })
-                  : rideStatus === 'ARRIVED' ? t('ride.status.arriving') : rideStatus === 'IN_PROGRESS' ? t('ride.status.inProgress') : t('ride.status.confirmed')
-              }
-              style={{ marginBottom: 12, alignSelf: 'center' }}
-            />
-            <Text style={styles.statusTitle}>
-              {(rideStatus === 'ACCEPTED' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED') && t('ride.confirmed')}
-              {rideStatus === 'ARRIVED' && t('ride.arrivedTitle')}
-              {rideStatus === 'IN_PROGRESS' && t('ride.inProgress')}
-            </Text>
-            <Text style={styles.statusText}>
-              {(rideStatus === 'ACCEPTED' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED') && (driverTrackingState === 'RECONNECTING' ? t('ride.enRouteGps') : t('ride.enRoute'))}
-              {rideStatus === 'ARRIVED' && t('ride.arrivedSub')}
-              {rideStatus === 'IN_PROGRESS' && `${t('ride.heading')} ${selectedPlace?.displayName ?? '—'}`}
-            </Text>
-            
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
-                <TouchableOpacity
-                  style={[styles.chatBtn, { flex: 1 }]}
-                  onPress={() => setChatVisible(true)}
-                >
-                  <Ionicons name="chatbubble-outline" size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={styles.chatBtnText}>{t('chat.withDriver')}</Text>
-                </TouchableOpacity>
+          <View style={styles.activeRideCardPassenger}>
+
+            {/* Fase */}
+            <View style={styles.activePhaseRow}>
+              <View style={[styles.activePhasePill, {
+                backgroundColor: rideStatus === 'IN_PROGRESS' ? theme.colors.successLight : theme.colors.primaryLight,
+                borderColor: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
+              }]}>
+                <View style={[styles.activePhaseDot, {
+                  backgroundColor: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
+                }]} />
+                <Text style={[styles.activePhaseText, {
+                  color: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
+                }]}>
+                  {rideStatus === 'ARRIVED'     ? 'Tu conductor llegó' :
+                   rideStatus === 'IN_PROGRESS' ? 'En camino a tu destino' :
+                                                  'Conductor en camino'}
+                </Text>
+              </View>
             </View>
+
+            {/* Destino */}
+            <Text style={styles.activeDestTextPassenger} numberOfLines={2}>
+              {rideStatus === 'IN_PROGRESS'
+                ? `→ ${selectedPlace?.displayName ?? selectedPlace?.address ?? 'Tu destino'}`
+                : 'Tu conductor se dirige hacia ti'}
+            </Text>
+
+            {/* Botones de acción */}
+            <View style={styles.activePassengerActions}>
+              <TouchableOpacity style={styles.activeActionBtn} onPress={() => setChatVisible(true)}>
+                <Ionicons name="chatbubble-outline" size={20} color={theme.colors.primary} />
+                <Text style={styles.activeActionText}>Chat</Text>
+              </TouchableOpacity>
+
+              {/* SOS */}
+              <SOSButton rideId={currentRideId ?? ''} style={styles.sosInline} />
+
+              <TouchableOpacity style={styles.activeActionBtn} onPress={() => {/* share */}}>
+                <Ionicons name="share-outline" size={20} color={theme.colors.primary} />
+                <Text style={styles.activeActionText}>Compartir</Text>
+              </TouchableOpacity>
+            </View>
+
           </View>
         )}
         </BottomSheetScrollView>
@@ -1048,6 +1168,62 @@ const getBidStyles = (theme: Theme) => StyleSheet.create({
 // ─── Main styles ─────────────────────────────────────────────────────────────
 const getStyles = (theme: Theme) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
+  floatingHeader: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 16,
+    left: 16, right: 16, zIndex: 20,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: theme.colors.overlay,
+    borderRadius: theme.borderRadius.pill,
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderWidth: 1, borderColor: theme.colors.borderLight,
+  },
+  headerAvatar: { position: 'relative' },
+  headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
+  headerAvatarFallback: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 1.5, borderColor: theme.colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  headerAvatarInitials: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
+  headerOnlineDot: {
+    position: 'absolute', bottom: 0, right: 0,
+    width: 10, height: 10, borderRadius: 5,
+    backgroundColor: theme.colors.success,
+    borderWidth: 1.5, borderColor: theme.colors.background,
+  },
+  headerGreeting: { flex: 1 },
+  headerGreetingText: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
+  headerGreetingSubtext: { fontSize: 11, color: theme.colors.textMuted },
+  headerIconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: theme.colors.surfaceHigh,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  
+  activeRideCardPassenger: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.l, margin: theme.spacing.m,
+    padding: theme.spacing.l, borderWidth: 1, borderColor: theme.colors.border,
+  },
+  activePhaseRow: { marginBottom: theme.spacing.m },
+  activePhasePill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: theme.borderRadius.pill, borderWidth: 1.5,
+  },
+  activePhaseDot: { width: 6, height: 6, borderRadius: 3 },
+  activePhaseText: { fontSize: 12, fontWeight: '700' },
+  activeDestTextPassenger: { ...theme.typography.title, fontSize: 16, marginBottom: theme.spacing.l },
+  activePassengerActions: {
+    flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'space-around',
+  },
+  activeActionBtn: { alignItems: 'center', gap: 4, flex: 1 },
+  activeActionText: { ...theme.typography.caption, color: theme.colors.textSecondary, fontSize: 11 },
+  sosInline: { width: 56, height: 56, borderRadius: 28 },
+
   headerOverlay: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 60 : 40,

@@ -15,6 +15,12 @@ const userSchema = new mongoose.Schema(
                 'Please add a valid email',
             ],
         },
+        firebaseUid: {
+            type: String,
+            sparse: true,
+            index: true,
+            default: null,
+        },
         password: {
             type: String,
             required: [true, 'Please add a password'],
@@ -35,6 +41,11 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: null,
             sparse: true,
+        },
+        firebaseUid: {
+            type: String,
+            sparse: true,
+            index: true,
         },
         phoneNumber: {
             type: String,

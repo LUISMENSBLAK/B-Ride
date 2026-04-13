@@ -159,7 +159,7 @@ const rideEvents = (socket) => {
                 return;
             }
             
-            const { pickupLocation, dropoffLocation, proposedPrice, eventId, isScheduled, scheduledAt, promoCode } = rideData;
+            const { pickupLocation, dropoffLocation, proposedPrice, eventId, isScheduled, scheduledAt, promoCode, vehicleCategory } = rideData;
             const passengerId = socket.userId;
             if (!passengerId) throw new Error('No autorizado');
 
@@ -169,7 +169,7 @@ const rideEvents = (socket) => {
             }
             const newRide = await rideService.createRideRequest(
                  passengerId, pickupLocation, dropoffLocation, proposedPrice, 
-                 { isScheduled, scheduledAt, promoCode }
+                 { isScheduled, scheduledAt, promoCode, vehicleCategory }
             );
 
             // Phase 9 rule: si es Scheduled, no se propaga todavía. Se guardará y el cron hará la propagación.
@@ -178,8 +178,11 @@ const rideEvents = (socket) => {
             }
 
             // Rebotar al pasajero para avisarle que se creó con éxito
-            getIO().to(passengerId).emit('rideRequestCreated', newRide);
-            if (isAckRequired) ack({ success: true, status: 'processed', newRide });
+            const populatedRide = await Ride.findById(newRide._id)
+                .populate('passenger', 'name email avatarUrl profilePhoto avgRating totalRatings phoneNumber')
+                .lean();
+            getIO().to(passengerId).emit('rideRequestCreated', populatedRide);
+            if (isAckRequired) ack({ success: true, status: 'processed', newRide: populatedRide });
 
         } catch (error) {
             console.error('[Rides] Error creating ride:', error);

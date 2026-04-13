@@ -1,95 +1,89 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, Alert, Linking, Platform } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, StyleSheet, Alert, Linking, Platform, Animated } from 'react-native';
+import { LongPressGestureHandler, State } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import * as Location from 'expo-location';
 import { useAppTheme } from '../hooks/useAppTheme';
-import { useTranslation } from '../hooks/useTranslation';
 import { useAuthStore } from '../store/authStore';
 import client from '../api/client';
 
 interface SOSButtonProps {
   rideId: string;
-  otherUserId?: string;
   style?: any;
 }
 
-/**
- * S1: Botón SOS — llamar emergencias + enviar evento al backend + registrar incidente
- */
-export default function SOSButton({ rideId, otherUserId, style }: SOSButtonProps) {
+export default function SOSButton({ rideId, style }: SOSButtonProps) {
   const theme = useAppTheme();
-  const { t } = useTranslation();
   const { user } = useAuthStore();
+  const progress = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const holdAnim = useRef<Animated.CompositeAnimation | null>(null);
 
-  const handleSOS = () => {
+  const triggerSOS = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-
-    Alert.alert(
-      '🚨 ' + t('sos.title', { defaultValue: 'Emergencia' }),
-      t('sos.confirmMsg', { defaultValue: '¿Estás en peligro? Esto llamará a servicios de emergencia y notificará a B-Ride.' }),
-      [
-        { text: t('general.cancel', { defaultValue: 'Cancelar' }), style: 'cancel' },
-        {
-          text: t('sos.callEmergency', { defaultValue: 'Llamar 911' }),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // 1. Obtener ubicación actual
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-
-              // 2. Enviar evento al backend
-              await client.post(`/rides/${rideId}/sos`, {
-                location: {
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                }
-              });
-
-              Alert.alert('SOS Enviado', 'Se ha alertado a la otra persona y al centro de emergencias corporativo de B-Ride.');
-
-              // 3. Llamar a emergencias (911 en México)
-              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
-              Linking.openURL(emergencyNumber);
-
-            } catch (e) {
-              console.error('[SOS] Error:', e);
-              // Aún así intentar llamar a emergencias
-              Linking.openURL('tel:911');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      await client.post(`/rides/${rideId}/sos`, {
+        location: { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
+      });
+    } catch (e) {}
+    const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
+    Linking.openURL(emergencyNumber);
   };
 
+  const onHandlerStateChange = ({ nativeEvent }: any) => {
+    if (nativeEvent.state === State.BEGAN) {
+      scaleAnim.setValue(0.9);
+      holdAnim.current = Animated.timing(progress, {
+        toValue: 1, duration: 1500, useNativeDriver: false,
+      });
+      holdAnim.current.start(({ finished }) => {
+        if (finished) triggerSOS();
+      });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } else if (nativeEvent.state === State.END || nativeEvent.state === State.CANCELLED || nativeEvent.state === State.FAILED) {
+      holdAnim.current?.stop();
+      Animated.parallel([
+        Animated.timing(progress, { toValue: 0, duration: 200, useNativeDriver: false }),
+        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: false }),
+      ]).start();
+    }
+  };
+
+  const arcWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+
   return (
-    <TouchableOpacity
-      style={[styles.sosBtn, { backgroundColor: theme.colors.error }, style]}
-      onPress={handleSOS}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.sosText}>SOS</Text>
-    </TouchableOpacity>
+    <LongPressGestureHandler onHandlerStateChange={onHandlerStateChange} minDurationMs={0}>
+      <Animated.View style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }, style]}>
+        {/* Anillo de progreso */}
+        <View style={styles.progressRing}>
+          <Animated.View style={[styles.progressFill, { width: arcWidth }]} />
+        </View>
+        <View style={styles.inner}>
+          <Text style={styles.sosText}>SOS</Text>
+          <Text style={styles.holdText}>mantén</Text>
+        </View>
+      </Animated.View>
+    </LongPressGestureHandler>
   );
 }
 
 const styles = StyleSheet.create({
-  sosBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#ff0000',
+  wrapper: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#E53935',
+    justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden',
+    shadowColor: '#E53935',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.5, shadowRadius: 8, elevation: 8,
   },
-  sosText: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: 1,
+  progressRing: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
+  progressFill: { height: 3, backgroundColor: '#fff' },
+  inner: { alignItems: 'center' },
+  sosText: { fontSize: 13, fontWeight: '900', color: '#fff', letterSpacing: 1.5 },
+  holdText: { fontSize: 8, color: 'rgba(255,255,255,0.7)', letterSpacing: 0.5 },
 });

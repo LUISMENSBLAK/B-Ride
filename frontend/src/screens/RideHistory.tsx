@@ -5,6 +5,7 @@ import {
   StyleSheet, TouchableOpacity, Platform, Modal, ActivityIndicator
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Svg, { Rect, Circle, Path } from 'react-native-svg';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme';
@@ -80,6 +81,23 @@ export default function RideHistory() {
         setPage(p => p + 1);
     }
   };
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <Svg width={120} height={80} viewBox="0 0 120 80" fill="none">
+        {/* Coche simple Wixárika */}
+        <Rect x="20" y="30" width="80" height="28" rx="8" fill={theme.colors.surfaceHigh} stroke={theme.colors.border} strokeWidth={1.5} />
+        <Path d="M30 30 L38 18 H82 L90 30" stroke={theme.colors.border} strokeWidth={1.5} strokeLinejoin="round" fill="none" />
+        <Circle cx="36" cy="59" r="8" fill={theme.colors.surfaceHigh} stroke={theme.colors.primary} strokeWidth={1.5} />
+        <Circle cx="84" cy="59" r="8" fill={theme.colors.surfaceHigh} stroke={theme.colors.primary} strokeWidth={1.5} />
+        <Rect x="44" y="19" width="32" height="12" rx="3" fill={theme.colors.primaryLight} />
+        {/* Línea punteada de ruta */}
+        <Path d="M10 72 H110" stroke={theme.colors.border} strokeWidth={1} strokeDasharray="4 4" />
+      </Svg>
+      <Text style={styles.emptyTitle}>Sin viajes aún</Text>
+      <Text style={styles.emptySubtitle}>Tu historial de viajes aparecerá aquí</Text>
+    </View>
+  );
 
   const renderItem = ({ item }: { item: any }) => {
     // Precio final: bid aceptado o precio propuesto original
@@ -204,13 +222,7 @@ export default function RideHistory() {
         onEndReached={onEndReached}
         onEndReachedThreshold={0.5}
         ListFooterComponent={loadingMore ? <ActivityIndicator size="small" style={{ margin: 20 }} /> : null}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>🚗</Text>
-            <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
-            <Text style={styles.emptySubtitle}>{t('history.emptySubtitle')}</Text>
-          </View>
-        }
+        ListEmptyComponent={loading ? null : renderEmpty()}
       />
 
       {/* MODAL BLOQUE 6 */}
@@ -396,24 +408,11 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   // ── Empty ───────────────────────────────────────────────────────────────────
   emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: theme.spacing.xl,
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: theme.spacing.xxxl, gap: 12,
   },
-  emptyIcon: {
-    fontSize: 56,
-    marginBottom: theme.spacing.m,
-  },
-  emptyTitle: {
-    ...theme.typography.title,
-    marginBottom: theme.spacing.s,
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    ...theme.typography.bodyMuted,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  emptyTitle: { ...theme.typography.title, color: theme.colors.text, textAlign: 'center' },
+  emptySubtitle: { ...theme.typography.bodyMuted, textAlign: 'center', paddingHorizontal: 40 },
   
   skeletonCard: {
     backgroundColor: theme.colors.surface,

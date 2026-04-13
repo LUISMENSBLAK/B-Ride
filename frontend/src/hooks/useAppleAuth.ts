@@ -1,49 +1,52 @@
 import { useState, useCallback } from 'react';
+import { Platform } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import auth from '@react-native-firebase/auth';
 import client from '../api/client';
 
 export function useAppleAuth() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const handleAppleLogin = useCallback(async () => {
-    setError(null);
+    if (Platform.OS !== 'ios') return null;
     setLoading(true);
     try {
-      const credential = await AppleAuthentication.signInAsync({
+      const appleCredential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
 
-      // Apple only provides name/email on the FIRST sign-in.
-      // After that, they return null. We send whatever we have.
-      const fullName = credential.fullName
-        ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
-        : undefined;
+      if (!appleCredential.identityToken) throw new Error('No se obtuvo identity token de Apple.');
 
-      const backendResponse = await client.post('/auth/apple', {
-        appleUserId: credential.user,
-        email: credential.email || undefined,
+      // Crear credencial de Firebase con el token de Apple
+      const { identityToken, nonce } = appleCredential;
+      const appleAuthProvider = auth.AppleAuthProvider.credential(identityToken, nonce);
+      const userCredential = await auth().signInWithCredential(appleAuthProvider);
+
+      // Obtener Firebase ID Token
+      const firebaseToken = await userCredential.user.getIdToken();
+
+      const fullName = appleCredential.fullName
+        ? `${appleCredential.fullName.givenName || ''} ${appleCredential.fullName.familyName || ''}`.trim()
+        : userCredential.user.displayName;
+
+      // Sincronizar con el backend de B-Ride
+      const backendResponse = await client.post('/auth/firebase-sync', {
         name: fullName || undefined,
-        identityToken: credential.identityToken,
-        authorizationCode: credential.authorizationCode,
+      }, {
+        headers: { Authorization: `Bearer ${firebaseToken}` }
       });
 
       setLoading(false);
       return backendResponse.data;
-    } catch (e: any) {
-      if (e.code === 'ERR_REQUEST_CANCELED') {
-        // User cancelled — not an error
-        setLoading(false);
-        return null;
-      }
-      setError(e.message || 'Error con Apple Sign-In');
+    } catch (error: any) {
       setLoading(false);
-      throw e;
+      if (error.code === 'ERR_REQUEST_CANCELED') return null;
+      throw error;
     }
   }, []);
 
-  return { handleAppleLogin, loading, error };
+  return { handleAppleLogin, loading };
 }

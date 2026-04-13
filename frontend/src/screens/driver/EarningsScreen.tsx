@@ -2,6 +2,7 @@ import { useAppTheme } from '../../hooks/useAppTheme';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence } from 'react-native-reanimated';
+import Svg, { Rect, Text as SvgText, Line } from 'react-native-svg';
 import { useAuthStore } from '../../store/authStore';
 import { theme } from '../../theme';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -21,6 +22,7 @@ export default function EarningsScreen() {
   const [todayStats, setTodayStats] = useState({ trips: 0, earned: 0.00, rating: user?.avgRating ?? 5.0 });
   const [weekTrips, setWeekTrips] = useState(0);
   const [monthTrips, setMonthTrips] = useState(0);
+  const [weeklyData, setWeeklyData] = useState<number[]>([0,0,0,0,0,0,0]);
 
   // BUG 16 FIX: Fetch real de ganancias desde el backend
   useEffect(() => {
@@ -28,10 +30,11 @@ export default function EarningsScreen() {
       try {
         const res = await client.get('/drivers/earnings');
         if (res.data?.success) {
-          const { todayEarnings, weekEarnings, monthEarnings, totalEarnings, todayRides, weekRides, monthRides, avgRating } = res.data;
+          const { todayEarnings, weekEarnings, monthEarnings, totalEarnings, todayRides, weekRides, monthRides, avgRating, dailyBreakdown } = res.data;
           setTodayStats({ trips: todayRides, earned: todayEarnings, rating: avgRating ?? user?.avgRating ?? 5.0 });
           setWeekTrips(weekRides);
           setMonthTrips(monthRides);
+          setWeeklyData(dailyBreakdown ?? [0,0,0,0,0,0,0]);
         }
       } catch (e) {
         console.error('[EarningsScreen] Error fetching earnings:', e);
@@ -70,6 +73,40 @@ export default function EarningsScreen() {
 
   const hasEarnings = todayStats.trips > 0 || weekTrips > 0 || monthTrips > 0;
 
+  const WeeklyChart = ({ data, theme }: { data: number[]; theme: any }) => {
+    const max = Math.max(...data, 1);
+    const days = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+    const barW = 28, gap = 12, height = 80, today = new Date().getDay();
+    const totalW = (barW + gap) * 7;
+
+    return (
+      <Svg width="100%" height={height + 30} viewBox={`0 0 ${totalW} ${height + 30}`}>
+        {data.map((val: number, i: number) => {
+          const barH = Math.max(3, (val / max) * height);
+          const x = i * (barW + gap);
+          const isToday = (i + 1) % 7 === today % 7;
+          return (
+            <React.Fragment key={i}>
+              <Rect
+                x={x} y={height - barH} width={barW} height={barH}
+                rx={6} fill={isToday ? theme.colors.primary : theme.colors.surfaceHigh}
+                opacity={isToday ? 1 : 0.7}
+              />
+              <SvgText
+                x={x + barW / 2} y={height + 16}
+                textAnchor="middle" fontSize={10}
+                fill={isToday ? theme.colors.primary : theme.colors.textMuted}
+                fontWeight={isToday ? '700' : '400'}
+              >
+                {days[i]}
+              </SvgText>
+            </React.Fragment>
+          );
+        })}
+      </Svg>
+    );
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -85,6 +122,12 @@ export default function EarningsScreen() {
             ? t('driver.tripsCompleted_one', { count: 1 }) 
             : t('driver.tripsCompleted_other', { count: todayStats.trips })}
         </Text>
+      </View>
+
+      {/* Card gráfico semanal */}
+      <View style={styles.chartCard}>
+        <Text style={styles.chartTitle}>Esta semana</Text>
+        <WeeklyChart data={weeklyData} theme={theme} />
       </View>
 
       {/* Stats secundarios */}
@@ -142,6 +185,13 @@ const getStyles = (theme: any) => StyleSheet.create({
   },
   statValue: { fontSize: 18, fontWeight: '700', color: theme.colors.text, marginBottom: 4 },
   statLabel: { ...theme.typography.bodyMuted, fontSize: 12 },
+  chartCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.l, padding: theme.spacing.l,
+    marginBottom: theme.spacing.l,
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  chartTitle: { ...theme.typography.title, fontSize: 16, marginBottom: theme.spacing.m },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyTitle: { ...theme.typography.title, marginBottom: 8 },

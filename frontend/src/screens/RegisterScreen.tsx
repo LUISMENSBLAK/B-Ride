@@ -146,7 +146,7 @@ export default function RegisterScreen({ navigation }: any) {
               ) : (
                 <>
                   <Image 
-                    source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+                    source={require('../../assets/google-logo.png')}
                     style={styles.googleImage} 
                   />
                   <Text style={styles.googleBtnText}>Continuar con Google</Text>
@@ -332,7 +332,7 @@ const getStyles = (theme: any) => StyleSheet.create({
   dividerText: { fontSize: 12 },
   inputContainer: { marginBottom: theme.spacing.m },
   input: {
-    backgroundColor: theme.colors.background, padding: 16, borderRadius: theme.borderRadius.m,
+    backgroundColor: theme.colors.surfaceHigh, padding: 16, borderRadius: theme.borderRadius.m,
     marginBottom: theme.spacing.m, fontSize: 16, color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border,
   },
   roleLabel: { ...theme.typography.body, fontWeight: '600', marginBottom: theme.spacing.s },

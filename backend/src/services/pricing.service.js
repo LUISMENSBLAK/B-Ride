@@ -4,9 +4,25 @@ const Ride = require('../models/Ride');
 class PricingService {
     constructor() {
         // Configuraciones escalables (fallback de Env)
-        this.BASE_FARE_PER_KM = parseFloat(process.env.BASE_FARE_PER_KM) || 1.20;
-        this.MIN_FARE = parseFloat(process.env.MIN_FARE) || 2.50;
+        this.BASE_FARE_PER_KM = parseFloat(process.env.BASE_FARE_PER_KM) || 0.42;
+        this.MIN_FARE         = parseFloat(process.env.MIN_FARE) || 2.00;
+        this.BASE_START_FARE  = parseFloat(process.env.BASE_START_FARE) || 1.50;
+        this.FARE_PER_MINUTE  = parseFloat(process.env.FARE_PER_MINUTE) || 0.06;
         this.MAX_SURGE = parseFloat(process.env.MAX_SURGE) || 2.5;
+
+        this.CATEGORY_MULTIPLIERS = {
+            ECONOMY:  1.0,
+            STANDARD: 1.25,
+            COMFORT:  1.60,
+            PREMIUM:  2.10,
+        };
+
+        this.CATEGORY_CONFIG = {
+            ECONOMY:  { label: 'Económico', description: 'Viajes accesibles', icon: 'car-outline',    capacity: 4 },
+            STANDARD: { label: 'Estándar',  description: 'Comodidad estándar', icon: 'car-sport-outline', capacity: 4 },
+            COMFORT:  { label: 'Confort',   description: 'Autos más nuevos',  icon: 'car-sharp',       capacity: 4 },
+            PREMIUM:  { label: 'Premium',   description: 'Servicio exclusivo', icon: 'diamond-outline', capacity: 4 },
+        };
 
         // Geopartitioning Truncation factor: `Math.floor(x * 50) / 50` ~= Grid de 2.22 km
         this.GRID_FACTOR = 50; 
@@ -137,7 +153,10 @@ class PricingService {
         
         const distanceKm = Math.max((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))), 0.5); // Minimo historico de calculo
 
-        const basePrice = Math.max(this.MIN_FARE, distanceKm * this.BASE_FARE_PER_KM);
+        const basePrice = Math.max(
+            this.MIN_FARE,
+            this.BASE_START_FARE + (distanceKm * this.BASE_FARE_PER_KM)
+        );
         const { surgeMultiplier, zoneId } = this.getSurgeForLocation(pickupLat, pickupLng);
 
         let finalPrice = basePrice * surgeMultiplier;
@@ -161,6 +180,25 @@ class PricingService {
     convertAmount(amountInUsd, targetCurrency = 'USD') {
         const rate = this.CURRENCY_RATES[targetCurrency.toUpperCase()] || 1.0;
         return amountInUsd * rate;
+    }
+
+    /**
+     * Estima precios para todas las categorías en una sola llamada
+     */
+    estimateAllCategories(pickupLat, pickupLng, dropoffLat, dropoffLng) {
+      const base = this.estimateRide(pickupLat, pickupLng, dropoffLat, dropoffLng);
+      const categories = {};
+      for (const [cat, mult] of Object.entries(this.CATEGORY_MULTIPLIERS)) {
+        const price = Math.round(base.recommendedPrice * mult * 10) / 10;
+        categories[cat] = {
+          ...this.CATEGORY_CONFIG[cat],
+          recommendedPrice: price,
+          surgeMultiplier: base.surgeMultiplier,
+          highDemand: base.highDemand,
+          distanceEstimatedKm: base.distanceEstimatedKm,
+        };
+      }
+      return { base, categories };
     }
 }
 

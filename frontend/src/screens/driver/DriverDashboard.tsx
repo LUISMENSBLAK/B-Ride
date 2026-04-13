@@ -7,15 +7,20 @@ import {
   Switch,
   Alert,
   Platform,
+  Image,
+  Linking,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withSpring, withTiming,
+  withSpring, withTiming, withSequence, withRepeat,
+  interpolateColor, Easing,
 } from 'react-native-reanimated';
+import PulsingDot from '../../components/PulsingDot';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
-import * as Linking from 'expo-linking';
 import * as Haptics from 'expo-haptics';
+
+import client from '../../api/client';
 
 import { useAuthStore } from '../../store/authStore';
 import socketService from '../../services/socket';
@@ -92,6 +97,49 @@ export default function DriverDashboard() {
   const incomingAnimStyle = useAnimatedStyle(() => ({
     opacity:   incomingOpacity.value,
     transform: [{ scale: incomingScale.value }],
+  }));
+
+  // MÓDULO 1: Valores animados para Toggle ONLINE
+  const toggleScale  = useSharedValue(1);
+  const toggleGlow   = useSharedValue(0);
+  const pulseOnline  = useSharedValue(1);
+
+  // MÓDULO 2: Stats del día
+  const [todayTrips, setTodayTrips] = useState<number>(0);
+  const [todayEarnings, setTodayEarnings] = useState<number>(0);
+
+  // Pulso cuando está online y fetch earnings
+  useEffect(() => {
+    if (isOnline) {
+      toggleGlow.value  = withTiming(1, { duration: 400 });
+      pulseOnline.value = withRepeat(
+        withSequence(withTiming(1.08, { duration: 1200 }), withTiming(1, { duration: 1200 })),
+        -1, true
+      );
+      client.get('/drivers/earnings').then(res => {
+        if (res.data?.success) {
+          setTodayTrips(res.data.todayRides ?? 0);
+          setTodayEarnings(res.data.todayEarnings ?? 0);
+        }
+      }).catch(() => {});
+    } else {
+      toggleGlow.value  = withTiming(0, { duration: 300 });
+      pulseOnline.value = withTiming(1, { duration: 300 });
+    }
+  }, [isOnline]);
+
+  const toggleBgStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      toggleGlow.value, [0, 1],
+      [theme.colors.surfaceHigh, theme.colors.primary]
+    ),
+    transform: [{ scale: pulseOnline.value }],
+  }));
+  const toggleBorderStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(
+      toggleGlow.value, [0, 1],
+      [theme.colors.border, theme.colors.primary]
+    ),
   }));
 
   // ── Socket + GPS Setup (solo mount) ──────────────────────────────────────
@@ -207,21 +255,26 @@ export default function DriverDashboard() {
 
   // ── Socket Events ─────────────────────────────────────────────────────────
   // [MODIFICADO] Escuchar 'ride:incoming' y devolver el ACK al backend para la métrica
-  useRideSocketEvent('ride:incoming', useCallback((ride, ack) => {
-    if (__DEV__) console.log(`[FRONTEND] Recibido evento 'ride:incoming' para ride: ${ride?._id}`);
+  useRideSocketEvent('ride:incoming', useCallback(async (ride, ack) => {
+    if (__DEV__) console.log(`[DRIVER] ride:incoming`, ride?._id);
+    if (!isOnlineRef.current || activeRideRef.current || !ride?._id) return;
     
-    // Responder el ACK al backend
-    if (typeof ack === 'function') {
-        ack("RECIBIDO_POR_FRONTEND");
+    // Enriquecer el ride con datos del pasajero si no vienen populados
+    let enrichedRide = ride;
+    if (!ride.passenger?.name) {
+      try {
+        const res = await client.get(`/rides/${ride._id}/details`);
+        if (res.data?.success) enrichedRide = res.data.data;
+      } catch (e) {
+        // Continuar con datos parciales
+      }
     }
-
-    if (isOnlineRef.current && !activeRideRef.current) {
-      setIncomingRide(ride);
-      setPhase('INCOMING');
-      // Animar entrada — después de state flush
-      setTimeout(animateIncomingIn, 30);
-    }
-  }, [animateIncomingIn]));
+    
+    setIncomingRide(enrichedRide);
+    setPhase('INCOMING');
+    setTimeout(animateIncomingIn, 30);
+    if (typeof ack === 'function') ack({ received: true, driverId: user?._id });
+  }, [animateIncomingIn, user?._id]));
 
   // Mantener compatibilidad si se emite por el MatchingService en la anterior version
   useRideSocketEvent('new_trip', useCallback((ride) => {
@@ -296,6 +349,34 @@ export default function DriverDashboard() {
   }, []));
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  const openNavigation = useCallback((lat: number, lng: number, label: string) => {
+    const schemes = [
+      `waze://?ll=${lat},${lng}&navigate=yes`,
+      `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`,
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,
+    ];
+
+    Alert.alert(
+      'Navegar',
+      `¿Con qué app quieres navegar a ${label}?`,
+      [
+        {
+          text: 'Waze',
+          onPress: () => Linking.openURL(schemes[0]).catch(() =>
+            Linking.openURL(schemes[2])
+          ),
+        },
+        {
+          text: 'Google Maps',
+          onPress: () => Linking.openURL(schemes[1]).catch(() =>
+            Linking.openURL(schemes[2])
+          ),
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    );
+  }, []);
+
   const toggleOnline = useCallback(async () => {
     if (!onboardingComplete) {
       Alert.alert(t('driver.financialRequired'), t('driver.financialRequiredMsg'));
@@ -378,7 +459,7 @@ export default function DriverDashboard() {
     }
   }, [activeRide, user]);
 
-  const handleRatePassenger = useCallback(async (score: number) => {
+  const handleRatePassenger = useCallback(async (score: number, comment: string) => {
     if (completedRide) {
        try {
            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -388,6 +469,9 @@ export default function DriverDashboard() {
              fromUserId: user?._id,
              score,
            });
+           if (comment) {
+               await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
+           }
        } catch (error: any) {
            Alert.alert(t('driver.ratingError'), error.message);
        }
@@ -437,7 +521,7 @@ export default function DriverDashboard() {
     ? ['10%', '70%', '92%']
     : ['10%', '38%', '60%']; // ACTIVE phases — compact
 
-  const hasActiveSheet = phase !== 'IDLE';
+  const hasActiveSheet = phase !== 'IDLE' || isOnline;
 
   // ─── RENDER ───────────────────────────────────────────────────────────────
   return (
@@ -478,22 +562,29 @@ export default function DriverDashboard() {
           <Text style={styles.driverName}>{user?.name}</Text>
         </View>
 
-        {/* Toggle ONLINE — grande, claro */}
-        {/* BUG 3 FIX: Solo el Switch dispara toggleOnline, TouchableOpacity es solo contenedor visual */}
+        {/* Toggle ONLINE — grande, Módulo 1 */}
         <TouchableOpacity
-          style={[styles.onlineToggle, isOnline ? styles.onlineToggleActive : styles.onlineToggleInactive]}
+          onPress={() => {
+            toggleScale.value = withSequence(withTiming(0.92, { duration: 80 }), withSpring(1, { damping: 14 }));
+            toggleOnline();
+          }}
           activeOpacity={1}
         >
-          <Text style={[styles.onlineToggleText, isOnline && styles.onlineToggleTextActive]}>
-            {isOnline ? 'EN LÍNEA' : 'CONECTAR'}
-          </Text>
-          <Switch
-            trackColor={{ false: 'transparent', true: 'rgba(255,255,255,0.35)' }}
-            thumbColor={isOnline ? theme.colors.text : theme.colors.border}
-            onValueChange={toggleOnline}
-            value={isOnline}
-            style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
-          />
+          <Animated.View style={[styles.onlineToggleNew, toggleBgStyle, toggleBorderStyle]}>
+            <View style={styles.onlineToggleDot}>
+              <View style={[styles.onlineDotInner, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.textMuted }]} />
+            </View>
+            <View style={styles.onlineToggleTextBlock}>
+              <Text style={[styles.onlineToggleLabelNew, { color: isOnline ? theme.colors.primaryText : theme.colors.textSecondary }]}>
+                {isOnline ? 'EN LÍNEA' : 'CONECTAR'}
+              </Text>
+              <Text style={[styles.onlineToggleSubNew, { color: isOnline ? `${theme.colors.primaryText}99` : theme.colors.textMuted }]}>
+                {isOnline ? 'Recibiendo viajes' : 'Toca para activar'}
+              </Text>
+            </View>
+            {/* Indicador LED */}
+            <View style={[styles.ledDot, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.border }]} />
+          </Animated.View>
         </TouchableOpacity>
       </View>
 
@@ -528,6 +619,33 @@ export default function DriverDashboard() {
             keyboardShouldPersistTaps="handled"
           >
 
+            {/* ═══ IDLE ONLINE — esperando viajes ══════════════════════════════ */}
+            {phase === 'IDLE' && isOnline && (
+              <View style={styles.idleOnlineContainer}>
+                {/* Stats rápidos del día */}
+                <View style={styles.idleStatsRow}>
+                  <View style={styles.idleStatCard}>
+                    <Text style={styles.idleStatValue}>{todayTrips ?? 0}</Text>
+                    <Text style={styles.idleStatLabel}>Viajes hoy</Text>
+                  </View>
+                  <View style={[styles.idleStatCard, styles.idleStatCardCenter]}>
+                    <Text style={[styles.idleStatValue, { color: theme.colors.primary }]}>
+                      MX${todayEarnings?.toFixed(0) ?? '0'}
+                    </Text>
+                    <Text style={styles.idleStatLabel}>Ganado hoy</Text>
+                  </View>
+                  <View style={styles.idleStatCard}>
+                    <Text style={styles.idleStatValue}>{user?.avgRating?.toFixed(1) ?? '—'}</Text>
+                    <Text style={styles.idleStatLabel}>⭐ Rating</Text>
+                  </View>
+                </View>
+                <Text style={styles.idleWaitText}>Esperando solicitudes de viaje...</Text>
+                <View style={styles.idleDotsRow}>
+                  {[0, 1, 2].map(i => <PulsingDot key={i} delay={i * 300} color={theme.colors.primary} />)}
+                </View>
+              </View>
+            )}
+
             {/* ═══ INCOMING RIDE ═══════════════════════════════════════ */}
             {(phase === 'INCOMING' || phase === 'BID_SENT') && incomingRide && (
               <Animated.View style={incomingAnimStyle}>
@@ -549,9 +667,29 @@ export default function DriverDashboard() {
                   <>
                     {/* Cabecera del viaje */}
                     <View style={styles.rideHeader}>
-                      <View>
-                        <Text style={styles.rideSectionLabel}>{t('driver.newRide')}</Text>
-                        <Text style={styles.passengerName}>{incomingRide.passenger?.name ?? t('driver.passenger')}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View>
+                          {/* Avatar del pasajero — con fallback a iniciales */}
+                          {incomingRide?.passenger?.avatarUrl || incomingRide?.passenger?.profilePhoto ? (
+                            <Image
+                              source={{ uri: incomingRide.passenger.avatarUrl || incomingRide.passenger.profilePhoto }}
+                              style={styles.passengerAvatar}
+                            />
+                          ) : (
+                            <View style={styles.passengerAvatarFallback}>
+                              <Text style={styles.passengerAvatarInitial}>
+                                {(incomingRide?.passenger?.name || 'P').charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                          <View style={styles.passengerVerifiedBadge}>
+                            <Ionicons name="checkmark-circle" size={16} color={theme.colors.success} />
+                          </View>
+                        </View>
+                        <View>
+                          <Text style={styles.rideSectionLabel}>{t('driver.newRide')}</Text>
+                          <Text style={styles.passengerName}>{incomingRide.passenger?.name ?? t('driver.passenger')}</Text>
+                        </View>
                       </View>
                       <View style={styles.priceTag}>
                         <Text style={styles.priceAmount}>{formatPrice(incomingRide.proposedPrice)}</Text>
@@ -648,118 +786,105 @@ export default function DriverDashboard() {
 
             {/* ═══ ACTIVE RIDE ══════════════════════════════════════════ */}
             {activeRide && (phase === 'ACCEPTED' || phase === 'ARRIVED' || phase === 'IN_PROGRESS') && (
-              <View style={styles.activeRideContainer}>
+              <View style={styles.activeRideCard}>
 
-                {/* Fase actual */}
-                <StatusBadge
-                  variant={phase === 'IN_PROGRESS' ? 'active' : 'searching'}
-                  label={
-                    phase === 'ACCEPTED'    ? t('driver.goingToPassenger')  :
-                    phase === 'ARRIVED'     ? t('driver.passengerWaiting') :
-                    t('driver.enRouteDestination')
-                  }
-                  style={styles.activeBadge}
-                />
+                {/* Barra de progreso del viaje — 3 pasos */}
+                <View style={styles.tripProgressBar}>
+                  {(['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'] as const).map((p, i) => {
+                    const phases = ['ACCEPTED', 'ARRIVED', 'IN_PROGRESS'];
+                    const currentIdx = phases.indexOf(phase);
+                    const isDone = i < currentIdx;
+                    const isActive = i === currentIdx;
+                    return (
+                      <React.Fragment key={p}>
+                        <View style={[
+                          styles.tripStep,
+                          isDone && styles.tripStepDone,
+                          isActive && styles.tripStepActive,
+                        ]}>
+                          <Text style={[styles.tripStepNum, (isDone || isActive) && styles.tripStepNumActive]}>
+                            {isDone ? '✓' : String(i + 1)}
+                          </Text>
+                        </View>
+                        {i < 2 && (
+                          <View style={[styles.tripStepLine, isDone && styles.tripStepLineDone]} />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </View>
 
-                {/* Dirección objetivo */}
-                <Text style={styles.activeDestLabel}>
-                  {phase === 'IN_PROGRESS' ? t('driver.destinationLabel') : t('driver.pickupAt')}
+                {/* Destino actual */}
+                <Text style={styles.activePhaseLabelNew}>
+                  {phase === 'ACCEPTED' ? '📍 Recogiendo pasajero' :
+                   phase === 'ARRIVED'  ? '🧍 Pasajero esperando' :
+                                          '🏁 En camino al destino'}
                 </Text>
-                <Text style={styles.activeDestAddress} numberOfLines={2}>
+                <Text style={styles.activeAddressNew} numberOfLines={2}>
                   {phase === 'IN_PROGRESS'
                     ? activeRide.dropoffLocation?.address
                     : activeRide.pickupLocation?.address}
                 </Text>
 
-                {/* Live distance + ETA */}
-                {activeMetrics.dist != null && activeMetrics.eta != null && (
-                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 24, marginTop: 12, marginBottom: 4 }}>
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.primary }}>{activeMetrics.dist.toFixed(1)} km</Text>
-                      <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.distance')}</Text>
+                {/* Métricas live */}
+                {activeMetrics.dist != null && (
+                  <View style={styles.activeMetricsRow}>
+                    <View style={styles.activeMetric}>
+                      <Text style={styles.activeMetricVal}>{activeMetrics.dist.toFixed(1)}</Text>
+                      <Text style={styles.activeMetricUnit}>km</Text>
                     </View>
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: 20, fontWeight: '800', color: theme.colors.text }}>{activeMetrics.eta} min</Text>
-                      <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary }}>{t('driver.estTime')}</Text>
+                    <View style={styles.activeMetricDivider} />
+                    <View style={styles.activeMetric}>
+                      <Text style={styles.activeMetricVal}>{activeMetrics.eta}</Text>
+                      <Text style={styles.activeMetricUnit}>min</Text>
+                    </View>
+                    <View style={styles.activeMetricDivider} />
+                    <View style={styles.activeMetric}>
+                      <Text style={[styles.activeMetricVal, { color: theme.colors.primary }]}>
+                        MX${(activeRide.proposedPrice * 0.80).toFixed(0)}
+                      </Text>
+                      <Text style={styles.activeMetricUnit}>ganancia</Text>
                     </View>
                   </View>
                 )}
 
-                {/* Navigate button — opens native maps */}
-                {(phase === 'ACCEPTED' || phase === 'ARRIVED') && (
-                  <TouchableOpacity
-                    style={[styles.chatQuickBtn, { backgroundColor: theme.colors.primaryLight, marginBottom: 8 }]}
-                    onPress={() => {
-                      const pickup = activeRide?.pickupLocation;
-                      const lat = pickup?.latitude ?? pickup?.lat;
-                      const lng = pickup?.longitude ?? pickup?.lng;
-                      if (!lat || !lng) return;
-                      const url = Platform.OS === 'ios'
-                        ? `http://maps.apple.com/?daddr=${lat},${lng}`
-                        : `google.navigation:q=${lat},${lng}`;
-                      Linking.openURL(url);
-                    }}
-                  >
-                    <Text style={[styles.chatQuickText, { color: theme.colors.primary }]}>📍 {t('ride.navigate')} → {t('driver.passenger')}</Text>
-                  </TouchableOpacity>
-                )}
-                {phase === 'IN_PROGRESS' && (
-                  <TouchableOpacity
-                    style={[styles.chatQuickBtn, { backgroundColor: theme.colors.primaryLight, marginBottom: 8 }]}
-                    onPress={() => {
-                      const dropoff = activeRide?.dropoffLocation;
-                      const lat = dropoff?.latitude ?? dropoff?.lat;
-                      const lng = dropoff?.longitude ?? dropoff?.lng;
-                      if (!lat || !lng) return;
-                      const url = Platform.OS === 'ios'
-                        ? `http://maps.apple.com/?daddr=${lat},${lng}`
-                        : `google.navigation:q=${lat},${lng}`;
-                      Linking.openURL(url);
-                    }}
-                  >
-                    <Text style={[styles.chatQuickText, { color: theme.colors.primary }]}>📍 {t('ride.navigate')} → {t('driver.destinationLabel')}</Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* Botón de acción grande — UNA sola acción a la vez */}
-                {phase === 'ACCEPTED' && (
-                  <Button
-                    label={t('driver.arrivedAtPoint')}
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    onPress={() => handleAdvance('ARRIVED')}
-                    style={styles.advanceBtn}
-                  />
-                )}
-                {phase === 'ARRIVED' && (
-                  <Button
-                    label={t('driver.startRide')}
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    onPress={() => handleAdvance('IN_PROGRESS')}
-                    style={styles.advanceBtn}
-                  />
-                )}
-                {phase === 'IN_PROGRESS' && (
-                  <Button
-                    label={t('driver.finishRide')}
-                    variant="success"
-                    size="lg"
-                    fullWidth
-                    onPress={() => handleAdvance('COMPLETED')}
-                    style={styles.advanceBtn}
-                  />
-                )}
-
-                {/* Chat — acceso rápido, no prominente */}
+                {/* Botones navegar */}
                 <TouchableOpacity
-                  style={styles.chatQuickBtn}
-                  onPress={() => setChatVisible(true)}
+                  style={styles.navigateBtnNew}
+                  onPress={() => {
+                    const target = phase === 'IN_PROGRESS' ? activeRide.dropoffLocation : activeRide.pickupLocation;
+                    const lat = target?.latitude ?? target?.coordinates?.[1];
+                    const lng = target?.longitude ?? target?.coordinates?.[0];
+                    if (!lat || !lng) return;
+                    const dest = `${lat},${lng}`;
+                    Alert.alert('Navegar con', '', [
+                      { text: 'Google Maps', onPress: () => Linking.openURL(Platform.OS === 'ios' ? `comgooglemaps://?daddr=${dest}&directionsmode=driving` : `google.navigation:q=${dest}&mode=d`).catch(() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${dest}`)) },
+                      Platform.OS === 'ios' && { text: 'Apple Maps', onPress: () => Linking.openURL(`maps://maps.apple.com/?daddr=${dest}`) } as any,
+                      { text: 'Waze', onPress: () => Linking.openURL(`waze://?ll=${dest}&navigate=yes`).catch(() => {}) },
+                      { text: 'Cancelar', style: 'cancel' },
+                    ].filter(Boolean) as any);
+                  }}
+                  activeOpacity={0.85}
                 >
-                  <Text style={styles.chatQuickText}>{t('driver.messagePassenger')}</Text>
+                  <Ionicons name="navigate" size={18} color={theme.colors.primaryText} />
+                  <Text style={styles.navigateBtnText}>
+                    {phase === 'IN_PROGRESS' ? 'Navegar al destino' : 'Navegar al pasajero'}
+                  </Text>
                 </TouchableOpacity>
+
+                {/* Acción principal */}
+                <View style={styles.activeActionsRow}>
+                  <TouchableOpacity style={styles.chatBtnSmall} onPress={() => setChatVisible(true)}>
+                    <Ionicons name="chatbubble-outline" size={18} color={theme.colors.primary} />
+                  </TouchableOpacity>
+                  <Button
+                    label={phase === 'ACCEPTED' ? 'Llegué al punto de recogida' : phase === 'ARRIVED' ? 'Iniciar viaje' : 'Finalizar viaje'}
+                    variant={phase === 'IN_PROGRESS' ? 'success' : 'primary'}
+                    size="lg"
+                    style={{ flex: 1 }}
+                    onPress={() => handleAdvance(phase === 'ACCEPTED' ? 'ARRIVED' : phase === 'ARRIVED' ? 'IN_PROGRESS' : 'COMPLETED')}
+                  />
+                </View>
               </View>
             )}
 
@@ -1005,5 +1130,36 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     ...theme.typography.body,
     color: theme.colors.textSecondary,
     fontSize: 14,
+  },
+  passengerAvatar: {
+    width: 64, height: 64, borderRadius: 32,
+    borderWidth: 2.5, borderColor: theme.colors.primary,
+  },
+  passengerAvatarFallback: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: theme.colors.primaryLight,
+    borderWidth: 2.5, borderColor: theme.colors.primary,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  passengerAvatarInitial: {
+    fontSize: 26, fontWeight: '700', color: theme.colors.primary,
+  },
+  passengerVerifiedBadge: {
+    position: 'absolute', bottom: -2, right: -2,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 10,
+  },
+  navButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 14, paddingHorizontal: 20,
+    borderRadius: theme.borderRadius.pill,
+    marginVertical: theme.spacing.s, gap: 8,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
+  },
+  navButtonText: {
+    fontSize: 16, fontWeight: '700', color: theme.colors.primaryText,
   },
 });

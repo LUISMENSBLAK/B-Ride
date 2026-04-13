@@ -1,82 +1,55 @@
-import { useEffect, useState, useCallback } from 'react';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
+import { useState, useCallback } from 'react';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import auth from '@react-native-firebase/auth';
 import client from '../api/client';
 
-// Required for Expo AuthSession to close the browser after redirect
-WebBrowser.maybeCompleteAuthSession();
+// WEB_CLIENT_ID: se obtiene de Firebase Console → Authentication → Google → 
+// Web SDK configuration → Web client ID
+// También está en google-services.json como "client_id" con "client_type": 3
+const WEB_CLIENT_ID = 'TU_WEB_CLIENT_ID.apps.googleusercontent.com';
 
-const GOOGLE_CLIENT_ID_WEB = '1098776842-dummy.apps.googleusercontent.com'; // Replace with real Web Client ID
-const GOOGLE_CLIENT_ID_IOS = 'com.googleusercontent.apps.1098776842-ios'; // Replace with real iOS Client ID
-
-// Discovery document for Google OAuth
-const discovery = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
-};
-
-interface GoogleUser {
-  email: string;
-  name: string;
-  picture?: string;
-  sub: string;
-}
+GoogleSignin.configure({
+  webClientId: WEB_CLIENT_ID,
+  offlineAccess: true,
+  scopes: ['profile', 'email'],
+});
 
 export function useGoogleAuth() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [request, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_CLIENT_ID_WEB,
-      iosClientId: GOOGLE_CLIENT_ID_IOS,
-      scopes: ['openid', 'profile', 'email'],
-      responseType: AuthSession.ResponseType.Token,
-      redirectUri: AuthSession.makeRedirectUri({
-        scheme: 'bride',
-      }),
-    },
-    discovery
-  );
 
   const handleGoogleLogin = useCallback(async () => {
-    setError(null);
     setLoading(true);
     try {
-      const result = await promptAsync();
-      if (result.type === 'success') {
-        const { access_token } = result.params;
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const userInfo = await GoogleSignin.signIn();
+      const { idToken } = await GoogleSignin.getTokens();
 
-        // Fetch user info from Google
-        const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${access_token}` },
-        });
-        const userInfo: GoogleUser = await userInfoResponse.json();
+      if (!idToken) throw new Error('No se obtuvo el ID token de Google.');
 
-        // Send to our backend
-        const backendResponse = await client.post('/auth/google', {
-          email: userInfo.email,
-          name: userInfo.name,
-          googleId: userInfo.sub,
-          avatarUrl: userInfo.picture,
-          accessToken: access_token,
-        });
+      // Autenticar en Firebase con el token de Google
+      const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      const userCredential = await auth().signInWithCredential(googleCredential);
+      
+      // Obtener Firebase ID Token para el backend
+      const firebaseToken = await userCredential.user.getIdToken();
 
-        setLoading(false);
-        return backendResponse.data;
-      } else if (result.type === 'cancel' || result.type === 'dismiss') {
-        setLoading(false);
-        return null;
-      }
-    } catch (e: any) {
-      setError(e.message || 'Error con Google Sign-In');
+      // Sincronizar con el backend de B-Ride
+      const backendResponse = await client.post('/auth/firebase-sync', {
+        name: userCredential.user.displayName,
+        avatarUrl: userCredential.user.photoURL,
+      }, {
+        headers: { Authorization: `Bearer ${firebaseToken}` }
+      });
+
       setLoading(false);
-      throw e;
+      return backendResponse.data;
+    } catch (error: any) {
+      setLoading(false);
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) return null;
+      if (error.code === statusCodes.IN_PROGRESS) return null;
+      throw error;
     }
-    setLoading(false);
-    return null;
-  }, [promptAsync]);
+  }, []);
 
-  return { handleGoogleLogin, loading, error, ready: !!request };
+  return { handleGoogleLogin, loading, ready: true };
 }

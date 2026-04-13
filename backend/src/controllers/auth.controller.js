@@ -66,10 +66,7 @@ const verifyEmail = async (req, res) => {
         const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(code, user.emailVerificationToken);
         
-        // [DEV MODE BYPASS] Permitir cualquier código para pruebas si no estamos en producción
-        if (!isMatch && process.env.NODE_ENV !== 'production') {
-            console.log(`[DEV BYPASS] Código de email '${code}' aceptado incondicionalmente para pruebas.`);
-        } else if (!isMatch) {
+        if (!isMatch) {
             return res.status(400).json({ success: false, message: 'Invalid code' });
         }
 
@@ -742,3 +739,42 @@ module.exports.deleteAccount = deleteAccount;
 module.exports.getReferral = getReferral;
 module.exports.googleLogin = googleLogin;
 module.exports.appleLogin = appleLogin;
+
+/**
+ * firebaseSync
+ * Llamado desde el frontend inmediatamente después de un signIn con Firebase.
+ * Sincroniza/crea el usuario en MongoDB y devuelve el perfil completo.
+ */
+const firebaseSync = async (req, res) => {
+  try {
+    const user = req.user; // Ya resuelto por el middleware protect
+    
+    // Actualizar datos del perfil si vienen en el body (primer login con OAuth)
+    const { name, avatarUrl, phoneNumber, role } = req.body;
+    
+    if (name && !user.name) user.name = name;
+    if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
+    if (phoneNumber && !user.phoneNumber) user.phoneNumber = phoneNumber;
+    if (role && user.role === 'USER') user.role = role;
+    
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        _id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarUrl,
+        phoneNumber: user.phoneNumber,
+        isEmailVerified: user.isEmailVerified,
+        approvalStatus: user.driverApprovalStatus || user.approvalStatus,
+      }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+module.exports.firebaseSync = firebaseSync;

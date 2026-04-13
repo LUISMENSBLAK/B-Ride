@@ -4,8 +4,14 @@ const paymentService = require('./payment.service');
 
 class RideService {
     async createRideRequest(passengerId, pickupLocation, dropoffLocation, proposedPrice, options = {}) {
-        const { isScheduled = false, scheduledAt = null, promoCode = null } = options;
+        const { isScheduled = false, scheduledAt = null, promoCode = null, vehicleCategory = 'ECONOMY' } = options;
         
+        const pricingService = require('./pricing.service');
+        const MIN_ALLOWED_USD = 1.00; // $17.5 MXN mínimo absoluto
+        if (proposedPrice < MIN_ALLOWED_USD) {
+            throw new Error(`El precio mínimo es ${pricingService.convertAmount(MIN_ALLOWED_USD, 'MXN').toFixed(0)} MXN. Por favor ofrece un precio justo.`);
+        }
+
         // Wrapper de compatibilidad hacia GeoJSON
         const geoPickup = {
              latitude: pickupLocation.latitude,
@@ -55,6 +61,7 @@ class RideService {
             discountApplied: finalDiscount,
             status: isScheduled ? 'SCHEDULED' : 'REQUESTED',
             version: 1,
+            vehicleCategory,
             pricingMeta: {
                 surgeMultiplier,
                 zoneId,

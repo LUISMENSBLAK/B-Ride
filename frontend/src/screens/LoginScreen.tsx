@@ -118,7 +118,7 @@ export default function LoginScreen({ navigation }: any) {
                           ) : (
                             <>
                               <Image 
-                                source={{ uri: 'https://developers.google.com/identity/images/g-logo.png' }}
+                                source={require('../../assets/google-logo.png')}
                                 style={styles.googleImage} 
                               />
                               <Text style={styles.googleBtnText}>Continuar con Google</Text>
@@ -279,7 +279,7 @@ const getStyles = (theme: any) => StyleSheet.create({
         marginBottom: theme.spacing.xl,
     },
     input: {
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.surfaceHigh,
         padding: 16,
         borderRadius: theme.borderRadius.m,
         marginBottom: theme.spacing.m,

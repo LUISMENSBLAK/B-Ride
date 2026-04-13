@@ -1,6 +1,6 @@
 import { useAppTheme } from '../hooks/useAppTheme';
 import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
 import { theme } from '../theme';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -8,7 +8,7 @@ interface RatingModalProps {
   visible: boolean;
   targetName: string;
   isDriver?: boolean;
-  onSubmit: (score: number) => void;
+  onSubmit: (score: number, comment: string) => void;
   onSkip: () => void;
 }
 
@@ -19,17 +19,20 @@ export const RatingModal = memo(({
   const { t } = useTranslation();
 
   const [selected, setSelected] = useState(0);
+  const [comment, setComment] = useState('');
 
   // When closing, reset selection
   const handleSkip = () => {
     setSelected(0);
+    setComment('');
     onSkip();
   };
 
   const handleSubmit = () => {
     if (selected > 0) {
-      onSubmit(selected);
+      onSubmit(selected, comment);
       setSelected(0);
+      setComment('');
     }
   };
 
@@ -48,6 +51,19 @@ export const RatingModal = memo(({
               </TouchableOpacity>
             ))}
           </View>
+
+          {selected > 0 && (
+            <TextInput
+              style={styles.commentInput}
+              placeholder={t('rating.leaveComment', { defaultValue: 'Deja un comentario (opcional)' })}
+              placeholderTextColor={theme.colors.textMuted}
+              value={comment}
+              onChangeText={setComment}
+              multiline
+              maxLength={300}
+            />
+          )}
+
           <TouchableOpacity
             style={[styles.submitBtn, !selected && styles.submitBtnDisabled]}
             onPress={handleSubmit}
@@ -128,5 +144,17 @@ const getStyles = (theme: any) => StyleSheet.create({
   skipText: {
     ...theme.typography.bodyMuted,
     textDecorationLine: 'underline',
+  },
+  commentInput: {
+    width: '100%',
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
+    color: theme.colors.text,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: theme.spacing.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
 });

@@ -44,20 +44,50 @@ router.post('/schedule', protect, async (req, res) => {
 router.post('/:rideId/sos', protect, require('../controllers/ride.controller').sosTrigger);
 
 // Estimate Price con Surge Module (Desacoplado)
-router.post('/estimate', protect, (req, res) => {
-    try {
-        const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.body;
-        
-        if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
-            return res.status(400).json({ error: 'Faltan coordenadas requeridas (pickupLat, pickupLng, dropoffLat, dropoffLng)' });
-        }
-        
-        const estimate = pricingService.estimateRide(pickupLat, pickupLng, dropoffLat, dropoffLng);
-        res.status(200).json({ success: true, data: estimate });
-    } catch (e) {
-        console.error('[Pricing] Failed to calculate estimate:', e.message);
-        res.status(500).json({ error: 'Failed to calculate estimate' });
+router.get('/estimate', protect, async (req, res) => {
+  try {
+    const { pickupLat, pickupLng, dropoffLat, dropoffLng } = req.query;
+    if (!pickupLat || !pickupLng || !dropoffLat || !dropoffLng) {
+      return res.status(400).json({ success: false, message: 'Coordenadas incompletas' });
     }
+    const pricingService = require('../services/pricing.service');
+    const result = pricingService.estimateAllCategories(
+      parseFloat(pickupLat), parseFloat(pickupLng),
+      parseFloat(dropoffLat), parseFloat(dropoffLng)
+    );
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+router.post('/:rideId/comment', protect, async (req, res) => {
+  try {
+    const { text, tags } = req.body;
+    const ride = await require('../models/Ride').findById(req.params.rideId);
+    
+    if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
+    if (ride.status !== 'COMPLETED') return res.status(400).json({ success: false, message: 'Solo puedes comentar viajes completados' });
+
+    const userId = req.user._id.toString();
+    const isPassenger = ride.passenger.toString() === userId;
+    const isDriver    = ride.driver?.toString() === userId;
+
+    if (!isPassenger && !isDriver) {
+      return res.status(403).json({ success: false, message: 'No eres parte de este viaje' });
+    }
+
+    if (isPassenger) {
+      ride.passengerComment = { text, tags: tags || [], postedAt: new Date() };
+    } else {
+      ride.driverComment = { text, tags: tags || [], postedAt: new Date() };
+    }
+
+    await ride.save();
+    res.json({ success: true, message: 'Comentario guardado' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
 });
 
 module.exports = router;

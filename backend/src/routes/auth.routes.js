@@ -53,4 +53,7 @@ router.post('/profile/avatar', protect, upload.single('avatar'), require('../con
 // V1/V2/S4/UX-B: Actualizar perfil (vehículo, contacto emergencia, direcciones, etc.)
 router.put('/profile', protect, require('../controllers/auth.controller').updateProfile);
 
+// Firebase Auth sync — llamado tras signIn exitoso en el frontend
+router.post('/firebase-sync', require('../middlewares/auth.middleware').protect, require('../controllers/auth.controller').firebaseSync);
+
 module.exports = router;

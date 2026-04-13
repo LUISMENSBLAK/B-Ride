@@ -123,9 +123,25 @@ class MatchingService {
                 return;
             }
 
+            // Si no está populado, popularlo aquí:
+            let rideWithPassenger = rideObj;
+            if (typeof rideObj.passenger === 'string' || rideObj.passenger instanceof require('mongoose').Types.ObjectId) {
+                const Ride = require('../models/Ride');
+                rideWithPassenger = await Ride.findById(rideObj._id)
+                    .populate('passenger', 'name avatarUrl profilePhoto avgRating')
+                    .lean();
+            }
+
             // Emitir evento a los conductores encontrados
+            const { getDriverRoom } = require('../utils/getDriverRoom');
             for (const { driver } of drivers) {
-                 io.to(driver._id.toString()).emit('new_ride_request', rideObj);
+                 io.to(driver._id.toString()).emit('ride:incoming', rideWithPassenger);
+                 
+                 // Fallback: emitir también por geohash room por si el personal falló
+                 if (rideObj.pickupLocation?.latitude && rideObj.pickupLocation?.longitude) {
+                   const geoRoom = getDriverRoom(rideObj.pickupLocation.latitude, rideObj.pickupLocation.longitude);
+                   io.to(geoRoom).emit('ride:incoming', rideWithPassenger);
+                 }
             }
         } catch (error) {
             console.error('[MatchingService] Error en campaign:', error.message);

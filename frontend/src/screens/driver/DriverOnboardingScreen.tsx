@@ -3,6 +3,11 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   ScrollView, Alert, Platform, ActivityIndicator, SafeAreaView, Image
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withSequence,
+  withTiming, withRepeat,
+} from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { useTranslation } from '../../hooks/useTranslation';
@@ -11,6 +16,14 @@ import client from '../../api/client';
 
 type Step = 'PROFILE_PHOTO' | 'VEHICLE' | 'LICENSE' | 'REGISTRATION' | 'WAITING';
 
+const STEPS: Step[] = ['PROFILE_PHOTO', 'VEHICLE', 'LICENSE', 'REGISTRATION', 'WAITING'];
+const STEP_LABELS: Record<Step, string> = {
+  PROFILE_PHOTO: 'Foto',
+  VEHICLE: 'Vehículo',
+  LICENSE: 'Licencia',
+  REGISTRATION: 'Registro',
+  WAITING: 'Revisión',
+};
 export default function DriverOnboardingScreen() {
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -24,6 +37,21 @@ export default function DriverOnboardingScreen() {
 
   const [step, setStep] = useState<Step>(initialStep);
   const [loading, setLoading] = useState(false);
+
+  const pulseScale = useSharedValue(1);
+  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulseScale.value }] }));
+  
+  React.useEffect(() => {
+    if (step === 'WAITING') {
+      pulseScale.value = withRepeat(
+        withSequence(
+          withTiming(1.08, { duration: 800 }),
+          withTiming(1.0, { duration: 800 }),
+        ),
+        -1, true
+      );
+    }
+  }, [step]);
 
   // Profile Photo
   const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
@@ -128,16 +156,19 @@ export default function DriverOnboardingScreen() {
     <View>
       <Text style={styles.stepTitle}>Paso 1: Foto de Perfil</Text>
       <Text style={styles.bodyText}>Sube una foto clara de tu rostro. Es necesaria para generar confianza en tus viajes.</Text>
-      <TouchableOpacity style={[styles.uploadBox, { aspectRatio: 1, borderRadius: 100 }]} onPress={() => pickImage(setProfilePhotoUri, [1,1])}>
-        {profilePhotoUri ? (
-             <Image source={{uri: profilePhotoUri}} style={{width: 150, height: 150, borderRadius: 75}} />
-        ) : (
-            <>
-                <Text style={styles.uploadIcon}>👤</Text>
-                <Text style={styles.uploadText}>Subir foto circular</Text>
-            </>
-        )}
-      </TouchableOpacity>
+      {profilePhotoUri ? (
+        <View style={styles.photoPreviewContainer}>
+          <Image source={{ uri: profilePhotoUri }} style={styles.photoPreview} />
+          <TouchableOpacity style={styles.photoChangeBtn} onPress={() => pickImage(setProfilePhotoUri, [1,1])}>
+            <Text style={styles.photoChangeBtnText}>Cambiar foto</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.photoPickerBtn} onPress={() => pickImage(setProfilePhotoUri, [1,1])}>
+          <Ionicons name="camera-outline" size={32} color={theme.colors.primary} />
+          <Text style={styles.photoPickerText}>Subir foto de perfil</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -159,14 +190,33 @@ export default function DriverOnboardingScreen() {
       <Text style={styles.stepTitle}>Paso 3: Licencia de Conducir</Text>
       <TextInput style={styles.input} placeholder="Nº de Licencia" placeholderTextColor={theme.colors.inputPlaceholder} value={licenseNumber} onChangeText={setLicenseNumber} />
       <View style={styles.row}>
-          <TouchableOpacity style={[styles.uploadBox, styles.halfInput]} onPress={() => pickImage(setLicenseFrontUri)}>
-            <Text style={styles.uploadIcon}>{licenseFrontUri ? '✅' : '📷'}</Text>
-            <Text style={styles.uploadText}>Frente</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.uploadBox, styles.halfInput]} onPress={() => pickImage(setLicenseBackUri)}>
-            <Text style={styles.uploadIcon}>{licenseBackUri ? '✅' : '📷'}</Text>
-            <Text style={styles.uploadText}>Dorso</Text>
-          </TouchableOpacity>
+          {licenseFrontUri ? (
+            <View style={[styles.photoPreviewContainer, styles.halfInput]}>
+              <Image source={{ uri: licenseFrontUri }} style={styles.photoPreview} />
+              <TouchableOpacity style={styles.photoChangeBtn} onPress={() => pickImage(setLicenseFrontUri)}>
+                <Text style={styles.photoChangeBtnText}>Cambiar foto</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={[styles.photoPickerBtn, styles.halfInput]} onPress={() => pickImage(setLicenseFrontUri)}>
+              <Ionicons name="camera-outline" size={32} color={theme.colors.primary} />
+              <Text style={styles.photoPickerText}>Frente</Text>
+            </TouchableOpacity>
+          )}
+
+          {licenseBackUri ? (
+            <View style={[styles.photoPreviewContainer, styles.halfInput]}>
+              <Image source={{ uri: licenseBackUri }} style={styles.photoPreview} />
+              <TouchableOpacity style={styles.photoChangeBtn} onPress={() => pickImage(setLicenseBackUri)}>
+                <Text style={styles.photoChangeBtnText}>Cambiar foto</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={[styles.photoPickerBtn, styles.halfInput]} onPress={() => pickImage(setLicenseBackUri)}>
+              <Ionicons name="camera-outline" size={32} color={theme.colors.primary} />
+              <Text style={styles.photoPickerText}>Dorso</Text>
+            </TouchableOpacity>
+          )}
       </View>
     </View>
   );
@@ -174,10 +224,19 @@ export default function DriverOnboardingScreen() {
   const renderRegistration = () => (
     <View>
       <Text style={styles.stepTitle}>Paso 4: Permiso de Circulación</Text>
-      <TouchableOpacity style={styles.uploadBox} onPress={() => pickImage(setRegistrationPhotoUri)}>
-        <Text style={styles.uploadIcon}>{registrationPhotoUri ? '✅' : '📸'}</Text>
-        <Text style={styles.uploadText}>Añadir foto del permiso de circulación o seguro operativo.</Text>
-      </TouchableOpacity>
+      {registrationPhotoUri ? (
+        <View style={styles.photoPreviewContainer}>
+          <Image source={{ uri: registrationPhotoUri }} style={styles.photoPreview} />
+          <TouchableOpacity style={styles.photoChangeBtn} onPress={() => pickImage(setRegistrationPhotoUri)}>
+            <Text style={styles.photoChangeBtnText}>Cambiar foto</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.photoPickerBtn} onPress={() => pickImage(setRegistrationPhotoUri)}>
+          <Ionicons name="camera-outline" size={32} color={theme.colors.primary} />
+          <Text style={styles.photoPickerText}>Añadir foto del permiso de circulación o seguro operativo.</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -197,7 +256,9 @@ export default function DriverOnboardingScreen() {
 
     return (
         <View style={styles.centerBox}>
-            <Text style={{fontSize: 50, marginBottom: 10}}>⏳</Text>
+            <Animated.View style={pulseStyle}>
+               <Text style={{fontSize: 50, marginBottom: 10}}>⏳</Text>
+            </Animated.View>
             <Text style={[styles.stepTitle, {textAlign: 'center'}]}>Documentos en Revisión</Text>
             <Text style={[styles.bodyText, {textAlign: 'center'}]}>Nuestro equipo está validando tu identidad. Esto suele demorar menos de 24 hrs. Te notificaremos por Push cuando seas aprobado.</Text>
             <TouchableOpacity style={styles.refreshBtn} onPress={checkAuth} disabled={loading}>
@@ -222,17 +283,44 @@ export default function DriverOnboardingScreen() {
       if (idx === 3) setStep('LICENSE');
   }
 
+  const StepIndicator = () => {
+    const currentIndex = STEPS.indexOf(step);
+    return (
+      <View style={styles.stepperContainer}>
+        {STEPS.map((s, i) => {
+          const isCompleted = i < currentIndex;
+          const isActive = i === currentIndex;
+          return (
+            <React.Fragment key={s}>
+              <View style={[
+                styles.stepDot,
+                isActive && styles.stepDotActive,
+                isCompleted && styles.stepDotCompleted,
+              ]}>
+                {isCompleted
+                  ? <Ionicons name="checkmark" size={12} color={theme.colors.primaryText} />
+                  : <Text style={[styles.stepDotText, isActive && { color: theme.colors.primaryText }]}>
+                      {i + 1}
+                    </Text>
+                }
+              </View>
+              {i < STEPS.length - 1 && (
+                <View style={[styles.stepLine, (isCompleted) && styles.stepLineCompleted]} />
+              )}
+            </React.Fragment>
+          );
+        })}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         
         {step !== 'WAITING' && (
             <>
-              <View style={styles.progressContainer}>
-                {[0, 1, 2, 3].map(i => (
-                  <View key={i} style={[styles.progressDot, i <= getStepIndex() && styles.progressDotActive]} />
-                ))}
-              </View>
+              <StepIndicator />
               <Text style={styles.header}>Onboarding Conductores</Text>
             </>
         )}
@@ -296,4 +384,42 @@ const getStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center', marginTop: 30, borderWidth: 1, borderColor: theme.colors.border, width: '100%'
   },
   refreshBtnText: { ...theme.typography.body, fontWeight: '600', color: theme.colors.text },
+  stepperContainer: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: theme.spacing?.l || 20, marginBottom: theme.spacing?.xl || 30,
+  },
+  stepDot: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: theme.colors.surfaceHigh || '#F3F4F6',
+    borderWidth: 1.5, borderColor: theme.colors.border,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  stepDotActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  stepDotCompleted: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  stepDotText: { fontSize: 12, fontWeight: '600', color: theme.colors.textMuted },
+  stepLine: { flex: 1, height: 1.5, backgroundColor: theme.colors.border },
+  stepLineCompleted: { backgroundColor: theme.colors.primary },
+  photoPreviewContainer: { alignItems: 'center', marginBottom: theme.spacing?.l || 20 },
+  photoPreview: {
+    width: 120, height: 120, borderRadius: 60,
+    borderWidth: 3, borderColor: theme.colors.primary,
+  },
+  photoChangeBtn: {
+    marginTop: theme.spacing?.m || 10, padding: 8,
+  },
+  photoChangeBtnText: { color: theme.colors.link || theme.colors.primary, fontWeight: '600', fontSize: 14 },
+  photoPickerBtn: {
+    height: 120, backgroundColor: theme.colors.surfaceHigh || '#F3F4F6',
+    borderRadius: theme.borderRadius?.l || 16, borderWidth: 1.5,
+    borderColor: theme.colors.border, borderStyle: 'dashed',
+    justifyContent: 'center', alignItems: 'center', gap: 8,
+    marginBottom: theme.spacing?.l || 20,
+  },
+  photoPickerText: { color: theme.colors.textMuted, fontSize: 14, fontWeight: '500' },
 });

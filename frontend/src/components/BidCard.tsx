@@ -6,7 +6,7 @@
  */
 import React, { memo, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator,
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image
 } from 'react-native';
 import Animated, {
   FadeInDown, Layout,
@@ -122,9 +122,16 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
 
       <View style={bidStyles.row}>
         {/* Avatar */}
-        <View style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest]}>
-          <Text style={bidStyles.avatarText}>{initial}</Text>
-        </View>
+        {bid.driver?.avatarUrl || bid.driver?.profilePhoto ? (
+          <Image
+            source={{ uri: bid.driver.avatarUrl || bid.driver.profilePhoto }}
+            style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest, { borderWidth: 2, borderColor: isBest ? theme.colors.primary : theme.colors.surfaceHigh }]}
+          />
+        ) : (
+          <View style={[bidStyles.avatar, isBest && !expired && bidStyles.avatarBest]}>
+            <Text style={bidStyles.avatarText}>{initial}</Text>
+          </View>
+        )}
 
         {/* Info conductor + V3: vehículo */}
         <View style={bidStyles.info}>

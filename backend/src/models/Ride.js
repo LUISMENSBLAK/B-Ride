@@ -56,6 +56,11 @@ const rideSchema = new mongoose.Schema(
             enum: ['SCHEDULED', 'REQUESTED', 'NEGOTIATING', 'ACCEPTED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
             default: 'REQUESTED',
         },
+        vehicleCategory: {
+          type: String,
+          enum: ['ECONOMY', 'STANDARD', 'COMFORT', 'PREMIUM'],
+          default: 'ECONOMY',
+        },
         
         // --- PHASE 8 & 9 (Promos & Scheduled) ---
         isScheduled: { type: Boolean, default: false },
@@ -101,6 +106,11 @@ const rideSchema = new mongoose.Schema(
         startedAt: { type: Date, default: null },
         completedAt: { type: Date, default: null },
         cancelledAt: { type: Date, default: null },
+        // Comentarios post-viaje
+        driverComment:      { type: String, maxlength: 300, default: null },
+        passengerComment:   { type: String, maxlength: 300, default: null },
+        driverCommentAt:    { type: Date, default: null },
+        passengerCommentAt: { type: Date, default: null },
     },
     {
         timestamps: true,

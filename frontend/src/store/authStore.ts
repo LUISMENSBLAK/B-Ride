@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import client from '../api/client';
-
+import auth from '@react-native-firebase/auth';
 interface User {
     _id: string;
     name: string;
@@ -56,68 +56,72 @@ export const useAuthStore = create<AuthState>((set) => ({
     },
     logout: async () => {
         try {
-            // Eliminar token en backend primero
+            // Logout de Firebase
+            await auth().signOut();
+        } catch (e) {
+            if (__DEV__) console.log('[AuthStore] Firebase signOut error:', e);
+        }
+        
+        try {
             const Constants = require('expo-constants').default;
             const Notifications = require('expo-notifications');
             const { removeTokenFromBackend } = require('../services/notifications/NotificationService');
-            
-            const projectId = Constants?.expoConfig?.extra?.eas?.projectId 
-                              ?? Constants?.easConfig?.projectId;
-
-            // Guard: Saltar si el projectId es el placeholder o está indefinido
+            const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
             const PLACEHOLDER = 'REEMPLAZAR_CON_TU_EAS_PROJECT_ID';
             const isValidProjectId = projectId && projectId !== PLACEHOLDER;
-
             if (isValidProjectId) {
                 const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-                if (tokenData && tokenData.data) {
-                    await removeTokenFromBackend(tokenData.data);
-                }
+                if (tokenData?.data) await removeTokenFromBackend(tokenData.data);
             }
         } catch (e) {
-            if (__DEV__) console.log('[AuthStore] Error al remover push token al hacer logout:', e);
+            if (__DEV__) console.log('[AuthStore] Error al remover push token:', e);
         }
 
-        // Limpiar todo en un solo round-trip
         await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
         set({ user: null });
     },
     checkAuth: async () => {
         set({ isLoading: true });
         try {
-            const token = await AsyncStorage.getItem('userToken');
-            const userInfoStr = await AsyncStorage.getItem('userInfo');
-
-            if (token && userInfoStr) {
-                // BUG 18 FIX: Validar token contra el backend antes de restaurar sesión
-                try {
-                    const res = await client.get('/auth/me');
-                    // In case interceptor refreshed the token, read from AsyncStorage again
-                    const freshToken = await AsyncStorage.getItem('userToken');
-                    const freshUserInfo = await AsyncStorage.getItem('userInfo');
-                    const userObj = freshUserInfo ? JSON.parse(freshUserInfo) : JSON.parse(userInfoStr);
-                    
-                    userObj.accessToken = freshToken || userObj.accessToken;
-                    // Mute profile updates from /auth/me
-                    if (res.data && res.data.data) Object.assign(userObj, res.data.data);
-                    
-                    set({ user: userObj });
-                } catch (validationError: any) {
-                    if (validationError.response?.status === 401) {
-                        // Token expirado — limpiar sesión silenciosamente
-                        console.warn('[AuthStore] Token expirado, cerrando sesión automáticamente');
-                        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
-                        set({ user: null });
-                    } else {
-                        // Error de red u otro — permitir acceso offline con token cacheado
-                        set({ user: JSON.parse(userInfoStr) });
-                    }
+            const firebaseUser = auth().currentUser;
+            
+            if (firebaseUser) {
+                const firebaseToken = await firebaseUser.getIdToken(true); // true = forza refresh
+                
+                // Sincronizar con el backend
+                const res = await client.get('/auth/me', {
+                    headers: { Authorization: `Bearer ${firebaseToken}` }
+                });
+                
+                if (res.data?.data) {
+                    const userData = { ...res.data.data, accessToken: firebaseToken };
+                    await AsyncStorage.setItem('userInfo', JSON.stringify(userData));
+                    set({ user: userData });
+                } else {
+                    set({ user: null });
                 }
             } else {
-                set({ user: null });
+                // Fallback: intentar con token guardado (usuarios legacy con JWT propio)
+                const token = await AsyncStorage.getItem('userToken');
+                const userInfoStr = await AsyncStorage.getItem('userInfo');
+                
+                if (token && userInfoStr) {
+                    try {
+                        const res = await client.get('/auth/me', {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                        const userObj = JSON.parse(userInfoStr);
+                        if (res.data?.data) Object.assign(userObj, res.data.data);
+                        set({ user: userObj });
+                    } catch {
+                        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
+                        set({ user: null });
+                    }
+                } else {
+                    set({ user: null });
+                }
             }
         } catch (e) {
-            // Error restoring token
             set({ user: null });
         } finally {
             set({ isLoading: false });
