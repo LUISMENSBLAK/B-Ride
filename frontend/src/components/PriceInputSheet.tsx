@@ -525,62 +525,132 @@ const getStyles = (theme: any, insets: any) => StyleSheet.create({
     paddingHorizontal: theme.spacing.l,
     paddingBottom: theme.spacing.m,
   },
-  
-  priceBlock: { alignItems: 'center', marginBottom: 24, marginTop: 8 },
-  priceInputRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  currencySymbol: { ...theme.typography.title, fontSize: 24, color: theme.colors.textMuted, marginTop: 8, marginRight: 4 },
-  priceInput: { ...theme.typography.title, fontSize: 44, color: theme.colors.text, minWidth: 100, textAlign: 'center' },
-  priceInputOk: { color: theme.colors.primary },
+  // ── PRECIO ──────────────────────────────────────────────────────────────────
+  priceBlock: { alignItems: 'center', paddingVertical: theme.spacing.l },
+  priceInputRow: {
+    flexDirection: 'row', alignItems: 'flex-end',
+    gap: 6, justifyContent: 'center',
+  },
+  currencySymbol: {
+    fontSize: 28, fontWeight: '700',
+    color: theme.colors.textMuted,
+    paddingBottom: 8,
+  },
+  priceInput: {
+    fontSize: 64, fontWeight: '800',
+    color: theme.colors.text,
+    minWidth: 120, textAlign: 'center',
+    padding: 0,
+  },
   priceInputError: { color: theme.colors.error },
-  priceLine: { height: 2, backgroundColor: theme.colors.borderLight, width: '40%', marginTop: 4, borderRadius: 1 },
-  priceLineOk: { backgroundColor: theme.colors.primary },
+  priceInputOk: { color: theme.colors.primary },
+  priceLine: {
+    width: 200, height: 2, borderRadius: 1,
+    backgroundColor: theme.colors.border,
+    marginTop: 4, marginBottom: 10,
+  },
   priceLineError: { backgroundColor: theme.colors.error },
-  priceHint: { ...theme.typography.bodyMuted, fontSize: 13, marginTop: 10 },
-  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  errorText: { ...theme.typography.body, color: theme.colors.error, fontSize: 13, fontWeight: '500' },
-  
-  sectionBlock: { marginBottom: 24 },
-  sectionLabel: { ...theme.typography.title, fontSize: 15, marginBottom: 12, color: theme.colors.text },
-  
-  categoryRow: { flexDirection: 'row', gap: 10 },
+  priceLineOk: { backgroundColor: theme.colors.primary },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  errorText: { ...theme.typography.caption, color: theme.colors.error, fontSize: 13 },
+  priceHint: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
+
+  // ── SECCIONES ───────────────────────────────────────────────────────────────
+  sectionBlock: { marginBottom: theme.spacing.l },
+  sectionLabel: {
+    ...theme.typography.label,
+    color: theme.colors.textMuted,
+    marginBottom: theme.spacing.s,
+  },
+
+  // ── CATEGORÍAS ──────────────────────────────────────────────────────────────
+  categoryRow: { flexDirection: 'row', gap: 8 },
   categoryChip: {
-    flex: 1, backgroundColor: theme.colors.surfaceHigh,
-    borderRadius: theme.borderRadius.l, padding: 12, alignItems: 'center',
+    flex: 1, alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 8,
+    borderRadius: theme.borderRadius.m,
     borderWidth: 1.5, borderColor: theme.colors.border,
-    minHeight: 110, justifyContent: 'center'
+    backgroundColor: theme.colors.surfaceHigh,
+    gap: 5,
   },
   chipCheck: {
-    position: 'absolute', top: 6, left: 6,
-    width: 14, height: 14, borderRadius: 7,
-    borderWidth: 1, borderColor: theme.colors.borderLight,
-    justifyContent: 'center', alignItems: 'center'
+    width: 18, height: 18, borderRadius: 9,
+    borderWidth: 1.5, borderColor: theme.colors.border,
+    justifyContent: 'center', alignItems: 'center',
+    alignSelf: 'flex-end',
   },
-  chipLabel: { ...theme.typography.caption, color: theme.colors.textSecondary, marginTop: 8, fontWeight: '600' },
-  chipPrice: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginTop: 2 },
-  
-  loadingCats: { flexDirection: 'row', gap: 10, width: '100%' },
+  chipLabel: {
+    ...theme.typography.caption,
+    fontSize: 12, fontWeight: '600',
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+  },
+  chipPrice: {
+    fontSize: 11, fontWeight: '700',
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+  },
+  loadingCats: { flexDirection: 'row', flex: 1, gap: 8 },
   categoryChipSkeleton: {
-    flex: 1, height: 110, backgroundColor: theme.colors.surfaceHigh,
-    borderRadius: theme.borderRadius.l, opacity: 0.5
+    flex: 1, height: 90, borderRadius: theme.borderRadius.m,
+    backgroundColor: theme.colors.surfaceHigh, opacity: 0.5,
   },
-  
+
+  // ── PAGO ────────────────────────────────────────────────────────────────────
   paymentRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.surfaceHigh,
-    borderRadius: theme.borderRadius.m, paddingVertical: 14, paddingHorizontal: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.m,
+    padding: theme.spacing.m,
     borderWidth: 1, borderColor: theme.colors.border,
   },
-  paymentLabel: { flex: 1, marginLeft: 12, ...theme.typography.body, fontWeight: '600', color: theme.colors.text },
-  
-  tripInfoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 12, backgroundColor: theme.colors.surfaceHigh, padding: 12, borderRadius: theme.borderRadius.m },
-  tripInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tripInfoText: { ...theme.typography.caption, color: theme.colors.textSecondary, fontWeight: '500' },
-  tripInfoDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: theme.colors.border },
-  
-  footer: { paddingHorizontal: theme.spacing.l, paddingTop: 8 },
-  confirmBtn: {
-    backgroundColor: theme.colors.primary, flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-    paddingVertical: 16, borderRadius: theme.borderRadius.pill, gap: 10,
+  paymentLabel: {
+    ...theme.typography.body, flex: 1,
+    fontWeight: '600',
   },
-  confirmBtnDisabled: { backgroundColor: theme.colors.surfaceHigh, opacity: 0.8 },
-  confirmBtnText: { ...theme.typography.button, color: theme.colors.primaryText },
+
+  // ── TRIP INFO ────────────────────────────────────────────────────────────────
+  tripInfoRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, marginBottom: theme.spacing.m,
+    paddingVertical: theme.spacing.s,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  tripInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  tripInfoText: {
+    ...theme.typography.caption, color: theme.colors.textSecondary,
+    fontSize: 12, fontWeight: '600',
+  },
+  tripInfoDot: {
+    width: 3, height: 3, borderRadius: 1.5,
+    backgroundColor: theme.colors.border,
+  },
+
+  // ── FOOTER ──────────────────────────────────────────────────────────────────
+  footer: {
+    paddingHorizontal: theme.spacing.l,
+    paddingTop: theme.spacing.m,
+    borderTopWidth: 1, borderColor: theme.colors.border,
+  },
+  confirmBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 16, borderRadius: theme.borderRadius.pill,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 12, elevation: 8,
+  },
+  confirmBtnDisabled: {
+    backgroundColor: theme.colors.surfaceHigh,
+    shadowOpacity: 0, elevation: 0,
+  },
+  confirmBtnText: {
+    ...theme.typography.button, fontSize: 17,
+  },
 });
