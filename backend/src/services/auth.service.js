@@ -69,11 +69,8 @@ class AuthService {
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         });
 
-        // Set emailVerified to true to allow immediate login since we bypass the block as requested
-        user.isEmailVerified = true;
-        user.emailVerified = true;
-        await user.save();
-
+        // Do NOT bypass email verify
+        // Keep tokens so frontend can login and show VerifyEmail block
         return {
             _id: user.id,
             name: user.name,

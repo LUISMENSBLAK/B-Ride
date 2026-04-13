@@ -63,6 +63,7 @@ export default function PassengerDashboard() {
   const [promoCode, setPromoCode] = useState('');
   const [promoDiscount, setPromoDiscount] = useState<{type: string, value: number} | null>(null);
   const [promoApplying, setPromoApplying] = useState(false);
+  const [promoInputOpen, setPromoInputOpen] = useState(false);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
 
   // Auto-calcular distancia y tarifa sugerida
@@ -113,7 +114,43 @@ export default function PassengerDashboard() {
   const currentRideIdRef = useRef<string | null>(null);
   useEffect(() => { currentRideIdRef.current = currentRideId; }, [currentRideId]);
 
-  // ─── Socket setup (solo mount) ─────────────────────────────────────────────
+  const checkLocationStatus = useCallback(async () => {
+    let isMounted = true;
+    try {
+        setErrorMsg(null);
+        // 1. Check if GPS is enabled on device
+        const providerStatus = await Location.getProviderStatusAsync();
+        if (!providerStatus.locationServicesEnabled) {
+             setErrorMsg('GPS_DISABLED');
+             return;
+        }
+
+        // 2. Request permissions
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+        if (status !== 'granted') { 
+             setErrorMsg('PERMISSION_DENIED'); 
+             return; 
+        }
+
+        // 3. Get initial location
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!isMounted) return;
+        setLocation(loc);
+
+        // 4. Watch position
+        const sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+          (newLoc) => { if (isMounted) setLocation(newLoc); }
+        );
+        return sub;
+    } catch (e: any) {
+        if (isMounted) setErrorMsg('SERVICE_ERROR');
+        return null;
+    }
+  }, []);
+
+  // ─── Socket setup y Location INIT ───────────────────────────────────────────
   useEffect(() => {
     let isMounted = true;
     let locationSubscription: Location.LocationSubscription | null = null;
@@ -130,22 +167,9 @@ export default function PassengerDashboard() {
        }
     });
 
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!isMounted) return;
-        if (status !== 'granted') { setErrorMsg('Permiso denegado'); return; }
-
-        const loc = await Location.getCurrentPositionAsync({});
-        if (!isMounted) return;
-        setLocation(loc);
-
-        locationSubscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
-          (newLoc) => { if (isMounted) setLocation(newLoc); }
-        );
-      } catch { if (isMounted) setErrorMsg('Servicio de ubicación falló.'); }
-    })();
+    checkLocationStatus().then(sub => {
+       locationSubscription = sub;
+    });
 
     return () => {
       isMounted = false;
@@ -153,7 +177,7 @@ export default function PassengerDashboard() {
       locationSubscription?.remove();
       sub.remove();
     };
-  }, []);
+  }, [checkLocationStatus]);
 
   const [activeDriversCount, setActiveDriversCount] = useState<number>(0);
   const [showDriverBanner, setShowDriverBanner] = useState<boolean>(false);
@@ -540,7 +564,28 @@ export default function PassengerDashboard() {
         />
       ) : (
         <View style={styles.loaderContainer}>
-          <Loader label={errorMsg ?? t('general.locating')} />
+          {errorMsg ? (
+            <View style={{alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: theme.colors.surface, borderRadius: 20, marginHorizontal: 20}}>
+                <Ionicons name="location-off" size={48} color={theme.colors.error} style={{marginBottom: 10}} />
+                <Text style={{...theme.typography.title, color: theme.colors.text, textAlign: 'center', marginBottom: 8}}>
+                   {errorMsg === 'GPS_DISABLED' ? 'Ubicación Desactivada' : 
+                    errorMsg === 'PERMISSION_DENIED' ? 'Permiso Denegado' : 'Error de Ubicación'}
+                </Text>
+                <Text style={{...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 20}}>
+                   {errorMsg === 'GPS_DISABLED' ? 'Activa el GPS de tu dispositivo para poder pedir viajes y ver el mapa.' : 
+                    errorMsg === 'PERMISSION_DENIED' ? 'Otorga permisos de ubicación a B-Ride desde los ajustes de tu dispositivo.' : 
+                    'No se pudo obtener tu ubicación actual.'}
+                </Text>
+                <TouchableOpacity 
+                   style={{backgroundColor: theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: theme.borderRadius.full}}
+                   onPress={checkLocationStatus}
+                >
+                   <Text style={{color: theme.colors.primaryText, fontWeight: '700', fontSize: 16}}>Reintentar</Text>
+                </TouchableOpacity>
+            </View>
+          ) : (
+            <Loader label={t('general.locating')} />
+          )}
         </View>
       )}
 
@@ -647,41 +692,67 @@ export default function PassengerDashboard() {
 
             <PaymentMethodSelector />
 
-            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-                <TextInput 
-                  style={[styles.inputLocation, { flex: 1, backgroundColor: theme.colors.surfaceHigh }]} 
-                  placeholder="Código Promo (opcional)"
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={promoCode}
-                  onChangeText={text => setPromoCode(text.toUpperCase())}
-                  autoCapitalize="characters"
-                />
-                <TouchableOpacity 
-                   style={{ backgroundColor: theme.colors.surfaceHigh, padding: 12, borderRadius: theme.borderRadius.m, borderWidth: 1, borderColor: theme.colors.borderLight, justifyContent: 'center' }}
-                   onPress={handleApplyPromo}
-                   disabled={promoApplying || !promoCode}
-                >
-                   {promoApplying ? <ActivityIndicator size="small" color={theme.colors.primary} /> : <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Aplicar</Text>}
-                </TouchableOpacity>
+            {/* UX Improvement: Discretely toggle promo input instead of occupying 100% space by default */}
+            <View style={{ marginBottom: 16, alignItems: 'center' }}>
+                {!promoDiscount ? (
+                  !promoInputOpen ? (
+                    <TouchableOpacity onPress={() => setPromoInputOpen(true)}>
+                       <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>+ Agregar Código Promo</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                        <TextInput 
+                          style={[styles.inputLocation, { flex: 1, backgroundColor: theme.colors.surfaceHigh, paddingVertical: 8 }]} 
+                          placeholder="Ingrese el código"
+                          placeholderTextColor={theme.colors.textMuted}
+                          value={promoCode}
+                          onChangeText={text => setPromoCode(text.toUpperCase())}
+                          autoCapitalize="characters"
+                          autoFocus
+                        />
+                        <TouchableOpacity 
+                           style={{ backgroundColor: theme.colors.surfaceHigh, paddingHorizontal: 16, borderRadius: theme.borderRadius.m, borderWidth: 1, borderColor: theme.colors.borderLight, justifyContent: 'center' }}
+                           onPress={handleApplyPromo}
+                           disabled={!promoCode || promoApplying}
+                        >
+                           {promoApplying ? (
+                              <ActivityIndicator size="small" color={theme.colors.primary} />
+                           ) : (
+                              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Aplicar</Text>
+                           )}
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                           style={{ justifyContent: 'center', paddingHorizontal: 8 }}
+                           onPress={() => setPromoInputOpen(false)}
+                        >
+                           <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                    </View>
+                  )
+                ) : (
+                  <View style={{ backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+                    <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Promo Aplicada: {promoCode}</Text>
+                  </View>
+                )}
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flexDirection: 'column', gap: 12 }}>
                 <TouchableOpacity
-                  style={[styles.requestButton, { flex: 1, backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.border }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
-                  onPress={() => setScheduleModalVisible(true)}
-                  disabled={!selectedPlace || distanceKm > 100}
-                >
-                  <Text style={[styles.requestButtonText, { color: theme.colors.text }]}>
-                    Programar
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.requestButton, { flex: 2 }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
+                  style={[styles.requestButton, { width: '100%' }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
                   onPress={handleRequestRide}
                   disabled={!selectedPlace || distanceKm > 100}
                 >
                   <Text style={styles.requestButtonText}>
-                    {selectedPlace ? t('form.searchDriver') : t('form.selectDestination')}
+                    {selectedPlace ? t('form.searchDriver', {defaultValue: 'Buscar conductor'}) : t('form.selectDestination', {defaultValue: 'Selecciona un destino'})}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ alignSelf: 'center', paddingVertical: 8 }}
+                  onPress={() => setScheduleModalVisible(true)}
+                  disabled={!selectedPlace || distanceKm > 100}
+                >
+                  <Text style={[{ color: theme.colors.text, fontWeight: '600', fontSize: 16 }, (!selectedPlace || distanceKm > 100) && { opacity: 0.5 }]}>
+                    Programar para después
                   </Text>
                 </TouchableOpacity>
             </View>

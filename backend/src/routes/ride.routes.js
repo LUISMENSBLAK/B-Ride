@@ -1,24 +1,24 @@
 const express = require('express');
 const { getMyRides } = require('../controllers/ride.controller');
-const { protect } = require('../middlewares/auth.middleware');
+const { protect, requireVerified } = require('../middlewares/auth.middleware');
 const pricingService = require('../services/pricing.service');
 
 const router = express.Router();
 
 // Get the rides for the currently authenticated user
-router.get('/history', protect, getMyRides);
+router.get('/history', protect, requireVerified, getMyRides);
 
 // Get ride sync state
-router.get('/:id/state', protect, require('../controllers/ride.controller').getRideState);
+router.get('/:id/state', protect, requireVerified, require('../controllers/ride.controller').getRideState);
 
 // Rate ride
-router.post('/:id/rate', protect, require('../controllers/ride.controller').rateRide);
+router.post('/:id/rate', protect, requireVerified, require('../controllers/ride.controller').rateRide);
 
 // Phase 14: Public Tracker endpoint
 router.get('/:id/track', require('../controllers/ride.controller').trackRide);
 
 // Scheduled Ride
-router.post('/schedule', protect, async (req, res) => {
+router.post('/schedule', protect, requireVerified, async (req, res) => {
   try {
     const { pickupLocation, dropoffLocation, proposedPrice, scheduledAt } = req.body;
     if (!scheduledAt || new Date(scheduledAt) <= new Date()) {

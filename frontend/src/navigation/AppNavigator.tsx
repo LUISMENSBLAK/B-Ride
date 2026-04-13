@@ -240,7 +240,9 @@ export default function AppNavigator() {
             <Suspense fallback={<ScreenLoadingFallback />}>
                 <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
                     {user ? (
-                        !legalAccepted ? (
+                        (!user.isEmailVerified && !user.emailVerified) ? (
+                            <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} initialParams={{ email: user.email }} />
+                        ) : !legalAccepted ? (
                             <AuthStack.Screen name="Legal">
                                 {() => <LegalScreen onAccept={() => setLegalAccepted(true)} />}
                             </AuthStack.Screen>

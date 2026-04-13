@@ -119,8 +119,14 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
                                 {resendLoading ? 'Enviando...' : countdown > 0 ? `Reenviar código en ${countdown}s` : 'Reenviar código'}
                             </Text>
                         </TouchableOpacity>
+                        <Text style={{...theme.typography.caption, color: theme.colors.textMuted, textAlign: 'center', marginTop: 12, paddingHorizontal: 20}}>
+                            ¿No has recibido el código? Revisa tu carpeta de Spam o Correo no deseado.
+                        </Text>
                         <View style={{height: 15}} />
-                        <TouchableOpacity onPress={() => navigation.goBack()}>
+                        <TouchableOpacity onPress={async () => {
+                            const { useAuthStore } = require('../../store/authStore');
+                            await useAuthStore.getState().logout();
+                        }}>
                             <Text style={styles.linkText}>¿No eres tú? Volver</Text>
                         </TouchableOpacity>
                     </View>

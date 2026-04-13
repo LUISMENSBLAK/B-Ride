@@ -46,4 +46,14 @@ const authorize = (...roles) => {
     };
 };
 
-module.exports = { protect, authorize };
+const requireVerified = (req, res, next) => {
+    if (!req.user.isEmailVerified && !req.user.emailVerified) {
+        return res.status(403).json({
+            success: false,
+            message: 'Email must be verified to access this route',
+        });
+    }
+    next();
+};
+
+module.exports = { protect, authorize, requireVerified };
