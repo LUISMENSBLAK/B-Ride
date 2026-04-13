@@ -431,12 +431,22 @@ const resendVerification = async (req, res) => {
         await user.save();
 
         const sendEmail = require('../utils/sendEmail');
-        await sendEmail({
-            email,
-            subject: 'Reenvío de código de verificación - B-Ride',
-            message: 'Aquí está tu nuevo código de verificación. Úsalo en la aplicación para activar tu cuenta.',
-            code: verifyCode
-        });
+        try {
+            console.log(`\n=========================================`);
+            console.log(`🛂 [B-RIDE] REENVÍO DE CÓDIGO (OTP) `);
+            console.log(`📧 Email: ${email}`);
+            console.log(`🔑 Código: ${verifyCode}`);
+            console.log(`=========================================\n`);
+            
+            await sendEmail({
+                email,
+                subject: 'Reenvío de código de verificación - B-Ride',
+                message: 'Aquí está tu nuevo código de verificación. Úsalo en la aplicación para activar tu cuenta.',
+                code: verifyCode
+            });
+        } catch (emailError) {
+            console.error('\n⚠️ [Auth] Aviso: No se pudo reenviar el correo real por restricciones de Resend (Modo Dev). El código es:', verifyCode, '\n');
+        }
 
         res.status(200).json({ success: true, message: 'Código reenviado correctamente' });
     } catch (error) {

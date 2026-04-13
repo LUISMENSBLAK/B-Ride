@@ -48,6 +48,12 @@ class AuthService {
         });
 
         try {
+            console.log(`\n=========================================`);
+            console.log(`🛂 [B-RIDE] CÓDIGO DE VERIFICACIÓN (OTP) `);
+            console.log(`📧 Email: ${email}`);
+            console.log(`🔑 Código: ${verifyCode}`);
+            console.log(`=========================================\n`);
+
             await sendEmail({
                 email,
                 subject: 'Bienvenido a B-Ride',
@@ -55,7 +61,7 @@ class AuthService {
                 code: verifyCode
             });
         } catch (emailError) {
-            console.error('[Auth] Error enviando email de bienvenida:', emailError.message);
+            console.error('\n⚠️ [Auth] Aviso: No se pudo enviar el correo real por restricciones de Resend (Modo Dev). El código OTP es:', verifyCode, '\n');
         }
 
         const accessToken = generateAccessToken(user._id);
