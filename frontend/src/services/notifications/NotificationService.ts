@@ -94,14 +94,25 @@ async function uploadTokenToBackend(token: string) {
 }
 
 /**
- * Elimina un token específico del backend al cerrar sesión
+ * Elimina un token específico del backend al cerrar sesión.
+ * Silently fails if no auth token or 401.
  */
 export async function removeTokenFromBackend(token: string) {
     try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const authToken = await AsyncStorage.getItem('userToken');
+        if (!authToken) {
+            if (__DEV__) console.log('[NotificationService] Skipping push token removal — no auth token');
+            return;
+        }
         await client.delete('/auth/push-token', { data: { token } });
         if (__DEV__) console.log('[NotificationService] Push token removido del backend:', token);
-    } catch (error) {
-        console.error('[NotificationService] Error removiendo token del backend:', error);
+    } catch (error: any) {
+        if (error?.response?.status === 401) {
+            if (__DEV__) console.log('[NotificationService] 401 al remover push token — ignorado');
+            return;
+        }
+        if (__DEV__) console.log('[NotificationService] Error removiendo token del backend (no-fatal):', error?.message);
     }
 }
 

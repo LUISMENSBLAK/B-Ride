@@ -252,7 +252,7 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     <>
     <MapView
       ref={mapRef}
-      provider={PROVIDER_GOOGLE}
+      provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
       style={styles.map}
       initialRegion={initialRegion}
       showsUserLocation={false}

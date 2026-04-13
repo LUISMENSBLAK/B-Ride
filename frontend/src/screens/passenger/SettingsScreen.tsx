@@ -232,17 +232,12 @@ export default function SettingsScreen() {
       >
         {/* ═══ 1. PERFIL ═══ */}
         <AnimatedSection index={0}>
-          <TouchableOpacity activeOpacity={0.8} style={styles.profileCard} onPress={handlePickImage} disabled={isUploading}>
+          <View style={styles.profileCard}>
             <View style={styles.avatar}>
               {user?.avatarUrl ? (
                 <Image key={user.avatarUrl} source={{ uri: user.avatarUrl }} style={styles.avatarImage} />
               ) : (
                 <Text style={styles.avatarText}>{initials}</Text>
-              )}
-              {isUploading && (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' }]}>
-                    <ActivityIndicator color="#fff" size="small" />
-                </View>
               )}
             </View>
             <View style={styles.profileInfo}>
@@ -257,7 +252,7 @@ export default function SettingsScreen() {
                 </View>
               )}
             </View>
-          </TouchableOpacity>
+          </View>
         </AnimatedSection>
 
         {/* ═══ 2. MÉTODOS DE PAGO ═══ */}
