@@ -40,17 +40,7 @@ const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (firebaseError) {
-    // Fallback a JWT propio (para tokens legacy durante la transición)
-    try {
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id);
-      if (!user) return res.status(401).json({ success: false, message: 'No autorizado.' });
-      req.user = user;
-      next();
-    } catch (jwtError) {
-      return res.status(401).json({ success: false, message: 'Token inválido o expirado.' });
-    }
+    return res.status(401).json({ success: false, message: 'Token inválido o expirado.' });
   }
 };
 

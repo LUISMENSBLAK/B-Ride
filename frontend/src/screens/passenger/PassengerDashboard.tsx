@@ -21,6 +21,7 @@ import MapRenderer, { MapRendererHandle } from '../../components/MapRenderer';
 import AddressAutocomplete, { PlaceResult } from '../../components/AddressAutocomplete';
 import { useRideSocketEvent } from '../../services/EventManager';
 import { useDriverTracking } from '../../hooks/useDriverTracking';
+import { RideData } from '../../types/ride';
 import { syncRideState } from '../../api/ride';
 import BidCard from '../../components/BidCard';
 import { stripeFrontendService } from '../../services/stripe';
@@ -56,9 +57,10 @@ export default function PassengerDashboard() {
   const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [price, setPrice] = useState('');
-  const [completedRide, setCompletedRide] = useState<any>(null);
+  const [completedRide, setCompletedRide] = useState<RideData | null>(null);
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
   const [paymentAuthorizing, setPaymentAuthorizing] = useState<boolean>(false);
+  const [paymentStatusText, setPaymentStatusText] = useState<string | null>(null);
   const [chatVisible, setChatVisible] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
@@ -161,7 +163,7 @@ export default function PassengerDashboard() {
         // 1. Check if GPS is enabled on device
         const providerStatus = await Location.getProviderStatusAsync();
         if (!providerStatus.locationServicesEnabled) {
-             setErrorMsg('GPS_DISABLED');
+             setErrorMsg(t('passenger.gpsDisabled', { defaultValue: 'Por favor, activa el GPS de tu dispositivo para continuar.' }));
              return;
         }
 
@@ -169,7 +171,7 @@ export default function PassengerDashboard() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (!isMounted) return;
         if (status !== 'granted') { 
-             setErrorMsg('PERMISSION_DENIED'); 
+             setErrorMsg(t('passenger.permissionDenied', { defaultValue: 'Permiso de ubicación denegado. Se requiere para solicitar viajes.' }));  
              return; 
         }
 
@@ -185,7 +187,7 @@ export default function PassengerDashboard() {
         );
         return sub;
     } catch (e: any) {
-        if (isMounted) setErrorMsg('SERVICE_ERROR');
+        if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
         return null;
     }
   }, []);
@@ -425,12 +427,14 @@ export default function PassengerDashboard() {
     if (currentRideId) {
        try {
            setPaymentAuthorizing(true);
+           setPaymentStatusText(t('payment.processing', { defaultValue: 'Procesando pago de forma segura...' }));
            
            if (paymentMethod === 'CARD') {
              // CORRECCIÓN 3: Stripe Payment Sheet real
              const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId, currency);
              if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
 
+             setPaymentStatusText(t('payment.confirming', { defaultValue: 'Esperando confirmación del banco...' }));
              const { error: initError } = await initPaymentSheet({
                paymentIntentClientSecret: stripeRes.clientSecret as string,
                merchantDisplayName: 'B-Ride',
@@ -440,13 +444,19 @@ export default function PassengerDashboard() {
              });
              if (initError) throw new Error(initError.message);
 
+             setPaymentStatusText(t('payment.authorizing', { defaultValue: 'Autorizando transacción...' }));
              const { error: presentError } = await presentPaymentSheet();
              if (presentError) {
                // Usuario canceló el payment sheet — no emitir socket
                setAcceptingBidId(null);
                setPaymentAuthorizing(false);
+               setPaymentStatusText(null);
                return;
              }
+             
+             // Payment successful
+             setPaymentStatusText(t('payment.success', { defaultValue: '¡Pago exitoso!' }));
+             await new Promise(r => setTimeout(r, 600)); // allow user to read success message
            }
            // Para CASH no hay payment sheet, emitir directamente
 
@@ -463,6 +473,7 @@ export default function PassengerDashboard() {
            setAcceptingBidId(null);
        } finally {
            setPaymentAuthorizing(false);
+           setPaymentStatusText(null);
        }
     }
   }, [currentRideId, user, acceptingBidId, paymentAuthorizing, initPaymentSheet, presentPaymentSheet]);
@@ -880,7 +891,9 @@ export default function PassengerDashboard() {
                   {paymentAuthorizing && (
                     <View style={styles.authStripeBox}>
                       <Loader size="sm" color="#635BFF" />
-                      <Text style={styles.authStripeText}>{t('general.holdingFunds')}</Text>
+                      <Text style={styles.authStripeText}>
+                         {paymentStatusText || t('general.holdingFunds', { defaultValue: 'Procesando pago seguro...' })}
+                      </Text>
                     </View>
                   )}
 

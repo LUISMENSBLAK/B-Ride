@@ -20,6 +20,7 @@ export const RatingModal = memo(({
 
   const [selected, setSelected] = useState(0);
   const [comment, setComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // When closing, reset selection
   const handleSkip = () => {
@@ -28,11 +29,17 @@ export const RatingModal = memo(({
     onSkip();
   };
 
-  const handleSubmit = () => {
-    if (selected > 0) {
-      onSubmit(selected, comment);
-      setSelected(0);
-      setComment('');
+  const handleSubmit = async () => {
+    if (selected > 0 && !isSubmitting) {
+      setIsSubmitting(true);
+      try {
+        await onSubmit(selected, comment);
+      } finally {
+        // Reset states so it's clean next time it opens
+        setSelected(0);
+        setComment('');
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -65,13 +72,15 @@ export const RatingModal = memo(({
           )}
 
           <TouchableOpacity
-            style={[styles.submitBtn, !selected && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, (!selected || isSubmitting) && styles.submitBtnDisabled]}
             onPress={handleSubmit}
-            disabled={!selected}
+            disabled={!selected || isSubmitting}
           >
-            <Text style={styles.submitBtnText}>{t('rating.send')}</Text>
+            <Text style={styles.submitBtnText}>
+              {isSubmitting ? t('general.loading', { defaultValue: 'Enviando...' }) : t('rating.send')}
+            </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
+          <TouchableOpacity onPress={handleSkip} style={styles.skipBtn} disabled={isSubmitting}>
             <Text style={styles.skipText}>{t('rating.skip')}</Text>
           </TouchableOpacity>
         </View>

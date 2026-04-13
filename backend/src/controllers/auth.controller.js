@@ -1,5 +1,15 @@
 const authService = require('../services/auth.service');
 const { registerValidation, loginValidation } = require('../validations/auth.validation');
+const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const uuid = require('uuid');
+const { getIO } = require('../sockets');
+const sendEmail = require('../utils/sendEmail');
+const sendSMS = require('../utils/sendSMS');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwtUtils');
+const fetch = require('node-fetch');
 
 const registerUser = async (req, res) => {
     try {
@@ -53,7 +63,6 @@ const verifyEmail = async (req, res) => {
         const { email, code } = req.body;
         if (!email || !code) return res.status(400).json({ success: false, message: 'Email and code required' });
 
-        const User = require('../models/User');
         const user = await User.findOne({ email }).select('+emailVerificationToken +emailVerificationExpires');
         
         if (!user) return res.status(404).json({ success: false, message: 'User not found' });
@@ -63,7 +72,6 @@ const verifyEmail = async (req, res) => {
              return res.status(400).json({ success: false, message: 'Code expired. Please login again to receive a new one.' });
         }
 
-        const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(code, user.emailVerificationToken);
         
         if (!isMatch) {
@@ -76,9 +84,6 @@ const verifyEmail = async (req, res) => {
         user.emailVerificationExpires = undefined;
         await user.save();
 
-        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
-        const RefreshToken = require('../models/RefreshToken');
-        const uuid = require('uuid');
 
         const accessToken = generateAccessToken(user._id);
         const rawRefreshToken = generateRefreshToken(user._id);
@@ -121,7 +126,7 @@ const getMe = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
     try {
-        const user = await require('../models/User').findOne({ email: req.body.email });
+        const user = await User.findOne({ email: req.body.email });
 
         if (!user) {
             return res.status(404).json({ success: false, message: 'There is no user with that email' });
@@ -130,7 +135,7 @@ const forgotPassword = async (req, res) => {
         // Get reset token
         const resetToken = user.getResetPasswordToken();
 
-        await require('../models/User').updateOne(
+        await User.updateOne(
             { _id: user._id },
             { $set: { resetPasswordToken: user.resetPasswordToken, resetPasswordExpire: user.resetPasswordExpire } }
         );
@@ -144,7 +149,7 @@ const forgotPassword = async (req, res) => {
             <a href="${resetUrl}" style="background-color: #F5C518; color: #0D0520; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">Restablecer Contraseña</a>`;
 
         try {
-            await require('../utils/sendEmail')({
+            await sendEmail({
                 email: user.email,
                 subject: 'Restablecer contraseña - B-Ride',
                 message,
@@ -154,7 +159,7 @@ const forgotPassword = async (req, res) => {
         } catch (err) {
             console.error('[Auth] forgotPassword email send failed:', err.message);
             // Token cleanup: revoke token if email could not be sent
-            await require('../models/User').updateOne(
+            await User.updateOne(
                 { _id: user._id },
                 { $unset: { resetPasswordToken: '', resetPasswordExpire: '' } }
             );
@@ -169,13 +174,12 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
     try {
         // Get hashed token
-        const crypto = require('crypto');
         const resetPasswordToken = crypto
             .createHash('sha256')
             .update(req.params.resettoken)
             .digest('hex');
 
-        const user = await require('../models/User').findOne({
+        const user = await User.findOne({
             resetPasswordToken,
             resetPasswordExpire: { $gt: Date.now() },
         });
@@ -185,14 +189,12 @@ const resetPassword = async (req, res) => {
         }
 
         // Set new password
-        const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(req.body.password, salt);
         user.resetPasswordToken = undefined;
         user.resetPasswordExpire = undefined;
         await user.save();
 
-        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
         const accessToken = generateAccessToken(user._id);
         const refreshToken = generateRefreshToken(user._id);
 
@@ -211,8 +213,6 @@ const refreshToken = async (req, res) => {
         const { token } = req.body;
         if (!token) return res.status(401).json({ success: false, message: 'Refresh token is required' });
 
-        const { verifyRefreshToken, generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
-        const RefreshToken = require('../models/RefreshToken');
         
         let decoded;
         try {
@@ -236,7 +236,7 @@ const refreshToken = async (req, res) => {
         dbToken.used = true;
         await dbToken.save();
 
-        const user = await require('../models/User').findById(decoded.id);
+        const user = await User.findById(decoded.id);
         if (!user || user.isBanned) return res.status(401).json({ success: false, message: 'User not found or banned' });
 
         const newAccessToken = generateAccessToken(user._id);
@@ -262,12 +262,10 @@ const refreshToken = async (req, res) => {
 
 const logoutAll = async (req, res) => {
     try {
-        const RefreshToken = require('../models/RefreshToken');
         // Marcar todos los tokens de este usuario como USADOS
         await RefreshToken.updateMany({ user: req.user._id }, { $set: { used: true } });
         
         // B2: Emitir evento por sockets para force logout sincrono 
-        const { getIO } = require('../sockets');
         try {
             getIO().to(req.user._id.toString()).emit('force_logout', { message: 'Se cerró sesión desde otro dispositivo.' });
         } catch (e) {
@@ -285,7 +283,7 @@ const updatePushToken = async (req, res) => {
         const { token } = req.body;
         if (!token) return res.status(400).json({ success: false, message: 'Token required' });
         
-        await require('../models/User').findByIdAndUpdate(req.user._id, {
+        await User.findByIdAndUpdate(req.user._id, {
             $addToSet: { expoPushTokens: token }
         });
 
@@ -304,7 +302,7 @@ const removePushToken = async (req, res) => {
         const { token } = req.body;
         if (!token) return res.status(400).json({ success: false, message: 'Token required' });
         
-        await require('../models/User').findByIdAndUpdate(req.user._id, {
+        await User.findByIdAndUpdate(req.user._id, {
             $pull: { expoPushTokens: token }
         });
 
@@ -351,7 +349,6 @@ const uploadAvatar = async (req, res) => {
              avatarUrl = `${req.protocol}://${req.get('host')}/uploads/${fileName}`;
         }
 
-        const User = require('../models/User');
         const updatedUser = await User.findByIdAndUpdate(req.user._id, { avatarUrl }, { new: true });
 
         res.status(200).json({
@@ -374,7 +371,6 @@ const uploadAvatar = async (req, res) => {
  */
 const updateProfile = async (req, res) => {
     try {
-        const User = require('../models/User');
 
         // Campos permitidos para actualización
         const allowedFields = [
@@ -427,13 +423,11 @@ const resendVerification = async (req, res) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ success: false, message: 'Email requerido' });
 
-        const User = require('../models/User');
         const user = await User.findOne({ email });
 
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
         if (user.isEmailVerified || user.emailVerified) return res.status(400).json({ success: false, message: 'El correo ya está verificado' });
 
-        const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
         
@@ -441,7 +435,6 @@ const resendVerification = async (req, res) => {
         user.emailVerificationExpires = Date.now() + 15 * 60 * 1000;
         await user.save();
 
-        const sendEmail = require('../utils/sendEmail');
         try {
             await sendEmail({
                 email,
@@ -471,14 +464,12 @@ const sendPhoneOtp = async (req, res) => {
         }
         
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
         
         user.verificationOTP = await bcrypt.hash(verifyCode, salt);
         user.verificationOTPExpire = Date.now() + 10 * 60 * 1000;
         await user.save();
         
-        const sendSMS = require('../utils/sendSMS');
         const smsSent = await sendSMS(user.phoneNumber, `[B-Ride] Tu codigo de verificacion SMS es: ${verifyCode}`);
         if (!smsSent) {
             return res.status(500).json({ success: false, message: 'Error enviando el SMS. Verifica el número de teléfono.' });
@@ -496,7 +487,6 @@ const verifyPhoneOtp = async (req, res) => {
         const { otp } = req.body;
         if (!otp) return res.status(400).json({ success: false, message: 'El OTP es requerido.' });
         
-        const User = require('../models/User');
         const user = await User.findById(req.user._id).select('+verificationOTP +verificationOTPExpire');
         
         if (user.phoneVerified) {
@@ -506,7 +496,6 @@ const verifyPhoneOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Código expirado o no solicitado.' });
         }
         
-        const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(otp, user.verificationOTP);
         
         // Security: No dev bypass — any environment must pass the real OTP check.
@@ -529,7 +518,6 @@ const verifyPhoneOtp = async (req, res) => {
 
 const deleteAccount = async (req, res) => {
     try {
-        const User = require('../models/User');
         const user = await User.findById(req.user._id);
         
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
@@ -539,11 +527,9 @@ const deleteAccount = async (req, res) => {
         user.deletionRequestedAt = Date.now();
         await user.save();
         
-        const RefreshToken = require('../models/RefreshToken');
         await RefreshToken.updateMany({ user: user._id }, { $set: { used: true } });
         
         try {
-            const { getIO } = require('../sockets');
             getIO().to(user._id.toString()).emit('force_logout', { message: 'Tu cuenta ha sido marcada para eliminación. La sesión se ha cerrado.' });
         } catch (e) {}
         
@@ -555,7 +541,6 @@ const deleteAccount = async (req, res) => {
 
 const getReferral = async (req, res) => {
     try {
-        const User = require('../models/User');
         const user = await User.findById(req.user._id).select('referralCode referralCount referralBonusEarned');
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
         
@@ -580,7 +565,6 @@ const googleLogin = async (req, res) => {
         }
 
         // Verify the Google token is real by fetching userinfo
-        const fetch = require('node-fetch');
         const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
             headers: { Authorization: `Bearer ${accessToken}` },
         });
@@ -592,16 +576,11 @@ const googleLogin = async (req, res) => {
             return res.status(401).json({ success: false, message: 'Email no coincide con el token' });
         }
 
-        const User = require('../models/User');
-        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
-        const RefreshToken = require('../models/RefreshToken');
-        const uuid = require('uuid');
 
         let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
         if (!user) {
             // Create new user via Google
-            const crypto = require('crypto');
             const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
             
             user = await User.create({
@@ -660,14 +639,24 @@ const googleLogin = async (req, res) => {
 const appleLogin = async (req, res) => {
     try {
         const { appleUserId, email, name, identityToken } = req.body;
-        if (!appleUserId) {
-            return res.status(400).json({ success: false, message: 'Apple User ID es requerido' });
+        if (!appleUserId || !identityToken) {
+            return res.status(400).json({ success: false, message: 'Apple User ID e identityToken son requeridos' });
         }
 
-        const User = require('../models/User');
-        const { generateAccessToken, generateRefreshToken } = require('../utils/jwtUtils');
-        const RefreshToken = require('../models/RefreshToken');
-        const uuid = require('uuid');
+        // Verify the Apple identity token ensures the payload wasn't spoofed
+        try {
+            const appleUser = await appleSignin.verifyIdToken(identityToken, {
+                // If you have a specific bundle ID, uncomment and set it in your env
+                // audience: process.env.APPLE_BUNDLE_ID,
+                ignoreExpiration: false,
+            });
+            if (appleUser.sub !== appleUserId) {
+                return res.status(401).json({ success: false, message: 'Token de Apple no coincide con el Apple User ID' });
+            }
+        } catch (tokenErr) {
+            return res.status(401).json({ success: false, message: 'Token de Apple inválido: ' + tokenErr.message });
+        }
+
 
         // Find by appleId first, then by email
         let user = await User.findOne({ appleId: appleUserId });
@@ -677,7 +666,6 @@ const appleLogin = async (req, res) => {
 
         if (!user) {
             // Create new user via Apple
-            const crypto = require('crypto');
             const myReferralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
             
             user = await User.create({

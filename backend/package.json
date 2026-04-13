@@ -14,8 +14,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "firebase-admin": "^12.0.0",
     "@vonage/server-sdk": "^3.27.0",
+    "apple-signin-auth": "^2.0.0",
     "bcryptjs": "^3.0.3",
     "conekta": "^8.0.2",
     "cors": "^2.8.6",
@@ -23,6 +23,7 @@
     "expo-server-sdk": "^6.1.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
+    "firebase-admin": "^12.0.0",
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",

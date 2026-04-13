@@ -87,11 +87,9 @@ const userSchema = new mongoose.Schema(
             enum: ['PENDING_DOCS', 'DOCS_SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'],
             default: 'PENDING_DOCS',
         },
-        approvalStatus: { type: String, enum: ['PENDING_DOCS', 'DOCS_SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED'], default: 'PENDING_DOCS' },
         rejectionReason: { type: String, default: null },
 
         // ─── S2/B2: VERIFICACIÓN ───────────────────────────────────────────
-        emailVerified: { type: Boolean, default: false },
         isEmailVerified: { type: Boolean, default: false }, // Compatibilidad requerida en prompt
         emailVerificationToken: { type: String, select: false },
         emailVerificationExpires: { type: Date, select: false },

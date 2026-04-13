@@ -38,8 +38,8 @@ module.exports = {
             }
         });
 
-        // CORRECCIÓN 10 / BLOQUE 5: Validación de JWT en Sockets y Baneo
-        const jwt = require('jsonwebtoken');
+        // CORRECCIÓN 10 / BLOQUE 5: Validación de Firebase Token en Sockets y Baneo
+        const admin = require('../config/firebase');
         const User = require('../models/User');
 
         io.use(async (socket, next) => {
@@ -52,10 +52,11 @@ module.exports = {
                     return next(new Error('Authentication error: No token provided'));
                 }
                 
-                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                // Strict Firebase verification
+                const decoded = await admin.auth().verifyIdToken(token);
                 
                 // BLOQUE 5: Verificación estricta de base de datos
-                const user = await User.findById(decoded.id).select('isBlocked isBanned lockUntil role');
+                const user = await User.findOne({ firebaseUid: decoded.uid }).select('isBlocked isBanned lockUntil role');
                 if (!user) return next(new Error('Authentication error: User not found'));
                 
                 if (user.isBlocked || user.isBanned) {
@@ -72,7 +73,7 @@ module.exports = {
 
                 next();
             } catch (err) {
-                return next(new Error('Authentication error: Invalid token'));
+                return next(new Error('Authentication error: Invalid Firebase token'));
             }
         });
 
