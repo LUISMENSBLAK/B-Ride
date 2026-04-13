@@ -103,21 +103,22 @@ class AuthService {
 
         // B2: Email Verify Check
         if (!user.isEmailVerified && !user.emailVerified) {
-            // Re-generar token
+            // Re-generar token (no lanzamos error para que puedan entrar y ver la pantalla de Verificación)
             const salt = await bcrypt.genSalt(10);
             const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
             user.emailVerificationToken = await bcrypt.hash(verifyCode, salt);
             user.emailVerificationExpires = Date.now() + 15 * 60 * 1000;
             await user.save();
-            await sendEmail({
-                email,
-                subject: 'Tu nuevo código de verificación - B-Ride',
-                message: 'Hemos generado un nuevo código para ti. Úsalo para verificar tu cuenta en la aplicación.',
-                code: verifyCode
-            });
-            const e = new Error('NOT_VERIFIED');
-            e.code = 403;
-            throw e;
+            try {
+                await sendEmail({
+                    email,
+                    subject: 'Tu código de verificación - B-Ride',
+                    message: 'Hemos generado un código para ti. Úsalo para verificar tu cuenta en la aplicación.',
+                    code: verifyCode
+                });
+            } catch (emailErr) {
+                console.error('[Auth] Error enviando email de OTP en login:', emailErr.message);
+            }
         }
 
         // B2: Success -> Reset Attempts
@@ -135,15 +136,19 @@ class AuthService {
                     firstSeen: Date.now(),
                     lastSeen: Date.now()
                 });
-                await sendEmail({
-                    email,
-                    subject: 'Alerta de Seguridad - Nuevo Dispositivo en B-Ride',
-                    message: `Hemos detectado un nuevo inicio de sesión en tu cuenta de B-Ride desde un nuevo dispositivo.<br/><br/>
-                    <strong>Dispositivo:</strong> ${deviceMeta.deviceName || 'Desconocido'}<br/>
-                    <strong>Plataforma:</strong> ${deviceMeta.platform || 'Unknown'}<br/>
-                    <strong>Fecha:</strong> ${new Date().toISOString()}<br/><br/>
-                    Si no fuiste tú, por favor contacta a soporte inmediatamente.`
-                });
+                try {
+                    await sendEmail({
+                        email,
+                        subject: 'Alerta de Seguridad - Nuevo Dispositivo en B-Ride',
+                        message: `Hemos detectado un nuevo inicio de sesión en tu cuenta de B-Ride desde un nuevo dispositivo.<br/><br/>
+                        <strong>Dispositivo:</strong> ${deviceMeta.deviceName || 'Desconocido'}<br/>
+                        <strong>Plataforma:</strong> ${deviceMeta.platform || 'Unknown'}<br/>
+                        <strong>Fecha:</strong> ${new Date().toISOString()}<br/><br/>
+                        Si no fuiste tú, por favor contacta a soporte inmediatamente.`
+                    });
+                } catch (secErr) {
+                    console.error('[Auth] Error sending security email:', secErr.message);
+                }
             } else {
                 isKnown.lastSeen = Date.now();
             }
@@ -167,6 +172,7 @@ class AuthService {
             name: user.name,
             email: user.email,
             role: user.role,
+            isEmailVerified: user.isEmailVerified || user.emailVerified || false,
             approvalStatus: user.driverApprovalStatus || user.approvalStatus,
             accessToken,
             refreshToken: rawRefreshToken,

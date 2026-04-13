@@ -26,7 +26,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const { t } = useTranslation();
 
-  const login = useAuthStore(state => state.login);
+  const register = useAuthStore(state => state.register);
   const { handleGoogleLogin, loading: googleLoading, ready: googleReady } = useGoogleAuth();
   const { handleAppleLogin, loading: appleLoading } = useAppleAuth();
 
@@ -51,12 +51,8 @@ export default function RegisterScreen({ navigation }: any) {
         termsAcceptedAt: new Date().toISOString(),
       });
       if (res.data.success) {
-        if (res.data.data?.verify_required) {
-            Alert.alert('Registro exitoso', res.data.data.message);
-            navigation.navigate('VerifyEmail', { email });
-        } else {
-            await login(res.data.data);
-        }
+        // Always use register() — sets justRegistered=true → routes to VerifyEmail
+        await register(res.data.data);
       }
     } catch (error: any) {
       if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
@@ -85,6 +81,8 @@ export default function RegisterScreen({ navigation }: any) {
     try {
       const result = await handleGoogleLogin();
       if (result?.success) {
+        // Google accounts are pre-verified → use login() (justRegistered=false)
+        const login = useAuthStore.getState().login;
         await login(result.data);
       }
     } catch (error: any) {
@@ -96,6 +94,8 @@ export default function RegisterScreen({ navigation }: any) {
     try {
       const result = await handleAppleLogin();
       if (result?.success) {
+        // Apple accounts are pre-verified → use login() (justRegistered=false)
+        const login = useAuthStore.getState().login;
         await login(result.data);
       }
     } catch (error: any) {

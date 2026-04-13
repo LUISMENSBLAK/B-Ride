@@ -23,15 +23,19 @@ interface User {
 interface AuthState {
     user: User | null;
     isLoading: boolean;
+    justRegistered: boolean;
     login: (userData: User) => Promise<void>;
+    register: (userData: User) => Promise<void>;
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
     updateUser: (data: Partial<User>) => Promise<void>;
+    clearJustRegistered: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
     user: null,
     isLoading: true,
+    justRegistered: false,
     login: async (userData) => {
         const entries: [string, string][] = [
             ['userInfo', JSON.stringify(userData)],
@@ -39,7 +43,16 @@ export const useAuthStore = create<AuthState>((set) => ({
         if (userData.accessToken) entries.push(['userToken', userData.accessToken]);
         if (userData.refreshToken) entries.push(['refreshToken', userData.refreshToken]);
         await AsyncStorage.multiSet(entries);
-        set({ user: userData });
+        set({ user: userData, justRegistered: false });
+    },
+    register: async (userData) => {
+        const entries: [string, string][] = [
+            ['userInfo', JSON.stringify(userData)],
+        ];
+        if (userData.accessToken) entries.push(['userToken', userData.accessToken]);
+        if (userData.refreshToken) entries.push(['refreshToken', userData.refreshToken]);
+        await AsyncStorage.multiSet(entries);
+        set({ user: userData, justRegistered: true });
     },
     logout: async () => {
         try {
@@ -117,5 +130,8 @@ export const useAuthStore = create<AuthState>((set) => ({
             AsyncStorage.setItem('userInfo', JSON.stringify(updated)).catch(() => {});
             return { user: updated };
         });
+    },
+    clearJustRegistered: () => {
+        set({ justRegistered: false });
     },
 }));

@@ -71,12 +71,24 @@ export async function registerForPushNotificationsAsync() {
 
 /**
  * Envia el token obtenido a nuestro endpoint `/api/auth/push-token`
+ * Solo si hay un token de autenticación guardado.
  */
 async function uploadTokenToBackend(token: string) {
     try {
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        const authToken = await AsyncStorage.getItem('userToken');
+        if (!authToken) {
+            if (__DEV__) console.log('[NotificationService] Skipping push token upload — no auth token');
+            return;
+        }
         await client.put('/auth/push-token', { token });
         if (__DEV__) console.log('[NotificationService] Push token registrado en backend:', token);
-    } catch (error) {
+    } catch (error: any) {
+        // Silently ignore 401 — user may not be fully authenticated yet
+        if (error?.response?.status === 401) {
+            if (__DEV__) console.log('[NotificationService] 401 al subir push token — ignorado');
+            return;
+        }
         console.error('[NotificationService] Error enviando token al backend:', error);
     }
 }

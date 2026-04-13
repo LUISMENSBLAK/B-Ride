@@ -215,7 +215,7 @@ const linking = {
 };
 
 export default function AppNavigator() {
-    const { user, isLoading, checkAuth } = useAuthStore();
+    const { user, isLoading, checkAuth, justRegistered } = useAuthStore();
     const theme = useAppTheme();
     const [legalAccepted, setLegalAccepted] = useState<boolean | null>(null);
 
@@ -240,7 +240,7 @@ export default function AppNavigator() {
             <Suspense fallback={<ScreenLoadingFallback />}>
                 <AuthStack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
                     {user ? (
-                        (!user.isEmailVerified && !user.emailVerified) ? (
+                        justRegistered ? (
                             <AuthStack.Screen name="VerifyEmail" component={VerifyEmailScreen} initialParams={{ email: user.email }} />
                         ) : !legalAccepted ? (
                             <AuthStack.Screen name="Legal">

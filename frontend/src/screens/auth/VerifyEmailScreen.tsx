@@ -14,6 +14,7 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
     const [resendLoading, setResendLoading] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const login = useAuthStore(state => state.login);
+    const clearJustRegistered = useAuthStore(state => state.clearJustRegistered);
     
     const inputs = useRef<Array<TextInput | null>>([]);
     
@@ -56,7 +57,9 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         try {
             const res = await client.post('/auth/verify-email', { email, code: fullCode });
             if (res.data.success) {
+                // login() sets justRegistered=false → routes to app
                 await login(res.data.data);
+                clearJustRegistered();
             }
         } catch (error: any) {
             Alert.alert('Verificación fallida', error.response?.data?.message || 'Código incorrecto o expirado.');
@@ -124,7 +127,7 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
                         </Text>
                         <View style={{height: 15}} />
                         <TouchableOpacity onPress={async () => {
-                            const { useAuthStore } = require('../../store/authStore');
+                            clearJustRegistered();
                             await useAuthStore.getState().logout();
                         }}>
                             <Text style={styles.linkText}>¿No eres tú? Volver</Text>
