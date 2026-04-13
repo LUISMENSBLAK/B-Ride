@@ -1,8 +1,10 @@
 import React, { memo, forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
-import { StyleSheet, Platform, View, ActivityIndicator, Text } from 'react-native';
+import { StyleSheet, Platform, View, ActivityIndicator, Text, TouchableOpacity, Alert } from 'react-native';
 import MapView, { Marker, Region, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../hooks/useAppTheme';
+import * as Location from 'expo-location';
+import { LocateFixed } from 'lucide-react-native';
 
 import CarMarker from './CarMarker';
 import PassengerLocationMarker from './PassengerLocationMarker';
@@ -107,6 +109,8 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
+
+  const [isLocating, setIsLocating] = useState(false);
   const mapRef = useRef<MapView>(null);
   const driverMarkerRef = useRef<any>(null);
 
@@ -246,7 +250,37 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       return destinationCoordinate;
     }
     return null;
-  }, [destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
+  }, [isDriver, driverPhase, pickupCoordinate, dropoffCoordinate, destinationCoordinate, latitude, longitude]);
+
+  const handleCenterLocation = async () => {
+    try {
+      setIsLocating(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permiso denegado', 'Otorga permisos de ubicación para centrar el mapa.');
+        setIsLocating(false);
+        return;
+      }
+
+      let loc = await Location.getLastKnownPositionAsync();
+      if (!loc) {
+        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      }
+      
+      if (loc && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01
+        }, 1000);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'No se pudo obtener tu ubicación actual.');
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   return (
     <>
@@ -312,6 +346,19 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
         <Text style={styles.routingText}>Ruta aproximada</Text>
       </View>
     )}
+    
+    <TouchableOpacity 
+      style={[styles.locateBtn, { bottom: isDriver ? 140 : 180 }]} 
+      onPress={handleCenterLocation}
+      disabled={isLocating}
+      activeOpacity={0.8}
+    >
+      {isLocating ? (
+        <ActivityIndicator size="small" color={theme.colors.text} />
+      ) : (
+        <LocateFixed size={22} color={theme.colors.text} strokeWidth={2.5} />
+      )}
+    </TouchableOpacity>
     </>
   );
 });
@@ -341,6 +388,23 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     ...theme.typography.caption,
     color: theme.colors.text,
     fontWeight: '600',
+  },
+  locateBtn: {
+    position: 'absolute',
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   }
 });
 
