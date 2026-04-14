@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Ride = require('../models/Ride');
+const geo = require('../utils/geo');
 
 class PricingService {
     constructor() {
@@ -152,15 +153,8 @@ class PricingService {
      * @desc Cálculo y Estimación completa entre dos puntos
      */
     estimateRide(pickupLat, pickupLng, dropoffLat, dropoffLng) {
-        // Haversine simplificado local
-        const R = 6371; // radio Tierra km
-        const dLat = (dropoffLat - pickupLat) * Math.PI / 180;
-        const dLng = (dropoffLng - pickupLng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropoffLat * Math.PI / 180) *
-                  Math.sin(dLng/2) * Math.sin(dLng/2);
-        
-        const distanceKm = Math.max((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))), 0.5); // Minimo historico de calculo
+        // Haversine unitario importado
+        const distanceKm = Math.max(geo.haversineKm(pickupLat, pickupLng, dropoffLat, dropoffLng), 0.5); // Minimo historico de calculo
 
         const basePrice = Math.max(
             this.MIN_FARE,
@@ -212,12 +206,7 @@ class PricingService {
 
     async getPricesByCategory(originLat, originLng, destLat, destLng) {
       // Haversine
-      const R = 6371;
-      const dLat = (destLat - originLat) * Math.PI / 180;
-      const dLng = (destLng - originLng) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2
-        + Math.cos(originLat * Math.PI/180) * Math.cos(destLat * Math.PI/180) * Math.sin(dLng/2)**2;
-      const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distKm = geo.haversineKm(originLat, originLng, destLat, destLng);
 
       if (distKm > this.MAX_DIST_KM) {
         const err = new Error(`La distancia máxima es ${this.MAX_DIST_KM} km.`);

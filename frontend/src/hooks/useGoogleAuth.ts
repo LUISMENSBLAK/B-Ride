@@ -8,11 +8,18 @@ import client from '../api/client';
 // También está en google-services.json como "client_id" con "client_type": 3
 const WEB_CLIENT_ID = 'TU_WEB_CLIENT_ID.apps.googleusercontent.com';
 
-GoogleSignin.configure({
-  webClientId: WEB_CLIENT_ID,
-  offlineAccess: true,
-  scopes: ['profile', 'email'],
-});
+// Configuración robusta de Google Sign-In
+// En iOS, si no existe GoogleService-Info.plist, iosClientId es OBLIGATORIO.
+try {
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'PENDIENTE_WEB',
+    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'PENDIENTE_IOS',
+    offlineAccess: true,
+    scopes: ['profile', 'email'],
+  });
+} catch (configError: any) {
+  console.warn('[GoogleSignin] Error de configuración inicial:', configError.message);
+}
 
 export function useGoogleAuth() {
   const [loading, setLoading] = useState(false);

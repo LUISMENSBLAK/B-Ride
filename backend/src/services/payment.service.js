@@ -48,8 +48,8 @@ class PaymentService {
         const passenger = await User.findById(passengerId).select('+stripeCustomerId');
         
         // Multi-Moneda: Convierte el precio base (USD) a la moneda local de cobro del usuario
-        const pricingService = require('./pricing.service');
-        const convertedPrice = pricingService.convertAmount(bid.price, currency);
+        const exchangeService = require('./exchange.service');
+        const convertedPrice = await exchangeService.convertAmount(bid.price, currency);
 
         // 15% Commision calculated safely
         const amountCents = Math.round(convertedPrice * 100);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import apiClient from '../api/client';
 import styles from './Dashboard.module.css';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Stats {
   totalUsers: number;
@@ -162,9 +163,45 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div style={{ marginTop: 24, background: 'var(--surface)', padding: 20, borderRadius: 16, border: '1px solid var(--border)' }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text)' }}>Conductores activos ahora</h2>
-        <div id="driversMap" style={{ height: 350, width: '100%', borderRadius: 12, backgroundColor: '#eee' }}></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 24, marginTop: 24 }}>
+        {/* Gráfico Recharts */}
+        <div style={{ background: 'var(--surface)', padding: 20, borderRadius: 16, border: '1px solid var(--border)' }}>
+          <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text)' }}>Ingresos Semanales (Estimado)</h2>
+          <div style={{ width: '100%', height: 350 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={[
+                { name: 'Lun', obj: 1200 },
+                { name: 'Mar', obj: 2100 },
+                { name: 'Mie', obj: 1800 },
+                { name: 'Jue', obj: 2400 },
+                { name: 'Vie', obj: 3500 },
+                { name: 'Sab', obj: 4200 },
+                { name: 'Dom', obj: 3100 },
+              ]}>
+                <defs>
+                  <linearGradient id="colorObj" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#DFB300" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#DFB300" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="name" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'var(--surface-high)', borderColor: 'var(--border)', borderRadius: 8, color: 'var(--text)' }}
+                  itemStyle={{ color: '#DFB300' }}
+                />
+                <Area type="monotone" dataKey="obj" stroke="#DFB300" strokeWidth={3} fillOpacity={1} fill="url(#colorObj)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Mapa Leaflet */}
+        <div style={{ background: 'var(--surface)', padding: 20, borderRadius: 16, border: '1px solid var(--border)' }}>
+          <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: 'var(--text)' }}>Conductores activos ahora</h2>
+          <div id="driversMap" style={{ height: 350, width: '100%', borderRadius: 12, backgroundColor: '#eee', zIndex: 0 }}></div>
+        </div>
       </div>
     </div>
   );
