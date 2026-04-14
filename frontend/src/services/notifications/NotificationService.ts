@@ -83,7 +83,7 @@ async function uploadTokenToBackend(token: string) {
         }
         await client.put('/auth/push-token', { token });
         if (__DEV__) console.log('[NotificationService] Push token registrado en backend:', token);
-    } catch (error: any) {
+    } catch (error: unknown) {
         // Silently ignore 401 — user may not be fully authenticated yet
         if (error?.response?.status === 401) {
             if (__DEV__) console.log('[NotificationService] 401 al subir push token — ignorado');
@@ -107,7 +107,7 @@ export async function removeTokenFromBackend(token: string) {
         }
         await client.delete('/auth/push-token', { data: { token } });
         if (__DEV__) console.log('[NotificationService] Push token removido del backend:', token);
-    } catch (error: any) {
+    } catch (error: unknown) {
         if (error?.response?.status === 401) {
             if (__DEV__) console.log('[NotificationService] 401 al remover push token — ignorado');
             return;

@@ -93,7 +93,7 @@ export const stripeFrontendService = {
         state: 'error',
         error: response.data.message || 'Payment creation failed.',
       };
-    } catch (err: any) {
+    } catch (error: unknown) {
       const isTimeout = err.message?.includes('timeout');
       return {
         state: 'error',

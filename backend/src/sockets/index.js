@@ -38,7 +38,7 @@ module.exports = {
             }
         });
 
-        // CORRECCIÓN 10 / BLOQUE 5: Validación de Firebase Token en Sockets y Baneo
+
         const admin = require('../config/firebase');
         const User = require('../models/User');
 
@@ -55,7 +55,7 @@ module.exports = {
                 // Strict Firebase verification
                 const decoded = await admin.auth().verifyIdToken(token);
                 
-                // BLOQUE 5: Verificación estricta de base de datos
+
                 const user = await User.findOne({ firebaseUid: decoded.uid }).select('isBlocked isBanned lockUntil role');
                 if (!user) return next(new Error('Authentication error: User not found'));
                 
@@ -66,7 +66,7 @@ module.exports = {
                     return next(new Error('Authentication error: Account temporarily locked'));
                 }
 
-                // BLOQUE 5 convention
+
                 socket.userId = user._id.toString();
                 socket.userRole = user.role;
                 socket.user = decoded; // Mantener compatible

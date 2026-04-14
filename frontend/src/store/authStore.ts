@@ -2,6 +2,10 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import client from '../api/client';
 import auth from '@react-native-firebase/auth';
+import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import { removeTokenFromBackend } from '../services/notifications/NotificationService';
+
 interface User {
     _id: string;
     name: string;
@@ -63,9 +67,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
         
         try {
-            const Constants = require('expo-constants').default;
-            const Notifications = require('expo-notifications');
-            const { removeTokenFromBackend } = require('../services/notifications/NotificationService');
             const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
             const PLACEHOLDER = 'REEMPLAZAR_CON_TU_EAS_PROJECT_ID';
             const isValidProjectId = projectId && projectId !== PLACEHOLDER;

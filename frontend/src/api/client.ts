@@ -3,7 +3,7 @@ import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 
-// CORRECCIÓN 4: Warning claro si EXPO_PUBLIC_API_URL no está definida
+
 const defaultURL = Platform.OS === 'android' ? 'https://b-ride-production.up.railway.app/api' : 'https://b-ride-production.up.railway.app/api';
 const baseURL = process.env.EXPO_PUBLIC_API_URL || defaultURL;
 
@@ -15,7 +15,7 @@ if (!process.env.EXPO_PUBLIC_API_URL) {
     );
 }
 
-// CORRECCIÓN 12: Timeout global de 10 segundos
+
 const client = axios.create({
     baseURL,
     timeout: 10000,
@@ -30,7 +30,6 @@ client.interceptors.request.use(
                 config.headers['Authorization'] = `Bearer ${token}`;
             } else {
                 // Fallback a token guardado en AsyncStorage (usuarios legacy)
-                const AsyncStorage = require('@react-native-async-storage/async-storage').default;
                 const savedToken = await AsyncStorage.getItem('userToken');
                 if (savedToken) config.headers['Authorization'] = `Bearer ${savedToken}`;
             }
@@ -51,7 +50,7 @@ client.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        // CORRECCIÓN 12: Manejo de errores de red (sin respuesta del servidor)
+
         if (!error.response) {
             // Solo mostrar alerta si no es un retry interno
             if (!originalRequest._networkAlertShown) {
@@ -100,7 +99,7 @@ client.interceptors.response.use(
                 try {
                     const { useAuthStore } = require('../store/authStore');
                     await useAuthStore.getState().logout();
-                } catch (logoutErr) {
+                } catch {
                     await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
                 }
                 return Promise.reject(err);

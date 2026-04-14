@@ -26,7 +26,7 @@ const SearchingDriversView = ({ onCancel, activeDriversCount }: SearchingDrivers
   const secs = timeLeft % 60;
   const timeString = `${mins}:${secs.toString().padStart(2, '0')}`;
 
-  // LAUNCH 1 FIX: Hooks declarados al nivel superior del componente, no dentro de función
+
   const ring1 = useSharedValue(0);
   const ring2 = useSharedValue(0);
   const ring3 = useSharedValue(0);

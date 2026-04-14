@@ -58,7 +58,7 @@ export default function PassengerProfileScreen() {
         setTopupAmount('');
         fetchWallet();
       }
-    } catch(e: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', e.response?.data?.message || 'Fallo de recarga');
     } finally {
       setTopupLoading(false);
@@ -122,7 +122,7 @@ export default function PassengerProfileScreen() {
               await updateUser({ avatarUrl: res.data.avatarUrl });
               Alert.alert('Éxito', 'Foto de perfil actualizada correctamente.');
           }
-      } catch (err: any) {
+      } catch (error: unknown) {
           Alert.alert('Error', err.response?.data?.message || 'No se pudo subir la foto');
       } finally {
           setUploading(false);

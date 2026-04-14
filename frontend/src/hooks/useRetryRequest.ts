@@ -46,7 +46,7 @@ export function useRetryRequest(options: UseRetryRequestOptions = {}) {
         setLoading(false);
         onSuccess?.(result);
         return result;
-      } catch (err: any) {
+      } catch (error: unknown) {
         retryCount.current++;
 
         const status = err.response?.status;

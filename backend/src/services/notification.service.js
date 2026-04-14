@@ -15,14 +15,14 @@ const sendSmartPushNotifications = async (notifications) => {
     for (const notif of notifications) {
         // LÓGICA INTELIGENTE: Si está en foreground (socket conectado), NO ENVIAR PUSH.
         if (isUserConnected(notif.userId)) {
-            console.log(`[PushService] Usuario ${notif.userId} en foreground. Push omitido.`);
+
             continue; 
         }
 
         // Obtener Push Tokens de la BD
         const user = await User.findById(notif.userId).select('+expoPushTokens');
         if (!user || !user.expoPushTokens || user.expoPushTokens.length === 0) {
-            console.log(`[PushService] Usuario ${notif.userId} sin tokens válidos. Omitido.`);
+
             continue;
         }
 
@@ -52,7 +52,7 @@ const sendSmartPushNotifications = async (notifications) => {
     for (const chunk of chunks) {
         try {
             const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-            console.log(`[PushService] Lote enviado. Tickets:`, ticketChunk);
+
             tickets.push(...ticketChunk);
         } catch (error) {
             console.error('[PushService] Error enviando lote:', error);
@@ -69,7 +69,7 @@ const sendSmartPushNotifications = async (notifications) => {
             const tokenToRemove = messages[i]?.to;
             if (tokenToRemove) {
                  await User.updateMany({}, { $pull: { expoPushTokens: tokenToRemove } });
-                 console.log(`[PushService] Token inválido ${tokenToRemove} eliminado.`);
+
             }
         }
     }

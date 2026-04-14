@@ -29,7 +29,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
             if (res.data.success) {
                 setSuccessMsg('Se ha enviado un enlace de recuperación a tu correo electrónico. Sigue las instrucciones para restablecer tu contraseña.');
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             Alert.alert('Error', error.response?.data?.message || 'No se pudo procesar la solicitud.');
         } finally {
             setLoading(false);

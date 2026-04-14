@@ -6,6 +6,8 @@ const idempotency = require('../services/idempotency.service');
 const watchdog = require('../services/watchdog.service');
 const matchingService = require('../services/matching.service');
 const locationCache = require('../services/locationCache.service');
+const { getDriverRoom } = require('../utils/getDriverRoom');
+const notificationService = require('../services/notification.service');
 
 // Memoria para Rate Limiting de Ofertas Cíclicas
 const bidRateLimits = new Map();
@@ -27,7 +29,6 @@ const rideEvents = (socket) => {
 
     // UNIRSE A ROOM DE DRIVERS POR GEOHASH
     socket.on('driver:join', ({ lat, lng }) => {
-        const getDriverRoom = require('../utils/getDriverRoom').getDriverRoom;
         const room = getDriverRoom(lat, lng);
         if(!room) return;
         
@@ -55,22 +56,19 @@ const rideEvents = (socket) => {
                 await User.findByIdAndUpdate(userId, { driverStatus: status });
             }
 
-            // BUG 2 FIX: Notificar a pasajeros cercanos cuando un conductor se pone online
             if (status === 'AVAILABLE' && userId) {
                 // Obtener ubicación del conductor desde la caché en RAM o desde la room geohash actual
                 const cachedLoc = locationCache.cache.get(userId.toString());
                 if (cachedLoc) {
                     // Emitir a la room geohash actual del driver para que pasajeros en la misma celda lo reciban
-                    const { getDriverRoom } = require('../utils/getDriverRoom');
                     const geoRoom = getDriverRoom(cachedLoc.lat, cachedLoc.lng);
                     if (geoRoom) {
                         getIO().to(geoRoom).emit('driver_available_nearby', { count: 1, driverId: userId });
-                        console.log(`[Sockets] Driver ${userId} online -> notificado a room ${geoRoom}`);
+                        if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Driver ${userId} online -> notificado a room ${geoRoom}`);
                     }
                 } else if (socket.currentGeoRoom) {
-                    // Fallback: usar la room geohash actual del socket
                     getIO().to(socket.currentGeoRoom).emit('driver_available_nearby', { count: 1, driverId: userId });
-                    console.log(`[Sockets] Driver ${userId} online -> notificado a room ${socket.currentGeoRoom} (fallback)`);
+                    if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Driver ${userId} online -> notificado a room ${socket.currentGeoRoom} (fallback)`);
                 }
             }
 
@@ -127,7 +125,6 @@ const rideEvents = (socket) => {
                 locationCache.updateLocation(driverId, longitude, latitude);
 
                 // GEO-SHARDING SOCKETS: Suscribir a la celda (~2km) O(1)
-                const getDriverRoom = require('../utils/getDriverRoom').getDriverRoom;
                 const newGeoRoom = getDriverRoom(latitude, longitude);
 
                 if (socket.currentGeoRoom !== newGeoRoom) {
@@ -172,7 +169,7 @@ const rideEvents = (socket) => {
                  { isScheduled, scheduledAt, promoCode, vehicleCategory }
             );
 
-            // Phase 9 rule: si es Scheduled, no se propaga todavía. Se guardará y el cron hará la propagación.
+
             if (!isScheduled) {
                  matchingService.startMatchingCampaign(newRide, getIO());
             }
@@ -205,7 +202,6 @@ const rideEvents = (socket) => {
             
             if (!rideId || !newPrice) throw new Error('rideId y newPrice requeridos');
 
-            const Ride = require('../models/Ride');
             const ride = await Ride.findById(rideId);
             if (!ride) throw new Error('Viaje no encontrado');
             if (ride.passenger.toString() !== passengerId) throw new Error('No autorizado');
@@ -214,7 +210,7 @@ const rideEvents = (socket) => {
             ride.version = (ride.version || 1) + 1;
             await ride.save();
 
-            console.log(`[Bidding] Pasajero ${passengerId} subió precio a $${newPrice}`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Bidding] Pasajero ${passengerId} subió precio a $${newPrice}`);
 
             // Notificar a conductores en la room del viaje y al pasajero
             getIO().to(`ride_${rideId}`).emit('ride_price_updated', {
@@ -267,11 +263,11 @@ const rideEvents = (socket) => {
             bidRateLimits.set(rateKey, limit);
             
             const updatedRide = await rideService.submitBid(rideId, driverId, price);
-            console.log(`[Bidding] Chofer ${driverId} propone $${price}`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Bidding] Chofer ${driverId} propone $${price}`);
             
             getIO().to(passengerId).emit('trip_bid_received', updatedRide);
             
-            require('../services/notification.service').sendSmartPushNotifications([{
+            notificationService.sendSmartPushNotifications([{
                 userId: passengerId,
                 title: 'Nueva Oferta',
                 body: 'Un conductor ha hecho una oferta para tu viaje',
@@ -324,7 +320,7 @@ const rideEvents = (socket) => {
             // Fallback al pasajero directamente por si aún no unió al room
             getIO().to(passengerId).emit('trip_state_changed', acceptedRide);
 
-            require('../services/notification.service').sendSmartPushNotifications([{
+            notificationService.sendSmartPushNotifications([{
                 userId: driverId,
                 title: '¡Subasta Ganada!',
                 body: 'Un pasajero ha aceptado tu oferta. Dirígete al origen.',
@@ -345,7 +341,7 @@ const rideEvents = (socket) => {
         try {
             const { rideId, eventId } = payload;
             
-            // CORRECCIÓN 10: Validar
+
             const passengerId = socket.user?.id;
             if (!passengerId) throw new Error('No autorizado');
 
@@ -354,7 +350,7 @@ const rideEvents = (socket) => {
                 return;
             }
             const cancelledRide = await rideService.cancelRide(rideId, passengerId);
-            console.log(`[Rides] Viaje ${rideId} cancelado por pasajero ${passengerId}.`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Rides] Viaje ${rideId} cancelado por pasajero ${passengerId}.`);
             
             // 1. Cerrar campañas abiertas de matching
             matchingService.abortCampaign(rideId);
@@ -382,7 +378,7 @@ const rideEvents = (socket) => {
                     : cancelledRide.driver.toString();
                 await User.findByIdAndUpdate(driverId, { driverStatus: 'AVAILABLE' });
                 getIO().to(driverId).emit('ride:cancelled', cancelPayload);
-                require('../services/notification.service').sendSmartPushNotifications([{
+                notificationService.sendSmartPushNotifications([{
                     userId: driverId,
                     title: 'Viaje Cancelado',
                     body: 'El pasajero ha cancelado el viaje.',
@@ -420,7 +416,7 @@ const rideEvents = (socket) => {
                 return;
             }
             const updatedRide = await rideService.advanceRideStatus(rideId, driverId, nextStatus);
-            console.log(`[Trip Progress] Viaje ${rideId} ha mutado al estado: ${nextStatus}`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Trip Progress] Viaje ${rideId} ha mutado al estado: ${nextStatus}`);
 
             // Si el viaje terminó, liberar al conductor en la cuadrícula de rastreo
             if (nextStatus === 'COMPLETED' || nextStatus === 'CANCELLED') {
@@ -433,7 +429,7 @@ const rideEvents = (socket) => {
             // Broadcast to the actual ride room 
             getIO().to(`ride_${rideId}`).emit('trip_state_changed', updatedRide);
             
-            // Phase 4: Push notifications
+
             const notifications = [];
             if (nextStatus === 'ACCEPTED') {
                  notifications.push({ userId: passengerId, title: 'Tu conductor está en camino', body: 'El conductor se dirige a tu ubicación.', data: { rideId } });
@@ -446,7 +442,7 @@ const rideEvents = (socket) => {
                  notifications.push({ userId: driverId, title: 'Viaje completado', body: 'Viaje completado satisfactoriamente.', data: { rideId } });
             }
             if (notifications.length > 0) {
-                 require('../services/notification.service').sendSmartPushNotifications(notifications);
+                 notificationService.sendSmartPushNotifications(notifications);
             }
             
             // Fallbacks point-to-point just in case
@@ -473,7 +469,7 @@ const rideEvents = (socket) => {
             if (score < 1 || score > 5) throw new Error('Puntuación inválida (1-5)');
 
             // Verificar que el viaje existe y el pasajero participó
-            const ride = await require('../models/Ride').findOne({
+            const ride = await Ride.findOne({
                 _id: rideId, passenger: fromUserId, driver: driverId, status: 'COMPLETED'
             });
             if (!ride) throw new Error('Viaje no válido para calificar');
@@ -495,7 +491,7 @@ const rideEvents = (socket) => {
                 $set:  { avgRating: Math.round(newAvg * 10) / 10, totalRatings: newTotal }
             });
 
-            console.log(`[Rating] Conductor ${driverId} calificado con ${score}/5 (nuevo avg: ${newAvg.toFixed(1)})`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Rating] Conductor ${driverId} calificado con ${score}/5 (nuevo avg: ${newAvg.toFixed(1)})`);
             socket.emit('rating_submitted', { success: true, newAvg: Math.round(newAvg * 10) / 10 });
             if (isAckRequired) ack({ success: true, status: 'processed' });
         } catch (error) {
@@ -516,7 +512,7 @@ const rideEvents = (socket) => {
             }
             if (score < 1 || score > 5) throw new Error('Puntuación inválida (1-5)');
 
-            const ride = await require('../models/Ride').findOne({
+            const ride = await Ride.findOne({
                 _id: rideId, passenger: passengerId, driver: fromUserId, status: 'COMPLETED'
             });
             if (!ride) throw new Error('Viaje no válido para calificar');
@@ -536,7 +532,7 @@ const rideEvents = (socket) => {
                 $set:  { avgRating: Math.round(newAvg * 10) / 10, totalRatings: newTotal }
             });
 
-            console.log(`[Rating] Pasajero ${passengerId} calificado con ${score}/5 (nuevo avg: ${newAvg.toFixed(1)})`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Rating] Pasajero ${passengerId} calificado con ${score}/5 (nuevo avg: ${newAvg.toFixed(1)})`);
             socket.emit('rating_submitted', { success: true, newAvg: Math.round(newAvg * 10) / 10 });
             if (isAckRequired) ack({ success: true, status: 'processed' });
         } catch (error) {
@@ -546,7 +542,7 @@ const rideEvents = (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`[Sockets] Usuario desconectado: ${socket.id}`);
+        if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Usuario desconectado: ${socket.id}`);
     });
 };
 

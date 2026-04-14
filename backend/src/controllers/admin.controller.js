@@ -106,7 +106,6 @@ const banUser = async (req, res) => {
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
         user.isBlocked = true;
-        // user.isBanned = true; // Por si se requiere nomenclatura ban.
         await user.save();
 
         getIO().to(user._id.toString()).emit('force_logout', { message: 'Tu cuenta ha sido suspendida.' });

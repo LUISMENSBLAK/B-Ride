@@ -61,7 +61,7 @@ class PushNotificationService {
         try {
             const user = await User.findById(userId).select('+expoPushTokens');
             if (!user?.expoPushTokens?.length) {
-                console.log(`[Push] User ${userId} no tiene push tokens`);
+
                 return;
             }
 
@@ -91,9 +91,9 @@ class PushNotificationService {
                         console.error('[Push] Error enviando chunk:', e.message);
                     }
                 }
-                console.log(`[Push] Enviado ${eventType} a ${userId} (${messages.length} tokens)`);
+
             } else {
-                console.log(`[Push] (mock) ${eventType} → ${userId}: ${template.body(data)}`);
+
             }
         } catch (e) {
             console.error('[Push] Error:', e.message);

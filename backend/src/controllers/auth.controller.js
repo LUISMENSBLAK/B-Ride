@@ -79,7 +79,6 @@ const verifyEmail = async (req, res) => {
         }
 
         user.isEmailVerified = true;
-        user.emailVerified = true;
         user.emailVerificationToken = undefined;
         user.emailVerificationExpires = undefined;
         await user.save();
@@ -228,7 +227,7 @@ const refreshToken = async (req, res) => {
         if (dbToken.used) {
             // ALERTA DE RE-USO DE TOKEN ROBADO! Invalidar toda la familia
             await RefreshToken.updateMany({ familyId: dbToken.familyId }, { $set: { used: true } });
-            console.log(`[Seguridad] Re-uso de token detectado para user ${dbToken.user}. Familia invalidada.`);
+
             return res.status(401).json({ success: false, message: 'Token compromise detected. Please login again.' });
         }
 
@@ -316,18 +315,7 @@ const removePushToken = async (req, res) => {
     }
 };
 
-module.exports = {
-    registerUser,
-    loginUser,
-    getMe,
-    forgotPassword,
-    resetPassword,
-    refreshToken,
-    updatePushToken,
-    removePushToken,
-    verifyEmail,
-    logoutAll
-};
+
 
 const uploadAvatar = async (req, res) => {
     try {
@@ -362,10 +350,10 @@ const uploadAvatar = async (req, res) => {
     }
 };
 
-// uploadAvatar exported at bottom of file
+
 
 /**
- * V1/V2/S4/UX-B: Actualizar perfil del usuario.
+ * Actualizar perfil del usuario.
  * Permite actualizar: name, phoneNumber, vehicle, documents, emergencyContact,
  * savedAddresses, approvalStatus, etc.
  */
@@ -416,7 +404,7 @@ const updateProfile = async (req, res) => {
     }
 };
 
-// updateProfile exported at bottom of file
+
 
 const resendVerification = async (req, res) => {
     try {
@@ -454,7 +442,7 @@ const resendVerification = async (req, res) => {
     }
 };
 
-// resendVerification exported at bottom of file
+
 
 const sendPhoneOtp = async (req, res) => {
     try {
@@ -595,15 +583,9 @@ const googleLogin = async (req, res) => {
                 referralCode: myReferralCode,
             });
         } else {
-            // Link Google ID if not already linked
-            if (!user.googleId) {
-                user.googleId = googleId;
-            }
-            if (avatarUrl && !user.avatarUrl) {
-                user.avatarUrl = avatarUrl;
-            }
+            if (!user.googleId) user.googleId = googleId;
+            if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
             user.isEmailVerified = true;
-            user.emailVerified = true;
             await user.save();
         }
 
@@ -679,11 +661,8 @@ const appleLogin = async (req, res) => {
                 referralCode: myReferralCode,
             });
         } else {
-            if (!user.appleId) {
-                user.appleId = appleUserId;
-            }
+            if (!user.appleId) user.appleId = appleUserId;
             user.isEmailVerified = true;
-            user.emailVerified = true;
             await user.save();
         }
 
@@ -716,17 +695,7 @@ const appleLogin = async (req, res) => {
     }
 };
 
-// Exports for functions defined after the first module.exports block
-// (consolidated here to prevent fragmented export trap)
-module.exports.uploadAvatar = uploadAvatar;
-module.exports.updateProfile = updateProfile;
-module.exports.resendVerification = resendVerification;
-module.exports.sendPhoneOtp = sendPhoneOtp;
-module.exports.verifyPhoneOtp = verifyPhoneOtp;
-module.exports.deleteAccount = deleteAccount;
-module.exports.getReferral = getReferral;
-module.exports.googleLogin = googleLogin;
-module.exports.appleLogin = appleLogin;
+
 
 /**
  * firebaseSync
@@ -766,4 +735,25 @@ const firebaseSync = async (req, res) => {
   }
 };
 
-module.exports.firebaseSync = firebaseSync;
+module.exports = {
+    registerUser,
+    loginUser,
+    getMe,
+    forgotPassword,
+    resetPassword,
+    refreshToken,
+    updatePushToken,
+    removePushToken,
+    verifyEmail,
+    logoutAll,
+    uploadAvatar,
+    updateProfile,
+    resendVerification,
+    sendPhoneOtp,
+    verifyPhoneOtp,
+    deleteAccount,
+    getReferral,
+    googleLogin,
+    appleLogin,
+    firebaseSync,
+};

@@ -5,7 +5,7 @@ const sendEmail = require('../utils/sendEmail');
 const startDocumentExpiryCron = () => {
     // Runs every day at 09:00 AM
     cron.schedule('0 9 * * *', async () => {
-        console.log('[Cron] Ejecutando rutina de expiración de documentos (9 AM)...');
+
         try {
             const today = new Date();
             const in30Days = new Date();

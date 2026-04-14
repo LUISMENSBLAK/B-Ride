@@ -58,7 +58,7 @@ function cleanupSocket(socketId) {
 function rejoinRideRoom(socket, rideId) {
     if (rideId) {
         socket.join(`ride:${rideId}`);
-        console.log(`[WS] Socket ${socket.id} re-joined ride:${rideId}`);
+
     }
 }
 

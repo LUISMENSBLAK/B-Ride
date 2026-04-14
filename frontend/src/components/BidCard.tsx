@@ -16,11 +16,12 @@ import { useAppTheme } from '../hooks/useAppTheme';
 import { type Theme } from '../theme';
 import { useTranslation } from '../hooks/useTranslation';
 import { useCurrency } from '../hooks/useCurrency';
+import { type Bid } from '../store/useRideFlowStore';
 
 const BID_TTL_SECONDS = 25;
 
 interface BidCardProps {
-  bid: any;
+  bid: Bid & { createdAt?: string; isProcessing?: boolean; surgeMultiplier?: number };
   isBest: boolean;
   onAccept: (bidId: string, driverId: string) => void;
   pickupLat?: number;

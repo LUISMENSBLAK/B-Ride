@@ -38,7 +38,7 @@ class ObservabilityService {
             eventId: meta.eventId || null,
             message: meta.message || ''
         };
-        console.log(JSON.stringify(payload));
+
     }
 
     /**

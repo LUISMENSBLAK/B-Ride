@@ -43,7 +43,7 @@ export function useGoogleAuth() {
 
       setLoading(false);
       return backendResponse.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       setLoading(false);
       if (error.code === statusCodes.SIGN_IN_CANCELLED) return null;
       if (error.code === statusCodes.IN_PROGRESS) return null;

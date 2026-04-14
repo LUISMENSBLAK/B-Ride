@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
+
 
 const userSchema = new mongoose.Schema(
     {
@@ -89,8 +91,7 @@ const userSchema = new mongoose.Schema(
         },
         rejectionReason: { type: String, default: null },
 
-        // ─── S2/B2: VERIFICACIÓN ───────────────────────────────────────────
-        isEmailVerified: { type: Boolean, default: false }, // Compatibilidad requerida en prompt
+        isEmailVerified: { type: Boolean, default: false },
         emailVerificationToken: { type: String, select: false },
         emailVerificationExpires: { type: Date, select: false },
         
@@ -135,7 +136,7 @@ const userSchema = new mongoose.Schema(
         }],
         lastDeviceId: { type: String, default: null },
         
-        // Bloqueo de fuerza bruta de Auth
+
         loginAttempts: { type: Number, default: 0 },
         lockUntil: { type: Date, default: null },
 
@@ -207,12 +208,10 @@ userSchema.index({ lastKnownLocation: '2dsphere' });
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ role: 1, driverStatus: 1 });
 userSchema.index({ 'vehicle.plate': 1 });
-userSchema.index({ approvalStatus: 1 });
 userSchema.index({ deviceIds: 1 });
 
 // Generate and hash password token
 userSchema.methods.getResetPasswordToken = function () {
-    const crypto = require('crypto');
     const resetToken = crypto.randomBytes(20).toString('hex');
     this.resetPasswordToken = crypto
         .createHash('sha256')

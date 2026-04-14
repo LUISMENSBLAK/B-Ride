@@ -2,6 +2,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
+import eventManager from './EventManager';
 
 import { Platform } from 'react-native';
 
@@ -13,7 +14,7 @@ const defaultSocketURL =
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
 
-// CORRECCIÓN 4: Warning claro si la URL de socket no está definida
+
 if (!process.env.EXPO_PUBLIC_SOCKET_URL) {
     console.warn(
         '[Socket] ⚠️ EXPO_PUBLIC_SOCKET_URL no está definida. ' +
@@ -61,8 +62,6 @@ class SocketService {
       timeout: 20000,
     });
 
-    // REBIND EVENT MANAGER AL NUEVO SOCKET QUE SE ACABA DE CREAR
-    const eventManager = require('./EventManager').default;
     eventManager.reconnectSocketBindings();
 
     this.socket.on('connect', () => {
@@ -85,9 +84,7 @@ class SocketService {
         // WEBSOCKETS RECOVERY: Pedimos el active ride state
         this.socket?.emit('sync_state', { userId: userState._id, role: userState.role }, (res: any) => {
             if (res && res.success && res.activeRide) {
-                // Notificar componente global del recargue (si hay uno)
                 if (__DEV__) console.log('[Socket] Estado activo recuperado:', res.activeRide._id);
-                const eventManager = require('./EventManager').default;
                 eventManager.emitLocalRideEvent('trip_state_changed', res.activeRide);
             }
         });
@@ -133,8 +130,9 @@ class SocketService {
            }
            
            return response; // Success Validation
-       } catch (error: any) {
-           console.warn(`[Socket] ACK Timeout en ${eventName} (Intento ${attempt}/${maxRetries}):`, error.message);
+       } catch (error: unknown) {
+           const msg = error instanceof Error ? error.message : String(error);
+           console.warn(`[Socket] ACK Timeout en ${eventName} (Intento ${attempt}/${maxRetries}):`, msg);
            if (attempt === maxRetries) {
                throw new Error(`Fallo de red tras ${maxRetries} reintentos en ${eventName}`);
            }

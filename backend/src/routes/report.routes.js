@@ -67,7 +67,7 @@ router.post('/sos', async (req, res) => {
         // TODO: Enviar push notification de emergencia a admins
         // TODO: Integrar con servicio de emergencias externo
 
-        console.log(`[SOS] ⚠️ Usuario ${req.user._id} activó SOS en ride ${rideId}`);
+        console.warn(`[SOS] ⚠️ Usuario ${req.user._id} activó SOS en ride ${rideId}`);
 
         res.status(201).json({ success: true, data: report });
     } catch (e) {

@@ -395,7 +395,7 @@ export default function DriverDashboard() {
       setIsOnline(next);
       // Nota: La emisión de actualización de location y driver:join
       // ahora está manejada por un useEffect estable cuando isOnline y location son válidos.
-    } catch (e: any) {
+    } catch (error: unknown) {
       Alert.alert(t('driver.networkError'), e.message);
     }
   }, [user, isOnline, onboardingComplete]);
@@ -417,7 +417,7 @@ export default function DriverDashboard() {
         price:       finalPriceUsd,
         passengerId: incomingRide.passenger._id,
       });
-    } catch (e: any) {
+    } catch (error: unknown) {
       Alert.alert(t('driver.auctionFailed'), e.message);
       setPhase('INCOMING');
     }
@@ -454,7 +454,7 @@ export default function DriverDashboard() {
         setActiveRide({ ...activeRide, status: nextStatus });
         setPhase(nextStatus as TripPhase);
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
       Alert.alert(t('driver.networkError'), e.message);
     }
   }, [activeRide, user]);
@@ -472,7 +472,7 @@ export default function DriverDashboard() {
            if (comment) {
                await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
            }
-       } catch (error: any) {
+       } catch (error: unknown) {
            Alert.alert(t('driver.ratingError'), error.message);
        }
     }

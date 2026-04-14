@@ -33,7 +33,7 @@ export default function LoginScreen({ navigation }: any) {
             if (res.data.success) {
                 await login(res.data.data);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
                 Alert.alert('Error de red', 'No hay conexión con el servidor. Revisa tu conexión de red o asegura que el servidor esté activo.');
                 return;
@@ -56,7 +56,7 @@ export default function LoginScreen({ navigation }: any) {
         if (result?.success) {
           await login(result.data);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Google');
       }
     };
@@ -67,7 +67,7 @@ export default function LoginScreen({ navigation }: any) {
         if (result?.success) {
           await login(result.data);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Apple');
       }
     };

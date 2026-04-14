@@ -145,7 +145,7 @@ export default function DriverOnboardingScreen() {
         }
         setStep('WAITING');
       }
-    } catch (e: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', e.response?.data?.message || 'Error al guardar');
     } finally {
       setLoading(false);

@@ -41,7 +41,7 @@ export function useAppleAuth() {
 
       setLoading(false);
       return backendResponse.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       setLoading(false);
       if (error.code === 'ERR_REQUEST_CANCELED') return null;
       throw error;

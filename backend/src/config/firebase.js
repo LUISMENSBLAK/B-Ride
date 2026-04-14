@@ -7,11 +7,18 @@ const admin = require('firebase-admin');
 let app;
 
 if (!admin.apps.length) {
-  const credential = process.env.FIREBASE_SERVICE_ACCOUNT
-    ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-    : admin.credential.cert(require('../../serviceAccount.json'));
+  try {
+    const credential = process.env.FIREBASE_SERVICE_ACCOUNT
+      ? admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+      : admin.credential.cert(require('../../serviceAccount.json'));
 
-  app = admin.initializeApp({ credential });
+    app = admin.initializeApp({ credential });
+  } catch (e) {
+    console.warn('[Firebase Admin] No se encontró serviceAccount.json ni FIREBASE_SERVICE_ACCOUNT en .env.');
+    console.warn('[Firebase Admin] El backend arranca sin Firebase Admin (funciones OAuth deshabilitadas).');
+    // Inicializar sin credenciales para desarrollo local
+    app = admin.apps[0] || admin.initializeApp();
+  }
 } else {
   app = admin.apps[0];
 }

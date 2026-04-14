@@ -76,7 +76,7 @@ class ChatService {
              } catch (e) {
                  // silenciar fallos si import circular
              }
-             console.log(`[ChatService] Contexto de chat efímero destruido para Ride ${rideId}`);
+
         }
     }
 }

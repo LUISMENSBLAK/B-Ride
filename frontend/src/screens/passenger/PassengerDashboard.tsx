@@ -186,7 +186,7 @@ export default function PassengerDashboard() {
           (newLoc) => { if (isMounted) setLocation(newLoc); }
         );
         return sub;
-    } catch (e: any) {
+    } catch (error: unknown) {
         if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
         return null;
     }
@@ -242,7 +242,7 @@ export default function PassengerDashboard() {
     setRideStatus('SEARCHING');
   }, []));
 
-  // CORRECCIÓN 9: Si no hay conductores, avisarle al pasajero
+
   useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
     Alert.alert('Sin conductores', data.message);
     resetFlow(); // Vuelve al estado IDLE
@@ -321,7 +321,7 @@ export default function PassengerDashboard() {
     setAcceptingBidId(null);
   }, []));
 
-  // LAUNCH 7 FIX: Escuchar eventos de driver no escuchados previamente
+
   useRideSocketEvent('driver_warning', useCallback((data: any) => {
     Alert.alert(
       '⚠️ Aviso del conductor',
@@ -412,7 +412,7 @@ export default function PassengerDashboard() {
         vehicleCategory: finalCategory,
       }, 3, 5000);
       // 'rideRequestCreated' socket event will update status
-    } catch (error: any) {
+    } catch (error: unknown) {
         Alert.alert('Error de conexión', error.message);
         setRideStatus('IDLE');
     }
@@ -430,7 +430,7 @@ export default function PassengerDashboard() {
            setPaymentStatusText(t('payment.processing', { defaultValue: 'Procesando pago de forma segura...' }));
            
            if (paymentMethod === 'CARD') {
-             // CORRECCIÓN 3: Stripe Payment Sheet real
+
              const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId, currency);
              if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
 
@@ -468,7 +468,7 @@ export default function PassengerDashboard() {
              driverId,
              paymentMethod,
            });
-       } catch (error: any) {
+       } catch (error: unknown) {
            Alert.alert('Transacción Detenida', error.message || 'No se pudo autorizar el pago.');
            setAcceptingBidId(null);
        } finally {
@@ -509,7 +509,7 @@ export default function PassengerDashboard() {
            setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
            Alert.alert('Promoción aplicada', 'El descuento ha sido reflejado en el precio.');
        }
-     } catch(e: any) {
+     } catch (error: unknown) {
         Alert.alert('Error promo', e.response?.data?.message || 'Código inválido.');
         setPromoDiscount(null);
      } finally {
@@ -543,7 +543,7 @@ export default function PassengerDashboard() {
            Alert.alert('Viaje Programado', `Tu viaje ha sido programado para ${scheduledDate.toLocaleString()}`);
            handleCancelRequest(); // Resetea form
        }
-    } catch (e: any) {
+    } catch (error: unknown) {
        Alert.alert('Error al programar', e.response?.data?.message || 'Algo salió mal');
     }
   };
@@ -593,7 +593,7 @@ export default function PassengerDashboard() {
            if (comment) {
              await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
            }
-       } catch (error: any) {
+       } catch (error: unknown) {
            Alert.alert('Error Calificando', error.message);
        }
     }

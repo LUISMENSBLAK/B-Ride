@@ -94,7 +94,7 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         await login(res.data.data);
         clearJustRegistered();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       triggerShake();
       setCode(['', '', '', '', '', '']);
       inputs.current[0]?.focus();
@@ -114,7 +114,7 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         setCode(['', '', '', '', '', '']);
         inputs.current[0]?.focus();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', error.response?.data?.message || 'No se pudo reenviar el código.');
     } finally {
       setResendLoading(false);

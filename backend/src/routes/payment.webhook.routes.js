@@ -144,14 +144,13 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
 router.post('/conekta', express.json(), async (req, res) => {
     try {
          const event = req.body;
-         console.log('[Conekta Webhook] Event Received:', event.type);
-         
+
          if (event.type === 'order.paid') {
               const order = event.data.object;
               const referenceId = order.metadata?.referenceId;
               if (referenceId) {
                    // Logica de confirmacion cuando el OXXO/SPEI es pagado
-                   console.log(`[Conekta Webhook] Orden Pagada, liberando viaje ${referenceId}`);
+
                    const Ride = require('../models/Ride');
                    const ride = await Ride.findById(referenceId);
                    if (ride && (ride.paymentStatus === 'HOLD' || ride.paymentStatus === 'PENDING')) {

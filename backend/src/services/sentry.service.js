@@ -9,7 +9,7 @@ let isInitialized = false;
 function initSentry() {
     const dsn = process.env.SENTRY_DSN;
     if (!dsn) {
-        console.log('[Sentry] SENTRY_DSN no configurado. Monitoreo de errores deshabilitado.');
+
         return;
     }
 
@@ -28,7 +28,7 @@ function initSentry() {
             },
         });
         isInitialized = true;
-        console.log('[Sentry] ✅ Monitoreo de errores inicializado.');
+
     } catch (e) {
         console.warn('[Sentry] @sentry/node no instalado. Ejecuta: npm install @sentry/node');
     }
@@ -51,7 +51,7 @@ function captureMessage(message, level = 'info') {
     if (isInitialized && Sentry) {
         Sentry.captureMessage(message, level);
     }
-    console.log(`[${level.toUpperCase()}]`, message);
+
 }
 
 function setUser(user) {

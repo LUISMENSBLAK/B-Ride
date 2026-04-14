@@ -18,7 +18,7 @@ class AuthService {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Bloque 2: Generar y guardar código 6 dígitos
+
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
         const hashedCode = await bcrypt.hash(verifyCode, salt);
 
@@ -48,11 +48,10 @@ class AuthService {
         });
 
         try {
-            console.log(`\n=========================================`);
-            console.log(`🛂 [B-RIDE] CÓDIGO DE VERIFICACIÓN (OTP) `);
-            console.log(`📧 Email: ${email}`);
-            console.log(`🔑 Código: ${verifyCode}`);
-            console.log(`=========================================\n`);
+
+
+
+
 
             await sendEmail({
                 email,

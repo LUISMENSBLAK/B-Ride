@@ -12,7 +12,7 @@ const sendSMS = async (to, text) => {
         const formattedTo = to.replace(/\+/g, '');
         const response = await vonage.sms.send({ to: formattedTo, from, text });
         if (response.messages[0].status === "0") {
-            console.log("SMS Message sent successfully to", formattedTo);
+            if (process.env.NODE_ENV !== 'production') console.log('[SMS] Message sent successfully to', formattedTo);
             return true;
         } else {
             console.error(`Vonage SMS failed with error: ${response.messages[0]['error-text']}`);

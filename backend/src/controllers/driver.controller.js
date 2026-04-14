@@ -1,4 +1,6 @@
+
 const Ride = require('../models/Ride');
+const User = require('../models/User');
 
 const getEarnings = async (req, res) => {
     try {
@@ -35,7 +37,7 @@ const getEarnings = async (req, res) => {
         });
         
         // Let's get the driver rating too
-        const User = require('../models/User');
+
         const driver = await User.findById(driverId).select('avgRating');
 
         res.status(200).json({

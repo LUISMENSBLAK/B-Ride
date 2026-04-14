@@ -23,7 +23,7 @@ class PaymentService {
                 const existingPi = await stripe.paymentIntents.retrieve(ride.paymentIntentId);
                 // Si está en estado pendiente de procesamiento/confirmación, se reutiliza
                 if (['requires_payment_method', 'requires_confirmation'].includes(existingPi.status)) {
-                    console.log(`[Payment] Reutilizando PaymentIntent existente para Ride: ${rideId}`);
+
                     return {
                         clientSecret: existingPi.client_secret,
                         paymentIntentId: existingPi.id,
@@ -80,7 +80,6 @@ class PaymentService {
             }
         }, { idempotencyKey });
 
-        console.log(`[Payment] Intent_CREATE | Ride: ${rideId} | IntentId: ${paymentIntent.id} | Amount (Converted): ${convertedPrice} ${currency}`);
 
         return {
             clientSecret: paymentIntent.client_secret,
@@ -105,11 +104,10 @@ class PaymentService {
 
         // Si no pudo bloquear la fila, es por concurrencia o estado inválido
         if (!ride || !ride.paymentIntentId) {
-             console.log(`[Payment] Capture abortado | Ride: ${rideId} | Razón: No en HOLD o sin PaymentIntent`);
+
              return;
         }
 
-        console.log(`[Payment] Lock adquirido (HOLD -> PROCESSING) | Ride: ${rideId}`);
 
         try {
             // [HARDENING] Validación Fuerte de Driver en Capture
@@ -127,7 +125,7 @@ class PaymentService {
             await stripe.paymentIntents.capture(ride.paymentIntentId, {
                 idempotencyKey: idempotencyKey || `capture_${ride._id}_${Date.now()}`
             });
-            console.log(`[Payment] Intent_CAPTURE_FIRED | Ride: ${ride._id} | IntentId: ${ride.paymentIntentId}`);
+
             // NOTA: Webhook es el dueño de transicionar a CAPTURED.
         } catch (error) {
             console.error(`[Payment] Error severo en Stripe Capture | Ride: ${rideId} | Error: ${error.message}`);
@@ -151,7 +149,7 @@ class PaymentService {
         );
 
         if (!ride || !ride.paymentIntentId) {
-             console.log(`[Payment] Cancelación abortada para Ride ${rideId}: No en HOLD o sin PaymentIntent`);
+
              return;
         }
 
@@ -160,7 +158,7 @@ class PaymentService {
                 cancellation_reason: 'requested_by_customer', // O abandoned
                 idempotencyKey: idempotencyKey || `cancel_${ride._id}_${Date.now()}`
             });
-            console.log(`[Payment] Intent de cancelación emitido a Stripe para Ride ${ride._id}`);
+
             // NOTA: De nuevo, Webhook se encargará de poner en CANCELED.
         } catch (error) {
             console.error(`[Payment] Error cancelando pago en Stripe: ${error.message}`);
@@ -206,7 +204,7 @@ class PaymentService {
                   idempotencyKey: idempotencyKey || `refund_${ride._id}_${Date.now()}`
               });
 
-              console.log(`[Payment] Refund Emitido | Ride: ${ride._id} | RefundId: ${refund.id}`);
+
               // Webhook (charge.refunded) será quien asiente el estado final
               return refund;
 
@@ -235,7 +233,7 @@ class PaymentService {
          const ride = await Ride.findById(rideId);
          if (!ride || !ride.paymentIntentId) throw new Error('Viaje inválido para reconciliación');
 
-         console.log(`[Payment] Iniciando RECONCILE | Ride: ${rideId}`);
+
          const pi = await stripe.paymentIntents.retrieve(ride.paymentIntentId);
          
          const oldStatus = ride.paymentStatus;
@@ -251,9 +249,9 @@ class PaymentService {
                  { _id: rideId },
                  { $set: { paymentStatus: newDbStatus } }
              );
-             console.log(`[Payment] Reconciliado | Ride: ${rideId} | ${oldStatus} -> ${newDbStatus}`);     
+
          } else {
-             console.log(`[Payment] DB ya convergió correctamente | Ride: ${rideId} (Status: ${oldStatus})`);
+
          }
 
          return { rideId, oldStatus, newDbStatus, stripeStatus: pi.status };
@@ -271,7 +269,7 @@ class PaymentService {
         });
 
         if (zombies.length > 0) {
-            console.log(`[Payment Zombie Job] Revisando ${zombies.length} viajes atascados en PROCESSING`);
+
             for (const zombie of zombies) {
                  try {
                      await this.reconcilePaymentStatus(zombie._id);
@@ -289,7 +287,7 @@ class PaymentService {
         });
 
         if (expiredRides.length > 0) {
-             console.log(`[Payment Expiry Job] Detectados ${expiredRides.length} viajes para cancelar holds expirados`);
+
              for (const ride of expiredRides) {
                  try {
                      // [HARDENING] Confirmar si se capturó a pesar del limbo DB antes de aniquilar

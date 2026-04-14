@@ -144,7 +144,7 @@ class RideService {
         return { acceptedRide: finalRide, rejectedDriverIds };
     }
 
-    // BUG FIX #2: Cancelación iniciada por el pasajero
+
     // advanceRideStatus requiere driverId (solo conductores), por eso existe este método separado.
     async cancelRide(rideId, passengerId) {
         const ride = await Ride.findOneAndUpdate(
@@ -197,7 +197,7 @@ class RideService {
         // Intercepción Financiera (NO bloquea el Thread actual)
         if (nextStatus === 'COMPLETED') {
             const User = require('../models/User');
-            // Phase 5: Destinos recientes
+
             try {
                 if (rideQuery.dropoffLocation) {
                     await User.findByIdAndUpdate(rideQuery.passenger, {
@@ -218,7 +218,7 @@ class RideService {
                 console.error('[RecentDestinations] Error saving:', err.message);
             }
             
-            // Phase 7: Referral First Ride Reward
+
             try {
                 const p = await User.findById(rideQuery.passenger);
                 if (p && p.referredBy && !p.referralRewardClaimed) {
@@ -232,7 +232,7 @@ class RideService {
                          $inc: { referralCount: 1, referralBonusEarned: 20, walletBalance: 20 }
                     });
                     
-                    console.log(`[Referral] Bono aplicado: +$20 al pasajero ${p._id} y al referidor ${p.referredBy}`);
+
                 }
             } catch (rErr) {
                  console.error('[Referral Reward Error]', rErr.message);

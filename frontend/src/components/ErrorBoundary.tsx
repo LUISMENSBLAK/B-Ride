@@ -11,7 +11,7 @@ interface State {
 }
 
 /**
- * LAUNCH 3: ErrorBoundary global — captura crashes JS y muestra UI de recovery
+ * ErrorBoundary global — captura crashes JS y muestra UI de recovery
  * en vez de pantalla blanca.
  */
 export default class ErrorBoundary extends Component<Props, State> {

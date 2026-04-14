@@ -29,10 +29,6 @@ const SECTIONS = [
   { id: 'liability', label: '🛡️ Responsabilidad' },
 ];
 
-/**
- * CORRECCIÓN 7: LegalScreen con Política de Privacidad RGPD-compliant,
- * Términos y Condiciones con sistema de pujas, índice navegable y botón de aceptar.
- */
 export default function LegalScreen({ onAccept }: Props) {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);

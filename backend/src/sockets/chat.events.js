@@ -17,7 +17,7 @@ const chatEvents = (socket) => {
             const history = chatService.getHistory(rideId);
             socket.emit('chat_history', { rideId, messages: history });
 
-            console.log(`[Chat] User ${userId} conectó a ${roomName}`);
+            if (process.env.NODE_ENV !== 'production') console.log(`[Chat] User ${userId} conectó a ${roomName}`);
             if (isAckRequired) ack({ success: true, history_count: history.length });
         } catch (error) {
             if (isAckRequired) ack({ success: false, error: error.message });

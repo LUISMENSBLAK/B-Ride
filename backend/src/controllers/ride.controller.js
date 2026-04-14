@@ -1,11 +1,18 @@
+
 const rideService = require('../services/ride.service');
+const Ride = require('../models/Ride');
+const SOS = require('../models/SOS');
+const { getIO } = require('../sockets');
+const sendEmail = require('../utils/sendEmail');
+const User = require('../models/User');
+const locationCacheModule = require('../services/locationCache.service');
 
 const getMyRides = async (req, res) => {
     try {
         const userId = req.user._id;
         const role = req.user.role; 
 
-        // Bloque 6: Paginación
+
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 20;
 
@@ -13,7 +20,7 @@ const getMyRides = async (req, res) => {
 
         const query = role === 'DRIVER' ? { driver: userId } : { passenger: userId };
         
-        const Ride = require('../models/Ride');
+
         const rides = await Ride.find(query)
             .sort({ createdAt: -1 })
             .skip(skip)
@@ -38,7 +45,7 @@ const getMyRides = async (req, res) => {
 
 const getRideState = async (req, res) => {
     try {
-        const ride = await require('../models/Ride').findById(req.params.id)
+        const ride = await Ride.findById(req.params.id)
             .select('status version bids driver passenger')
             .populate('driver', 'name email phoneNumber')
             .populate('bids.driver', 'name avgRating');
@@ -79,7 +86,7 @@ const sosTrigger = async (req, res) => {
         
         if (!rideId) return res.status(400).json({ success: false, message: 'rideId requerido' });
 
-        const SOS = require('../models/SOS');
+
         const sosAlert = await SOS.create({
             ride: rideId,
             user: req.user._id,
@@ -90,7 +97,7 @@ const sosTrigger = async (req, res) => {
         });
 
         // Emitir evento por socket room
-        const { getIO } = require('../sockets');
+
         try {
             getIO().to(`ride_${rideId}`).emit('sos_triggered', { 
                 rideId, 
@@ -101,7 +108,7 @@ const sosTrigger = async (req, res) => {
 
         // Enviar email a soporte
         const supportEmail = process.env.SUPPORT_EMAIL || 'support@brideapp.com';
-        const sendEmail = require('../utils/sendEmail');
+
         await sendEmail({
             email: supportEmail,
             subject: '🚨 EMERGENCIA SOS — B-Ride',
@@ -123,8 +130,8 @@ const rateRide = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Rating válido entre 1 y 5 es requerido' });
         }
 
-        const Ride = require('../models/Ride');
-        const User = require('../models/User');
+
+
         const ride = await Ride.findById(rideId);
         
         if (!ride) return res.status(404).json({ success: false, message: 'Viaje no encontrado' });
@@ -154,7 +161,7 @@ const rateRide = async (req, res) => {
         await targetUser.save();
         
         try {
-            const { getIO } = require('../sockets');
+
             getIO().to(targetUser._id.toString()).emit('rating_received', { rideId: ride._id, score: rating, feedback });
         } catch (e) {}
 
@@ -167,8 +174,7 @@ const rateRide = async (req, res) => {
 const trackRide = async (req, res) => {
     try {
         const rideId = req.params.id;
-        const Ride = require('../models/Ride');
-        const locationCacheModule = require('../services/locationCache.service');
+
 
         const ride = await Ride.findById(rideId).populate('driver', 'name vehicle driverStatus');
         

@@ -34,7 +34,7 @@ export default function ShareRideButton({ rideId, driverName, vehiclePlate, styl
         message,
         title: t('share.title', { defaultValue: 'Mi viaje en B-Ride' }),
       });
-    } catch (e: any) {
+    } catch (error: unknown) {
       if (e.message !== 'User did not share') {
         Alert.alert('Error', 'No se pudo compartir el viaje');
       }

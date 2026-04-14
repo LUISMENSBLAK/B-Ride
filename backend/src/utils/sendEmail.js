@@ -40,8 +40,6 @@ const sendEmail = async (options) => {
             console.error('[Resend Error]', error);
             throw new Error('Error sending email');
         }
-
-        console.log('Message sent:', data);
     } catch (error) {
         console.error('[sendEmail Error]', error);
         throw error;

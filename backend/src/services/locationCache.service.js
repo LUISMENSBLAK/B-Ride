@@ -47,7 +47,7 @@ class LocationCacheService {
 
             if (bulkOps.length > 0) {
                  await User.bulkWrite(bulkOps, { ordered: false });
-                 console.log(`[LocationCache] Flushed ${bulkOps.length} geo-updates to MongoDB en BulkWrite successfully.`);
+
             }
 
         } catch (e) {

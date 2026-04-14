@@ -54,7 +54,7 @@ export default function RegisterScreen({ navigation }: any) {
         // Always use register() — sets justRegistered=true → routes to VerifyEmail
         await register(res.data.data);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
         Alert.alert('Error de red', 'No hay conexión con el servidor. Revisa tu conexión de red o asegura que el servidor esté activo.');
       } else {
@@ -85,7 +85,7 @@ export default function RegisterScreen({ navigation }: any) {
         const login = useAuthStore.getState().login;
         await login(result.data);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Google');
     }
   };
@@ -98,7 +98,7 @@ export default function RegisterScreen({ navigation }: any) {
         const login = useAuthStore.getState().login;
         await login(result.data);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Apple');
     }
   };

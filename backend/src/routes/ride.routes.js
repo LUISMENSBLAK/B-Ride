@@ -14,7 +14,7 @@ router.get('/:id/state', protect, require('../controllers/ride.controller').getR
 // Rate ride
 router.post('/:id/rate', protect, require('../controllers/ride.controller').rateRide);
 
-// Phase 14: Public Tracker endpoint
+
 router.get('/:id/track', require('../controllers/ride.controller').trackRide);
 
 // Scheduled Ride
