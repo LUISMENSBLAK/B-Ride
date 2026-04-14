@@ -10,8 +10,19 @@ import SOSPage from './pages/SOS';
 import PromosPage from './pages/Promos';
 import AnalyticsPage from './pages/Analytics';
 
+import { useEffect } from 'react';
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, hydrate } = useAuthStore();
+
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
+
+  // Prevent flicker during hydrate basically if not authenticated check localStorage
+  const hasToken = !!localStorage.getItem('admin_token');
+  if (!isAuthenticated && hasToken) return null; // Wait for hydrate
+
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
