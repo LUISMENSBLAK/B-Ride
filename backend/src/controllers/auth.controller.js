@@ -364,7 +364,7 @@ const updateProfile = async (req, res) => {
         // Campos permitidos para actualización
         const allowedFields = [
             'name', 'phoneNumber',
-            'vehicle', 'documents', 'approvalStatus', 'driverApprovalStatus',
+            'vehicle', 'documents',
             'emergencyContact', 'savedAddresses',
         ];
 
@@ -375,12 +375,6 @@ const updateProfile = async (req, res) => {
             }
         }
 
-        // Sincronizar legacy
-        if (updateData.approvalStatus && !updateData.driverApprovalStatus) {
-            updateData.driverApprovalStatus = updateData.approvalStatus;
-        } else if (updateData.driverApprovalStatus && !updateData.approvalStatus) {
-            updateData.approvalStatus = updateData.driverApprovalStatus;
-        }
 
         // Seguridad: un usuario no puede auto-aprobarse
         if (updateData.approvalStatus === 'APPROVED' || updateData.driverApprovalStatus === 'APPROVED') {

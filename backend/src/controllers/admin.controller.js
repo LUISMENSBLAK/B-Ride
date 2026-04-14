@@ -70,12 +70,28 @@ const getAllRides = async (req, res) => {
             query.createdAt = { $gte: start, $lt: end };
         }
 
-        const rides = await Ride.find(query)
-            .populate('passenger', 'name email phoneNumber')
-            .populate('driver', 'name email phoneNumber')
-            .sort({ createdAt: -1 });
+        const pageNum = parseInt(req.query.page, 10) || 1;
+        const limitNum = parseInt(req.query.limit, 10) || 20;
+        const skip = (pageNum - 1) * limitNum;
 
-        res.status(200).json({ success: true, count: rides.length, data: rides });
+        const [rides, total] = await Promise.all([
+            Ride.find(query)
+                .populate('passenger', 'name email phoneNumber')
+                .populate('driver', 'name email phoneNumber')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum),
+            Ride.countDocuments(query)
+        ]);
+
+        res.status(200).json({ 
+            success: true, 
+            count: rides.length, 
+            total,
+            page: pageNum,
+            pages: Math.ceil(total / limitNum),
+            data: rides 
+        });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
@@ -93,8 +109,23 @@ const getAllUsers = async (req, res) => {
             query.createdAt = { $gte: start, $lt: end };
         }
 
-        const users = await User.find(query).select('-password');
-        res.status(200).json({ success: true, count: users.length, data: users });
+        const pageNum = parseInt(req.query.page, 10) || 1;
+        const limitNum = parseInt(req.query.limit, 10) || 20;
+        const skip = (pageNum - 1) * limitNum;
+
+        const [users, total] = await Promise.all([
+            User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+            User.countDocuments(query)
+        ]);
+        
+        res.status(200).json({ 
+            success: true, 
+            count: users.length, 
+            total,
+            page: pageNum,
+            pages: Math.ceil(total / limitNum),
+            data: users 
+        });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

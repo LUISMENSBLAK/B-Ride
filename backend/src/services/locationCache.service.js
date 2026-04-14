@@ -1,9 +1,10 @@
 const User = require('../models/User');
+const NodeCache = require('node-cache');
 
 class LocationCacheService {
     constructor() {
-        // Estructura: driverId => { lng, lat, timestamp }
-        this.cache = new Map();
+        // Cache con TTL de 10 minutos (600s), chequea expiración cada 2 mins
+        this.cache = new NodeCache({ stdTTL: 600, checkperiod: 120 });
         this.isFlushing = false;
     }
 
@@ -23,16 +24,17 @@ class LocationCacheService {
      * @desc Vacía memoria asíncronamente y empaqueta BulkQueries para MongoDB
      */
     async flushToDatabase() {
-        if (this.isFlushing || this.cache.size === 0) return;
+        if (this.isFlushing || this.cache.keys().length === 0) return;
         this.isFlushing = true;
 
         try {
             // Snapshot atómico para liberar lock
-            const snapshot = new Map(this.cache);
-            this.cache.clear();
+            const snapshot = this.cache.mget(this.cache.keys());
+            this.cache.flushAll(); // Limpia la instancia de node-cache
+
 
             const bulkOps = [];
-            for (let [driverId, data] of snapshot.entries()) {
+            for (let [driverId, data] of Object.entries(snapshot)) {
                  bulkOps.push({
                      updateOne: {
                          filter: { _id: driverId },

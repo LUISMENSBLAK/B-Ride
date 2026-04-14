@@ -40,7 +40,19 @@ const protect = async (req, res, next) => {
     req.user = user;
     next();
   } catch (firebaseError) {
-    return res.status(401).json({ success: false, message: 'Token inválido o expirado.' });
+    // Fallback: tratar de descifrar como backend JWT local (Admin Panel & Legacy)
+    try {
+        const jwt = require('jsonwebtoken');
+        const decodedJwt = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decodedJwt.id);
+        if (!user) {
+            return res.status(401).json({ success: false, message: 'No cuenta backend asociada al token.' });
+        }
+        req.user = user;
+        next();
+    } catch (jwtError) {
+        return res.status(401).json({ success: false, message: 'Token inválido o expirado (Firebase & JWT).' });
+    }
   }
 };
 

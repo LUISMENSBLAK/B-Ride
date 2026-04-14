@@ -45,7 +45,6 @@ class PricingService {
 
         // Cache in-memory temporal: { "zoneId": multiplier }
         this.surgeCache = new Map();
-        
         // Cache Crudo de Inteligencia para modulo Heat Zones
         this.rawDemandMap = new Map();
         this.rawSupplyMap = new Map();
