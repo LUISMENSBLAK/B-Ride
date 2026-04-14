@@ -10,6 +10,7 @@ const sendEmail = require('../utils/sendEmail');
 const sendSMS = require('../utils/sendSMS');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwtUtils');
 const fetch = require('node-fetch');
+const appleSignin = require('apple-signin-auth');
 
 const registerUser = async (req, res) => {
     try {

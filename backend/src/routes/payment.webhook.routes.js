@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock_b_ride_123');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const Ride = require('../models/Ride');
 const User = require('../models/User');
 const paymentService = require('../services/payment.service');
@@ -10,7 +10,7 @@ const obs = require('../services/observability.service');
 // Debe ser parseado como un Buffer crudo para que Stripe pueda verificar las firmas.
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
-    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_mock_secret';
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
     let event;
 

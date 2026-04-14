@@ -15,7 +15,7 @@ router.get('/:id/state', protect, require('../controllers/ride.controller').getR
 router.post('/:id/rate', protect, require('../controllers/ride.controller').rateRide);
 
 
-router.get('/:id/track', require('../controllers/ride.controller').trackRide);
+router.get('/:id/track', protect, require('../controllers/ride.controller').trackRide);
 
 // Scheduled Ride
 router.post('/schedule', protect, async (req, res) => {

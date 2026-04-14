@@ -7,13 +7,13 @@ const generateAccessToken = (id) => {
 };
 
 const generateRefreshToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET || 'refreshSecret123!', {
+    return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, {
         expiresIn: '7d', // Long-lived refresh token
     });
 };
 
 const verifyRefreshToken = (token) => {
-    return jwt.verify(token, process.env.JWT_REFRESH_SECRET || 'refreshSecret123!');
+    return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
 };
 
 module.exports = {
