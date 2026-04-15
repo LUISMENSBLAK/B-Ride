@@ -47,18 +47,31 @@ module.exports = {
                 // Soportar token en header (extraHeaders) o en auth object
                 const authHeader = socket.handshake.headers.authorization;
                 const token = (authHeader && authHeader.split(' ')[1]) || socket.handshake.auth?.token;
-                
+
                 if (!token) {
                     return next(new Error('Authentication error: No token provided'));
                 }
-                
-                // Strict Firebase verification
-                const decoded = await admin.auth().verifyIdToken(token);
-                
 
-                const user = await User.findOne({ firebaseUid: decoded.uid }).select('isBlocked isBanned lockUntil role');
+                const jwt = require('jsonwebtoken');
+                let user = null;
+
+                try {
+                    // Intentar JWT propio (flujo principal — Firebase desactivado)
+                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                    user = await User.findById(decoded.id).select('isBlocked isBanned lockUntil role');
+                } catch (jwtErr) {
+                    // Fallback: Firebase ID Token (por si se reactiva en el futuro)
+                    try {
+                        const admin = require('../config/firebase');
+                        const decoded = await admin.auth().verifyIdToken(token);
+                        user = await User.findOne({ firebaseUid: decoded.uid }).select('isBlocked isBanned lockUntil role');
+                    } catch (fbErr) {
+                        return next(new Error('Authentication error: Invalid token'));
+                    }
+                }
+
                 if (!user) return next(new Error('Authentication error: User not found'));
-                
+
                 if (user.isBlocked || user.isBanned) {
                     return next(new Error('Authentication error: Account is banned'));
                 }
@@ -66,14 +79,13 @@ module.exports = {
                     return next(new Error('Authentication error: Account temporarily locked'));
                 }
 
-
                 socket.userId = user._id.toString();
                 socket.userRole = user.role;
-                socket.user = decoded; // Mantener compatible
 
                 next();
             } catch (err) {
-                return next(new Error('Authentication error: Invalid Firebase token'));
+                console.error('[Socket Auth] Unexpected error:', err.message);
+                return next(new Error('Authentication error: Unexpected error'));
             }
         });
 

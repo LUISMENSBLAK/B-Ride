@@ -146,7 +146,6 @@ export default function DriverDashboard() {
   useEffect(() => {
     let isMounted = true;
     let locationSubscription: Location.LocationSubscription | null = null;
-    socketService.connect();
 
     (async () => {
       try {
@@ -179,7 +178,6 @@ export default function DriverDashboard() {
           locationSubscription.remove();
       }
       socketService.getSocket()?.emit('setDriverStatus', { userId: user?._id, status: 'OFFLINE' });
-      socketService.disconnect();
     };
   }, [user?._id]);
 
@@ -396,7 +394,8 @@ export default function DriverDashboard() {
       // Nota: La emisión de actualización de location y driver:join
       // ahora está manejada por un useEffect estable cuando isOnline y location son válidos.
     } catch (error: unknown) {
-      Alert.alert(t('driver.networkError'), e.message);
+      const msg = error instanceof Error ? error.message : 'Error de red';
+      Alert.alert(t('driver.networkError'), msg);
     }
   }, [user, isOnline, onboardingComplete]);
 
@@ -418,7 +417,8 @@ export default function DriverDashboard() {
         passengerId: incomingRide.passenger._id,
       });
     } catch (error: unknown) {
-      Alert.alert(t('driver.auctionFailed'), e.message);
+      const msg = error instanceof Error ? error.message : 'Error al enviar oferta';
+      Alert.alert(t('driver.auctionFailed'), msg);
       setPhase('INCOMING');
     }
   }, [incomingRide, user]);
@@ -455,7 +455,8 @@ export default function DriverDashboard() {
         setPhase(nextStatus as TripPhase);
       }
     } catch (error: unknown) {
-      Alert.alert(t('driver.networkError'), e.message);
+      const msg = error instanceof Error ? error.message : 'Error de red';
+      Alert.alert(t('driver.networkError'), msg);
     }
   }, [activeRide, user]);
 

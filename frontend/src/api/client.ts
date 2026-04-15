@@ -1,5 +1,4 @@
 import axios from 'axios';
-import auth from '@react-native-firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform, Alert } from 'react-native';
 
@@ -24,23 +23,14 @@ const client = axios.create({
 client.interceptors.request.use(
     async (config) => {
         try {
-            const firebaseUser = auth().currentUser;
-            if (firebaseUser) {
-                const token = await firebaseUser.getIdToken();
-                config.headers['Authorization'] = `Bearer ${token}`;
-            } else {
-                // Fallback a token guardado en AsyncStorage (usuarios legacy)
-                const savedToken = await AsyncStorage.getItem('userToken');
-                if (savedToken) config.headers['Authorization'] = `Bearer ${savedToken}`;
-            }
+            const token = await AsyncStorage.getItem('userToken');
+            if (token) config.headers['Authorization'] = `Bearer ${token}`;
         } catch (e) {
             if (__DEV__) console.log('[API Client] Error obteniendo token:', e);
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 client.interceptors.response.use(

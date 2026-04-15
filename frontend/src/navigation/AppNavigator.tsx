@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense } from 'react';
-import { View, ActivityIndicator, Text as RNText } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import { navigationRef } from './NavigationService';
 import { useTranslation } from '../hooks/useTranslation';
 import { useAppTheme } from '../hooks/useAppTheme';
 import type { Theme } from '../theme';
+import socketService from '../services/socket';
 
 import {
   Map,
@@ -236,6 +237,18 @@ export default function AppNavigator() {
     useEffect(() => {
         checkAuth();
     }, []);
+
+    // ─── Socket lifecycle global ─────────────────────────────────────────────
+    // Conectar UNA vez cuando el usuario está autenticado.
+    // Desconectar solo al hacer logout (user pasa a null).
+    // NUNCA conectar/desconectar en componentes de pantalla individuales.
+    useEffect(() => {
+        if (user) {
+            socketService.connect();
+        } else {
+            socketService.disconnect();
+        }
+    }, [user?._id]);
 
     useEffect(() => {
         hasAcceptedLegal().then(setLegalAccepted);

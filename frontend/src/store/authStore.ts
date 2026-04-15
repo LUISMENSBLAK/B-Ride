@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import client from '../api/client';
-import auth from '@react-native-firebase/auth';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { removeTokenFromBackend } from '../services/notifications/NotificationService';
@@ -59,12 +58,6 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user: userData, justRegistered: true });
     },
     logout: async () => {
-        try {
-            // Logout de Firebase
-            await auth().signOut();
-        } catch (e) {
-            if (__DEV__) console.log('[AuthStore] Firebase signOut error:', e);
-        }
         
         try {
             const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
@@ -84,43 +77,30 @@ export const useAuthStore = create<AuthState>((set) => ({
     checkAuth: async () => {
         set({ isLoading: true });
         try {
-            const firebaseUser = auth().currentUser;
-            
-            if (firebaseUser) {
-                const firebaseToken = await firebaseUser.getIdToken(true); // true = forza refresh
-                
-                // Sincronizar con el backend
-                const res = await client.get('/auth/me', {
-                    headers: { Authorization: `Bearer ${firebaseToken}` }
-                });
-                
-                if (res.data?.data) {
-                    const userData = { ...res.data.data, accessToken: firebaseToken };
-                    await AsyncStorage.setItem('userInfo', JSON.stringify(userData));
-                    set({ user: userData });
-                } else {
-                    set({ user: null });
-                }
-            } else {
-                // Fallback: intentar con token guardado (usuarios legacy con JWT propio)
-                const token = await AsyncStorage.getItem('userToken');
-                const userInfoStr = await AsyncStorage.getItem('userInfo');
-                
-                if (token && userInfoStr) {
-                    try {
-                        const res = await client.get('/auth/me', {
-                            headers: { Authorization: `Bearer ${token}` }
-                        });
+            const token = await AsyncStorage.getItem('userToken');
+            const userInfoStr = await AsyncStorage.getItem('userInfo');
+
+            if (token && userInfoStr) {
+                try {
+                    const res = await client.get('/auth/me', {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.data?.data) {
                         const userObj = JSON.parse(userInfoStr);
-                        if (res.data?.data) Object.assign(userObj, res.data.data);
-                        set({ user: userObj });
-                    } catch {
+                        const merged = { ...userObj, ...res.data.data, accessToken: token };
+                        await AsyncStorage.setItem('userInfo', JSON.stringify(merged));
+                        set({ user: merged });
+                    } else {
                         await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
                         set({ user: null });
                     }
-                } else {
+                } catch {
+                    // Token expirado o inválido — limpiar sesión
+                    await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
                     set({ user: null });
                 }
+            } else {
+                set({ user: null });
             }
         } catch (e) {
             set({ user: null });

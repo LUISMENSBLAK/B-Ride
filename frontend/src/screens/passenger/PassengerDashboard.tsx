@@ -384,7 +384,6 @@ export default function PassengerDashboard() {
   useEffect(() => {
     let isMounted = true;
     let locationSubscription: Location.LocationSubscription | null = null;
-    socketService.connect();
 
     const sub = AppState.addEventListener('change', async (nextAppState) => {
       if (nextAppState === 'active' && currentRideIdRef.current) {
@@ -402,7 +401,6 @@ export default function PassengerDashboard() {
 
     return () => {
       isMounted = false;
-      socketService.disconnect();
       locationSubscription?.remove();
       sub.remove();
     };

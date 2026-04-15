@@ -342,7 +342,7 @@ const rideEvents = (socket) => {
             const { rideId, eventId } = payload;
             
 
-            const passengerId = socket.user?.id;
+            const passengerId = socket.userId;
             if (!passengerId) throw new Error('No autorizado');
 
             if (eventId && await idempotency.isDuplicate(eventId)) {
