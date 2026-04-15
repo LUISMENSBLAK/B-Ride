@@ -1,9 +1,10 @@
 import { useAppTheme } from "../hooks/useAppTheme";
 import React, { useState, useCallback, useRef, memo } from 'react';
 import {
-  View, TextInput, FlatList, Text, TouchableOpacity,
+  View, Text, TouchableOpacity,
   ActivityIndicator, StyleSheet, Keyboard,
 } from 'react-native';
+import { BottomSheetTextInput, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import * as Localization from 'expo-localization';
 
 import useDebounce from '../hooks/useDebounce';
@@ -159,7 +160,7 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
   return (
     <View style={styles.wrapper}>
       <View style={styles.inputRow}>
-        <TextInput
+        <BottomSheetTextInput
           style={styles.input}
           placeholder={placeholder}
           placeholderTextColor={theme.colors.inputPlaceholder}
@@ -186,12 +187,12 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
       {/* Dropdown de resultados */}
       {showDropdown && (
         <View style={styles.dropdown}>
-          <FlatList
+          <BottomSheetFlatList
             data={results}
             keyExtractor={(_, i) => String(i)}
             keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 20 }}
             scrollEnabled={results.length > 3}
-            style={{ maxHeight: 220 }}
             renderItem={({ item, index }) => (
               <TouchableOpacity
                 style={[styles.resultItem, index < results.length - 1 && styles.resultBorder]}
@@ -214,7 +215,6 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
 const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   wrapper: {
     flex: 1,
-    zIndex: 100, // Encima del mapa y del resto de la UI
   },
   inputRow: {
     flexDirection: 'row',
@@ -237,20 +237,12 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     color: theme.colors.textMuted,
   },
   dropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    marginTop: 4,
+    flex: 1,
+    marginTop: 12,
     backgroundColor: theme.colors.background,
     borderRadius: theme.borderRadius.m,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 12,
     overflow: 'hidden',
   },
   resultItem: {

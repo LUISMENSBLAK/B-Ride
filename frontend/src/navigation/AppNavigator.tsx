@@ -25,17 +25,31 @@ import RegisterScreen from '../screens/RegisterScreen';
 import VerifyEmailScreen from '../screens/auth/VerifyEmailScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
-// ─── Screens (Lazy) ─────────────────────────────────────────────────────────
-const DriverDashboard = React.lazy(() => import('../screens/driver/DriverDashboard'));
-const EarningsScreen = React.lazy(() => import('../screens/driver/EarningsScreen'));
-const DriverProfileScreen = React.lazy(() => import('../screens/driver/DriverProfileScreen'));
-const DriverOnboardingScreen = React.lazy(() => import('../screens/driver/DriverOnboardingScreen'));
+// ─── Componentes Lazy Load Seguros ──────────────────────────────────────────
+// Previene el error: "Element type is invalid. Received a promise that resolves to: undefined."
+const safeLazy = (importFunc: () => Promise<any>) => {
+  return React.lazy(async () => {
+    try {
+      const module = await importFunc();
+      return { default: module.default || Object.values(module)[0] };
+    } catch (err) {
+      console.error('[AppNavigator] Error en carga lazy:', err);
+      // Fallback a vista vacía si falla dramáticamente (nunca retornará undefined)
+      return { default: () => <View style={{flex: 1, backgroundColor: '#0A0A0A'}}><ActivityIndicator size="large" color="#0BD38A" style={{flex:1}} /></View> };
+    }
+  });
+};
 
-const PassengerDashboard = React.lazy(() => import('../screens/passenger/PassengerDashboard'));
-const PaymentStatusScreen = React.lazy(() => import('../screens/passenger/PaymentStatusScreen'));
-const PassengerProfileScreen = React.lazy(() => import('../screens/passenger/PassengerProfileScreen'));
-const RideHistory = React.lazy(() => import('../screens/RideHistory'));
-const SettingsScreen = React.lazy(() => import('../screens/passenger/SettingsScreen'));
+const DriverDashboard = safeLazy(() => import('../screens/driver/DriverDashboard'));
+const EarningsScreen = safeLazy(() => import('../screens/driver/EarningsScreen'));
+const DriverProfileScreen = safeLazy(() => import('../screens/driver/DriverProfileScreen'));
+const DriverOnboardingScreen = safeLazy(() => import('../screens/driver/DriverOnboardingScreen'));
+
+const PassengerDashboard = safeLazy(() => import('../screens/passenger/PassengerDashboard'));
+const PaymentStatusScreen = safeLazy(() => import('../screens/passenger/PaymentStatusScreen'));
+const PassengerProfileScreen = safeLazy(() => import('../screens/passenger/PassengerProfileScreen'));
+const RideHistory = safeLazy(() => import('../screens/RideHistory'));
+const SettingsScreen = safeLazy(() => import('../screens/passenger/SettingsScreen'));
 
 // ─── Legal ──────────────────────────────────────────────────────────────────
 import LegalScreen, { hasAcceptedLegal } from '../screens/LegalScreen';

@@ -2,14 +2,16 @@ import React, { useEffect, useState, useCallback, useRef, memo } from 'react';
 import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, KeyboardAvoidingView, Platform, Alert, Modal, FlatList, AppState, Linking,
-  ActivityIndicator, Image
+  TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
+  ActivityIndicator, Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolate, withSequence, runOnJS } from 'react-native-reanimated';
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import socketService from '../../services/socket';
@@ -25,33 +27,228 @@ import { RideData } from '../../types/ride';
 import { syncRideState } from '../../api/ride';
 import BidCard from '../../components/BidCard';
 import { stripeFrontendService } from '../../services/stripe';
-import Button from '../../components/Button';
 import Loader from '../../components/Loader';
-import CarMarker from '../../components/CarMarker';
 import SOSButton from '../../components/SOSButton';
-import StatusBadge from '../../components/StatusBadge';
 import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
 import PriceInputSheet from '../../components/PriceInputSheet';
-import { haversineKm, etaMinutes } from '../../utils/geo';
+import { haversineKm } from '../../utils/geo';
 import { useCurrency } from '../../hooks/useCurrency';
+
+// ─── SUB-COMPONENTS WIXÁRIKA V3 ───────────────────────────────────────────────
+
+function firstName(name?: string) {
+  return name?.split(' ')[0] ?? 'Viajero';
+}
+
+// ── TopBar Flotante ────────────────────────────────────────────────────────
+const TopBar = memo(({ userName, profilePhoto, onAvatarPress, theme }: any) => {
+  const insets = useSafeAreaInsets();
+  const topPosition = Math.max(insets.top, 20) + 12;
+
+  return (
+    <View style={[topBarStyles.container, { top: topPosition }]}>
+      <TouchableOpacity style={topBarStyles.leftSection} onPress={onAvatarPress} activeOpacity={0.8}>
+        {profilePhoto ? (
+           <Image source={{ uri: profilePhoto }} style={topBarStyles.avatar} />
+        ) : (
+           <View style={[topBarStyles.avatar, { backgroundColor: theme.colors.primaryLight, justifyContent: 'center', alignItems: 'center' }]}>
+             <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>{firstName(userName)[0]}</Text>
+           </View>
+        )}
+        <View style={topBarStyles.textBlock}>
+          <Text style={topBarStyles.greeting}>Hola, {firstName(userName)} 👋</Text>
+          <Text style={topBarStyles.subText}>Ubicación actual detectada</Text>
+        </View>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={topBarStyles.notifBtn}>
+        <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
+        <View style={topBarStyles.notifBadge} />
+      </TouchableOpacity>
+    </View>
+  );
+});
+
+const topBarStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(13,5,32,0.55)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  leftSection: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  avatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: '#F5C518' },
+  textBlock: { justifyContent: 'center' },
+  greeting: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  subText: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 2 },
+  notifBtn: { 
+    width: 36, height: 36, borderRadius: 18, 
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center', alignItems: 'center' 
+  },
+  notifBadge: {
+    position: 'absolute', top: 8, right: 8,
+    width: 8, height: 8, borderRadius: 4,
+    backgroundColor: '#FF6B6B',
+    borderWidth: 1.5, borderColor: '#0D0520'
+  }
+});
+
+// ── Pill de Conductores Cercanos ───────────────────────────────────────────
+const DriverPill = memo(({ count, animatedIndex }: { count: number, animatedIndex: Animated.SharedValue<number> }) => {
+  const isZero = count === 0;
+  const pulseAnim = useSharedValue(0.6);
+
+  useEffect(() => {
+    pulseAnim.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: isZero ? 1500 : 1000 }),
+        withTiming(0.6, { duration: isZero ? 1500 : 1000 })
+      ),
+      -1,
+      true
+    );
+  }, [count]);
+
+  const stylez = useAnimatedStyle(() => ({
+    opacity: interpolate(animatedIndex.value, [1, 1.5, 2], [1, 0.5, 0], Extrapolate.CLAMP),
+    transform: [{ scale: interpolate(animatedIndex.value, [1, 2], [1, 0.9]) }]
+  }));
+
+  const iconStylez = useAnimatedStyle(() => ({ opacity: pulseAnim.value }));
+
+  if (count === 0) return null;
+
+  return (
+    <Animated.View style={[driverPillStyles.container, {
+      backgroundColor: 'rgba(245,197,24,0.15)',
+      borderColor: 'rgba(245,197,24,0.35)',
+    }, stylez]}>
+      <Animated.View style={iconStylez}>
+        <Ionicons name="car" size={16} color="#F5C518" />
+      </Animated.View>
+      <Text style={[driverPillStyles.text, { color: '#F5C518' }]}>
+        {`${count} conductor${count !== 1 ? 'es' : ''} cerca`}
+      </Text>
+    </Animated.View>
+  );
+});
+
+const driverPillStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    top: '38%',
+    alignSelf: 'center',
+    zIndex: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 8,
+  },
+  text: { fontSize: 13, fontWeight: '600' }
+});
+
+// ── Favoritos Dinámicos ───────────────────────────────────────────────
+const FavoritesList = memo(({ onSelect, favorites }: any) => {
+  const displayFavorites = favorites && favorites.length > 0
+    ? favorites
+    : [{ id: 'add', name: '+ Agregar favorito', isEmptyState: true }];
+
+  return (
+    <View style={{ marginTop: 16 }}>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        {displayFavorites.map((fav: any) => (
+          <TouchableOpacity key={fav.id} onPress={() => onSelect(fav)} activeOpacity={0.8}>
+            <View style={[favStyles.chip, fav.isEmptyState && favStyles.chipDashed]}>
+              <Ionicons name={fav.isEmptyState ? 'add' : 'star'} size={14} color={fav.isEmptyState ? 'rgba(255,255,255,0.4)' : '#F5C518'} />
+              <Text style={[favStyles.name, fav.isEmptyState && { color: 'rgba(255,255,255,0.6)' }]}>
+                {fav.name}
+              </Text>
+              {!fav.isEmptyState && fav.dist && <Text style={favStyles.dist}>{fav.dist}</Text>}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+});
+
+const favStyles = StyleSheet.create({
+  chip: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    gap: 6
+  },
+  chipDashed: {
+    backgroundColor: 'transparent',
+    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  name: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  dist: { color: 'rgba(255,255,255,0.5)', fontSize: 11 }
+});
+
+// ── Payment Mini Chip ──────────────────────────────────────────────────────
+const PaymentMiniChip = memo(() => {
+  return (
+    <TouchableOpacity style={paymentChipStyles.chip} activeOpacity={0.8}>
+      <Ionicons name="cash-outline" size={16} color="#C4B8E0" />
+      <Text style={paymentChipStyles.text}>Efectivo</Text>
+      <Ionicons name="chevron-down" size={14} color="#C4B8E0" />
+    </TouchableOpacity>
+  );
+});
+
+const paymentChipStyles = StyleSheet.create({
+  chip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    marginTop: 12, gap: 6
+  },
+  text: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' }
+});
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function PassengerDashboard() {
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const navigation = useNavigation<any>();
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   const bottomSheetRef = useRef<BottomSheet>(null);
-  
+  const animatedIndex = useSharedValue(0);
+
   const theme = useAppTheme();
   const { t } = useTranslation();
-  const { currency, formatPrice, convertToLocal, convertToUsd } = useCurrency();
+  const { currency, formatPrice, convertToUsd } = useCurrency();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
-  const bidStylesFixed = React.useMemo(() => getBidStyles(theme), [theme]);
+
+
+  // Search modal state
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
 
   // Trip state centralizado
   const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
@@ -64,12 +261,12 @@ export default function PassengerDashboard() {
   const [chatVisible, setChatVisible] = useState(false);
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
-  
+
   // PriceInputSheet states
   const [priceSheetVisible, setPriceSheetVisible] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<any>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
-  
+
   // Promos y agendado
   const [promoCode, setPromoCode] = useState('');
   const [promoDiscount, setPromoDiscount] = useState<{type: string, value: number} | null>(null);
@@ -80,16 +277,17 @@ export default function PassengerDashboard() {
   // Auto-calcular distancia y tarifa sugerida
   useEffect(() => {
     if (selectedPlace && location) {
-      const dist = haversineKm(
-        location.coords.latitude, location.coords.longitude,
-        selectedPlace.latitude, selectedPlace.longitude
-      );
-      setDistanceKm(Number(dist.toFixed(1)));
-      // BUG 5 FIX: Factor determinístico basado en hora del día en vez de Math.random()
-      const hour = new Date().getHours();
-      const trafficMultiplier = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19) ? 1.4 : 1.0;
-      const baseEta = Math.max(1, Math.round((dist / 40) * 60)); // 40 km/h avg
-      setEstimatedTimeMin(Math.round(baseEta * trafficMultiplier));
+      if (selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined) {
+        const dist = haversineKm(
+          location.coords.latitude, location.coords.longitude,
+          selectedPlace.latitude, selectedPlace.longitude
+        );
+        setDistanceKm(Number(dist.toFixed(1)));
+        const hour = new Date().getHours();
+        const trafficMultiplier = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19) ? 1.4 : 1.0;
+        const baseEta = Math.max(1, Math.round((dist / 40) * 60));
+        setEstimatedTimeMin(Math.round(baseEta * trafficMultiplier));
+      }
     } else {
       setDistanceKm(0);
       setEstimatedTimeMin(0);
@@ -114,10 +312,8 @@ export default function PassengerDashboard() {
           });
           if (!active) return;
           if (res.data?.success) {
-            // Feed categories into PriceInputSheet via setCategoryOptions
             const cats = res.data.data?.categories ?? res.data.data ?? null;
             setCategoryOptions(cats);
-            // Set a sensible default price from selected category
             const catData = cats?.[vehicleCategory];
             const suggestedMXN = catData?.priceMXN ?? catData?.recommendedPrice ?? 0;
             if (suggestedMXN > 0) {
@@ -147,10 +343,9 @@ export default function PassengerDashboard() {
   }, [distanceKm, selectedPlace, location, vehicleCategory, promoDiscount]);
 
   const mapRef = useRef<MapRendererHandle>(null);
-  const { pushLocation, stopTracking, driverTrackingState } = useDriverTracking(mapRef);
-  
+  const { pushLocation, stopTracking } = useDriverTracking(mapRef);
+
   const localVersion = useRef(0);
-  // Removido: console.log de render count (producción)
 
   // Refs anti-stale-closure
   const currentRideIdRef = useRef<string | null>(null);
@@ -159,36 +354,29 @@ export default function PassengerDashboard() {
   const checkLocationStatus = useCallback(async () => {
     let isMounted = true;
     try {
-        setErrorMsg(null);
-        // 1. Check if GPS is enabled on device
-        const providerStatus = await Location.getProviderStatusAsync();
-        if (!providerStatus.locationServicesEnabled) {
-             setErrorMsg(t('passenger.gpsDisabled', { defaultValue: 'Por favor, activa el GPS de tu dispositivo para continuar.' }));
-             return;
-        }
-
-        // 2. Request permissions
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (!isMounted) return;
-        if (status !== 'granted') { 
-             setErrorMsg(t('passenger.permissionDenied', { defaultValue: 'Permiso de ubicación denegado. Se requiere para solicitar viajes.' }));  
-             return; 
-        }
-
-        // 3. Get initial location
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        if (!isMounted) return;
-        setLocation(loc);
-
-        // 4. Watch position
-        const sub = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
-          (newLoc) => { if (isMounted) setLocation(newLoc); }
-        );
-        return sub;
+      setErrorMsg(null);
+      const providerStatus = await Location.getProviderStatusAsync();
+      if (!providerStatus.locationServicesEnabled) {
+        setErrorMsg(t('passenger.gpsDisabled', { defaultValue: 'Por favor, activa el GPS de tu dispositivo para continuar.' }));
+        return;
+      }
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (!isMounted) return;
+      if (status !== 'granted') {
+        setErrorMsg(t('passenger.permissionDenied', { defaultValue: 'Permiso de ubicación denegado. Se requiere para pedir un ride.' }));
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (!isMounted) return;
+      setLocation(loc);
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+        (newLoc) => { if (isMounted) setLocation(newLoc); }
+      );
+      return sub;
     } catch (error: unknown) {
-        if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
-        return null;
+      if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
+      return null;
     }
   }, []);
 
@@ -198,19 +386,18 @@ export default function PassengerDashboard() {
     let locationSubscription: Location.LocationSubscription | null = null;
     socketService.connect();
 
-    // AppState Listener para Sincronía POST background (Fase API Re-Fetch)
     const sub = AppState.addEventListener('change', async (nextAppState) => {
-       if (nextAppState === 'active' && currentRideIdRef.current) {
-          const serverRideState = await syncRideState(currentRideIdRef.current);
-          if (serverRideState && serverRideState.version > localVersion.current) {
-             localVersion.current = serverRideState.version;
-             setRideStatus(serverRideState.status);
-          }
-       }
+      if (nextAppState === 'active' && currentRideIdRef.current) {
+        const serverRideState = await syncRideState(currentRideIdRef.current);
+        if (serverRideState && serverRideState.version > localVersion.current) {
+          localVersion.current = serverRideState.version;
+          setRideStatus(serverRideState.status);
+        }
+      }
     });
 
     checkLocationStatus().then(sub => {
-       locationSubscription = sub;
+      if (sub) locationSubscription = sub;
     });
 
     return () => {
@@ -221,10 +408,21 @@ export default function PassengerDashboard() {
     };
   }, [checkLocationStatus]);
 
+  // Timeout para cancelar la busqueda de conductores automaticamente con 5 min (300,000s)
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING') {
+      timeout = setTimeout(() => {
+        Alert.alert('Aviso', 'No encontramos conductores disponibles en este momento. Inténtalo de nuevo en unos minutos.');
+      }, 300000);
+    }
+    return () => clearTimeout(timeout);
+  }, [rideStatus]);
+
   const [activeDriversCount, setActiveDriversCount] = useState<number>(0);
   const [showDriverBanner, setShowDriverBanner] = useState<boolean>(false);
 
-  // --- EVENTOS SOCKET CENTRALIZADOS (EventManager) ---
+  // --- EVENTOS SOCKET CENTRALIZADOS ---
 
   useRideSocketEvent('driver_available_nearby', useCallback((data: any) => {
     setActiveDriversCount(data && data.count != null ? data.count : (prev => prev + 1));
@@ -242,24 +440,19 @@ export default function PassengerDashboard() {
     setRideStatus('SEARCHING');
   }, []));
 
-
   useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
     Alert.alert('Sin conductores', data.message);
-    resetFlow(); // Vuelve al estado IDLE
-    setPrice(''); // Limpiar precio propuesto
+    resetFlow();
+    setPrice('');
   }, []));
 
   useRideSocketEvent('trip_bid_received', useCallback((updatedRide: any) => {
     if (updatedRide.bids) {
       const isFirstBid = useRideFlowStore.getState().bids.length === 0;
-      if (isFirstBid) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
+      if (isFirstBid) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       const pending = updatedRide.bids
         .filter((b: any) => b.status === 'PENDING')
         .sort((a: any, b: any) => a.price - b.price);
-      
-      // Update directly to the store for each bid
       pending.forEach((b: any) => receiveBid(b));
     }
   }, []));
@@ -269,50 +462,44 @@ export default function PassengerDashboard() {
     if (version && version <= localVersion.current) return;
     if (version) localVersion.current = version;
 
-    // Cada estado del backend se mapea 1:1 a un estado UI distinto
     if (status === 'ACCEPTED') {
-        setActiveRide(updatedRide);
-        setRideStatus('ACCEPTED');
-        bottomSheetRef.current?.snapToIndex(1);
+      setActiveRide(updatedRide);
+      setRideStatus('ACCEPTED');
+      bottomSheetRef.current?.snapToIndex(1);
     } else if (status === 'ARRIVED') {
-        setRideStatus('ARRIVED');
+      setRideStatus('ARRIVED');
     } else if (status === 'IN_PROGRESS') {
-        setRideStatus('IN_PROGRESS');
+      setRideStatus('IN_PROGRESS');
     } else if (status === 'COMPLETED' || status === 'CANCELLED') {
-        if (status === 'COMPLETED') {
-          // No need for state hacks anymore - compute scalar explicit values
-          const finalPrice = updatedRide?.bids?.find((b: any) => b.status === 'ACCEPTED')?.price
-            ?? updatedRide?.proposedPrice
-            ?? '—';
-          
-          stopTracking();
-          resetFlow();
-          setPrice('');
-          setAcceptingBidId(null);
-          setSelectedPlace(null);
-          bottomSheetRef.current?.snapToIndex(1);
-          
-          // Use robust navigation push for production grade persistence state
-          navigation.navigate('PassengerPayment', { 
-              price: finalPrice,
-              rideId: updatedRide?._id,
-              status: 'COMPLETED'
-          });
-        } else {
-          stopTracking();
-          resetFlow();
-          setPrice('');
-          setAcceptingBidId(null);
-          setSelectedPlace(null);
-          bottomSheetRef.current?.snapToIndex(1);
-          Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
-        }
+      if (status === 'COMPLETED') {
+        const finalPrice = updatedRide?.bids?.find((b: any) => b.status === 'ACCEPTED')?.price
+          ?? updatedRide?.proposedPrice
+          ?? '—';
+        stopTracking();
+        resetFlow();
+        setPrice('');
+        setAcceptingBidId(null);
+        setSelectedPlace(null);
+        bottomSheetRef.current?.snapToIndex(1);
+        navigation.navigate('PassengerPayment', {
+          price: finalPrice,
+          rideId: updatedRide?._id,
+          status: 'COMPLETED'
+        });
+      } else {
+        stopTracking();
+        resetFlow();
+        setPrice('');
+        setAcceptingBidId(null);
+        setSelectedPlace(null);
+        bottomSheetRef.current?.snapToIndex(1);
+        Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
+      }
     }
   }, [stopTracking]));
 
   useRideSocketEvent('driverLocationUpdate', useCallback((locData) => {
-      // Usamos el hook purificado para Queue + Lerp Nativo + Watchdog Timeline
-      pushLocation(locData.latitude, locData.longitude);
+    pushLocation(locData.latitude, locData.longitude);
   }, [pushLocation]));
 
   useRideSocketEvent('rideError', useCallback((error) => {
@@ -321,12 +508,8 @@ export default function PassengerDashboard() {
     setAcceptingBidId(null);
   }, []));
 
-
   useRideSocketEvent('driver_warning', useCallback((data: any) => {
-    Alert.alert(
-      '⚠️ Aviso del conductor',
-      data?.message || 'El conductor reporta un problema en la ruta.'
-    );
+    Alert.alert('⚠️ Aviso del conductor', data?.message || 'El conductor reporta un problema en la ruta.');
   }, []));
 
   useRideSocketEvent('driver_disconnected', useCallback((data: any) => {
@@ -335,9 +518,7 @@ export default function PassengerDashboard() {
       'Se perdió la conexión con el conductor. Si persiste, contacta a soporte.',
       [
         { text: 'OK', style: 'default' },
-        { text: 'SOS', style: 'destructive', onPress: () => {
-          // Se gestionará cuando el SOS esté integrado en la UI
-        }},
+        { text: 'SOS', style: 'destructive', onPress: () => {} },
       ]
     );
   }, []));
@@ -347,7 +528,6 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
-    // Cuando el chofer cancela la asignación
     stopTracking();
     resetFlow();
     setPrice('');
@@ -357,24 +537,23 @@ export default function PassengerDashboard() {
     setEstimatedTimeMin(0);
     socketService.setRideRoom(null);
     bottomSheetRef.current?.snapToIndex(1);
-    Alert.alert('Viaje Cancelado', 'El conductor ha cancelado el viaje. Puedes solicitar uno nuevo.');
+    Alert.alert('Ride Cancelado', 'El conductor ha cancelado. Puedes pedir un nuevo ride.');
   }, [stopTracking]));
 
-  // ─── Handlers ──────────────────────────────────────────────────────────────
+  // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleRequestRide = useCallback(async (finalPrice: number, finalCategory: any) => {
     if (!user?.avatarUrl && !user?.profilePhoto) {
-        Alert.alert(
-            'Foto Obligatoria',
-            'Por seguridad, debes subir una foto de perfil antes de pedir un viaje.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                { text: 'Subir Foto', onPress: () => navigation.navigate('PassengerProfile') }
-            ]
-        );
-        return;
+      Alert.alert(
+        'Foto Obligatoria',
+        'Por seguridad, debes subir una foto de perfil antes de pedir un ride.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Subir Foto', onPress: () => navigation.navigate('PassengerProfile') }
+        ]
+      );
+      return;
     }
-
     if (distanceKm > 100) {
       Alert.alert(t('errors.outOfRange'), t('errors.outOfRangeMsg'));
       return;
@@ -387,7 +566,6 @@ export default function PassengerDashboard() {
       Alert.alert(t('errors.locationNotReady'), t('errors.locationNotReadyMsg'));
       return;
     }
-
     setPrice(String(finalPrice));
     setVehicleCategory(finalCategory);
     setPriceSheetVisible(false);
@@ -411,10 +589,10 @@ export default function PassengerDashboard() {
         promoCode: promoDiscount ? promoCode : undefined,
         vehicleCategory: finalCategory,
       }, 3, 5000);
-      // 'rideRequestCreated' socket event will update status
     } catch (error: unknown) {
-        Alert.alert('Error de conexión', error.message);
-        setRideStatus('IDLE');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error de conexión', err.message || 'No se pudo enviar la solicitud.');
+      setRideStatus('IDLE');
     }
   }, [selectedPlace, location, user, convertToUsd, currency, paymentMethod, distanceKm, promoDiscount, promoCode]);
 
@@ -425,56 +603,53 @@ export default function PassengerDashboard() {
     setAcceptingBidId(bidId);
 
     if (currentRideId) {
-       try {
-           setPaymentAuthorizing(true);
-           setPaymentStatusText(t('payment.processing', { defaultValue: 'Procesando pago de forma segura...' }));
-           
-           if (paymentMethod === 'CARD') {
+      try {
+        setPaymentAuthorizing(true);
+        setPaymentStatusText(t('payment.processing', { defaultValue: 'Procesando pago de forma segura...' }));
 
-             const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId, currency);
-             if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
+        if (paymentMethod === 'CARD') {
+          const stripeRes = await stripeFrontendService.createPaymentIntent(currentRideId, bidId, currency);
+          if (stripeRes.state === 'error') throw new Error(stripeRes.error || 'Fallo al retener fondos en tarjeta.');
 
-             setPaymentStatusText(t('payment.confirming', { defaultValue: 'Esperando confirmación del banco...' }));
-             const { error: initError } = await initPaymentSheet({
-               paymentIntentClientSecret: stripeRes.clientSecret as string,
-               merchantDisplayName: 'B-Ride',
-               applePay: { merchantCountryCode: 'US' },
-               googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ },
-               defaultBillingDetails: { name: user?.name || '' },
-             });
-             if (initError) throw new Error(initError.message);
+          setPaymentStatusText(t('payment.confirming', { defaultValue: 'Esperando confirmación del banco...' }));
+          const { error: initError } = await initPaymentSheet({
+            paymentIntentClientSecret: stripeRes.clientSecret as string,
+            merchantDisplayName: 'B-Ride',
+            applePay: { merchantCountryCode: 'US' },
+            googlePay: { merchantCountryCode: 'US', testEnv: __DEV__ },
+            defaultBillingDetails: { name: user?.name || '' },
+          });
+          if (initError) throw new Error(initError.message);
 
-             setPaymentStatusText(t('payment.authorizing', { defaultValue: 'Autorizando transacción...' }));
-             const { error: presentError } = await presentPaymentSheet();
-             if (presentError) {
-               // Usuario canceló el payment sheet — no emitir socket
-               setAcceptingBidId(null);
-               setPaymentAuthorizing(false);
-               setPaymentStatusText(null);
-               return;
-             }
-             
-             // Payment successful
-             setPaymentStatusText(t('payment.success', { defaultValue: '¡Pago exitoso!' }));
-             await new Promise(r => setTimeout(r, 600)); // allow user to read success message
-           }
-           // Para CASH no hay payment sheet, emitir directamente
+          setPaymentStatusText(t('payment.authorizing', { defaultValue: 'Autorizando transacción...' }));
+          const { error: presentError } = await presentPaymentSheet();
+          if (presentError) {
+            setAcceptingBidId(null);
+            setPaymentAuthorizing(false);
+            setPaymentStatusText(null);
+            return;
+          }
 
-           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-           await socketService.emitWithAck('trip_accept_bid', {
-             rideId: currentRideId,
-             passengerId: user?._id,
-             bidId,
-             driverId,
-             paymentMethod,
-           });
-       } catch (error: unknown) {
-           Alert.alert('Transacción Detenida', error.message || 'No se pudo autorizar el pago.');
-           setAcceptingBidId(null);
-       } finally {
-           setPaymentAuthorizing(false);
-           setPaymentStatusText(null);
-       }
+          setPaymentStatusText(t('payment.success', { defaultValue: '¡Pago exitoso!' }));
+          await new Promise(r => setTimeout(r, 600));
+        }
+
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await socketService.emitWithAck('trip_accept_bid', {
+          rideId: currentRideId,
+          passengerId: user?._id,
+          bidId,
+          driverId,
+          paymentMethod,
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string; code?: string; response?: any };
+        Alert.alert('Transacción Detenida', err.message || 'No se pudo autorizar el pago.');
+        setAcceptingBidId(null);
+      } finally {
+        setPaymentAuthorizing(false);
+        setPaymentStatusText(null);
+      }
     }
   }, [currentRideId, user, acceptingBidId, paymentAuthorizing, initPaymentSheet, presentPaymentSheet]);
 
@@ -482,10 +657,10 @@ export default function PassengerDashboard() {
     const rideId = currentRideIdRef.current;
     if (rideId) {
       try {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          await socketService.emitWithAck('cancel_ride', { rideId, passengerId: user?._id });
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        await socketService.emitWithAck('cancel_ride', { rideId, passengerId: user?._id });
       } catch (e) {
-          console.warn('Fallback: Failed cancel explicitly but resetting locally');
+        console.warn('Fallback: Failed cancel explicitly but resetting locally');
       }
     }
     socketService.setRideRoom(null);
@@ -501,101 +676,70 @@ export default function PassengerDashboard() {
   }, [user]);
 
   const handleApplyPromo = async () => {
-     if (!promoCode) return;
-     setPromoApplying(true);
-     try {
-       const res = await client.post('/promos/validate', { code: promoCode, rideValue: convertToUsd(Number(price)) });
-       if (res.data.success) {
-           setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
-           Alert.alert('Promoción aplicada', 'El descuento ha sido reflejado en el precio.');
-       }
-     } catch (error: unknown) {
-        Alert.alert('Error promo', e.response?.data?.message || 'Código inválido.');
-        setPromoDiscount(null);
-     } finally {
-        setPromoApplying(false);
-     }
+    if (!promoCode) return;
+    setPromoApplying(true);
+    try {
+      const res = await client.post('/promos/validate', { code: promoCode, rideValue: convertToUsd(Number(price)) });
+      if (res.data.success) {
+        setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
+        Alert.alert('Promoción aplicada', 'El descuento ha sido reflejado en el precio.');
+      }
+    } catch (error: unknown) {
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error promo', err.response?.data?.message || 'Código inválido.');
+      setPromoDiscount(null);
+    } finally {
+      setPromoApplying(false);
+    }
   };
 
   const handleScheduleRide = async (hoursAhead: number) => {
     if (!selectedPlace || !location) return;
     setScheduleModalVisible(false);
-    
     const scheduledDate = new Date();
     scheduledDate.setHours(scheduledDate.getHours() + hoursAhead);
-    
     try {
-       const res = await client.post('/rides/schedule', {
-          passengerId: user?._id,
-          pickupAddress: 'Mi Ubicación Actual',
-          pickupLat: location.coords.latitude,
-          pickupLng: location.coords.longitude,
-          dropoffAddress: selectedPlace.displayName,
-          dropoffLat: selectedPlace.latitude,
-          dropoffLng: selectedPlace.longitude,
-          proposedPrice: convertToUsd(Number(price)),
-          currency,
-          paymentMethod,
-          vehicleCategory,
-          scheduledAt: scheduledDate.toISOString()
-       });
-       if (res.data.success) {
-           Alert.alert('Viaje Programado', `Tu viaje ha sido programado para ${scheduledDate.toLocaleString()}`);
-           handleCancelRequest(); // Resetea form
-       }
+      const res = await client.post('/rides/schedule', {
+        passengerId: user?._id,
+        pickupAddress: 'Mi Ubicación Actual',
+        pickupLat: location.coords.latitude,
+        pickupLng: location.coords.longitude,
+        dropoffAddress: selectedPlace.displayName,
+        dropoffLat: selectedPlace.latitude,
+        dropoffLng: selectedPlace.longitude,
+        proposedPrice: convertToUsd(Number(price)),
+        currency,
+        paymentMethod,
+        vehicleCategory,
+        scheduledAt: scheduledDate.toISOString()
+      });
+      if (res.data.success) {
+        Alert.alert('Ride Programado', `Tu ride ha sido programado para ${scheduledDate.toLocaleString()}`);
+        handleCancelRequest();
+      }
     } catch (error: unknown) {
-       Alert.alert('Error al programar', e.response?.data?.message || 'Algo salió mal');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error al programar', err.response?.data?.message || 'Algo salió mal');
     }
   };
 
-  const openNavigation = useCallback(() => {
-    if (!selectedPlace) return;
-    const lat = selectedPlace.latitude;
-    const lng = selectedPlace.longitude;
-    const label = selectedPlace.displayName;
-    const schemes = [
-      `waze://?ll=${lat},${lng}&navigate=yes`,
-      `comgooglemaps://?daddr=${lat},${lng}&directionsmode=driving`,
-      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,
-    ];
-
-    Alert.alert(
-      'Navegar',
-      `¿Con qué app quieres navegar a ${label}?`,
-      [
-        {
-          text: 'Waze',
-          onPress: () => Linking.openURL(schemes[0]).catch(() =>
-            Linking.openURL(schemes[2])
-          ),
-        },
-        {
-          text: 'Google Maps',
-          onPress: () => Linking.openURL(schemes[1]).catch(() =>
-            Linking.openURL(schemes[2])
-          ),
-        },
-        { text: 'Cancelar', style: 'cancel' },
-      ]
-    );
-  }, [selectedPlace]);
-
   const handleRateDriver = useCallback(async (score: number, comment: string) => {
     if (completedRide) {
-       try {
-           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-           await socketService.emitWithAck('rate_driver', {
-             rideId: completedRide._id,
-             driverId: completedRide.driver?._id ?? completedRide.driver,
-             fromUserId: user?._id,
-             score,
-           });
-           if (comment) {
-             await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
-           }
-       } catch (error: unknown) {
-           Alert.alert('Error Calificando', error.message);
-       }
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await socketService.emitWithAck('rate_driver', {
+          rideId: completedRide._id,
+          driverId: (completedRide.driver as any)?._id ?? completedRide.driver,
+          fromUserId: user?._id,
+          score,
+        });
+        if (comment) {
+          await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
+        }
+      } catch (error: unknown) {
+        const err = error as { message?: string; code?: string; response?: any };
+        Alert.alert('Error Calificando', err.message || 'No se pudo enviar la calificación.');
+      }
     }
     setCompletedRide(null);
   }, [completedRide, user]);
@@ -604,823 +748,500 @@ export default function PassengerDashboard() {
 
   const isSearching =
     rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING';
-  const isActiveRide = rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED';
+  const isActiveRide =
+    rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED';
+  const isIdle = rideStatus === 'IDLE';
 
-  // El bid más barato es el índice 0 (ya vienen ordenados por precio asc)
   const bestBidId = bids.length > 0 ? bids[0]._id : null;
 
+  // Determine bottom sheet snap points
+  const snapPoints = React.useMemo(() => [
+    100,
+    isSearching ? '72%' : isActiveRide ? '32%' : '60%',
+    '92%',
+  ], [isSearching, isActiveRide]);
+
+  // ─── Active ride status label ────────────────────────────────────────────
+  const activeStatusLabel = () => {
+    if (rideStatus === 'ARRIVED') return 'Tu conductor llegó';
+    if (rideStatus === 'IN_PROGRESS') return 'Disfruta tu ride';
+    return 'Tu ride está en camino';
+  };
+
+  // ─── Map Animated Scale ──────────────────────────────────────────────────
+  const mapAnimatedStyle = useAnimatedStyle(() => {
+    // Escala 1.0 en snappoints 0 y 1 ('25%', '60%'), 0.96 en snappoint 2 ('92%')
+    const scale = interpolate(animatedIndex.value, [0, 1, 2], [1, 1, 0.96], Extrapolate.CLAMP);
+    return { transform: [{ scale }] };
+  });
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* Rating modal post-viaje */}
-      <RatingModal
-        visible={!!completedRide}
-        targetName={completedRide?.driver?.name ?? 'el conductor'}
-        onSubmit={handleRateDriver}
-        onSkip={handleSkipRating}
-      />
-
-
-
-      {/* Header flotante superior */}
-      <View style={styles.floatingHeader}>
-        {/* Avatar del usuario */}
-        <TouchableOpacity
-          style={styles.headerAvatar}
-          onPress={() => navigation.navigate('PassengerProfile')}
-          activeOpacity={0.8}
-        >
-          {user?.profilePhoto || user?.avatarUrl ? (
-            <Image
-              source={{ uri: user.profilePhoto || user.avatarUrl }}
-              style={styles.headerAvatarImg}
-            />
-          ) : (
-            <View style={styles.headerAvatarFallback}>
-              <Text style={styles.headerAvatarInitials}>
-                {user?.name?.charAt(0)?.toUpperCase() ?? 'U'}
-              </Text>
-            </View>
-          )}
-          {/* Indicador online */}
-          <View style={styles.headerOnlineDot} />
-        </TouchableOpacity>
-
-        {/* Saludo */}
-        <View style={styles.headerGreeting}>
-          <Text style={styles.headerGreetingText}>Hola, {user?.name?.split(' ')[0] ?? 'Usuario'}</Text>
-          <Text style={styles.headerGreetingSubtext}>¿A dónde vas hoy?</Text>
-        </View>
-
-        {/* Notificaciones placeholder */}
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <Ionicons name="notifications-outline" size={22} color={theme.colors.text} />
-        </TouchableOpacity>
-      </View>
-
-      {location ? (
-        <MapRenderer
-          ref={mapRef}
-          latitude={location.coords.latitude}
-          longitude={location.coords.longitude}
-          title={t('general.locating')}
-          destinationCoordinate={selectedPlace ? { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude } : undefined}
-        />
-      ) : (
-        <View style={styles.loaderContainer}>
-          {errorMsg ? (
-            <View style={{alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: theme.colors.surface, borderRadius: 20, marginHorizontal: 20}}>
-                <Ionicons name="location-off" size={48} color={theme.colors.error} style={{marginBottom: 10}} />
-                <Text style={{...theme.typography.title, color: theme.colors.text, textAlign: 'center', marginBottom: 8}}>
-                   {errorMsg === 'GPS_DISABLED' ? t('errors.locationNotReady') : 
-                    errorMsg === 'PERMISSION_DENIED' ? t('general.locationDenied') : t('general.locationFailed')}
-                </Text>
-                <Text style={{...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center', marginBottom: 20}}>
-                   {errorMsg === 'GPS_DISABLED' ? t('errors.locationNotReadyMsg') : 
-                    errorMsg === 'PERMISSION_DENIED' ? t('general.locationDenied') : 
-                    t('general.locationFailed')}
-                </Text>
-                <TouchableOpacity 
-                   style={{backgroundColor: theme.colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: theme.borderRadius.full}}
-                   onPress={checkLocationStatus}
-                >
-                   <Text style={{color: theme.colors.primaryText, fontWeight: '700', fontSize: 16}}>{t('history.retry')}</Text>
+    <View style={styles.container}>
+      {/* ── Background Map ── */}
+      <Animated.View style={[{ flex: 1, backgroundColor: '#0D0520' }, mapAnimatedStyle]}>
+        {location ? (
+          <MapRenderer
+            ref={mapRef}
+            latitude={location.coords.latitude}
+            longitude={location.coords.longitude}
+            title={t('general.locating')}
+            destinationCoordinate={
+              (selectedPlace && selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined)
+                ? { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }
+                : undefined
+            }
+          />
+        ) : (
+          <View style={styles.loaderContainer}>
+            {errorMsg ? (
+              <View style={styles.errorCard}>
+                <Ionicons name="location" size={48} color={theme.colors.error} style={{ marginBottom: 14 }} />
+                <Text style={styles.errorTitle}>{errorMsg === 'GPS_DISABLED' ? t('errors.locationNotReady') : t('general.locationFailed')}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={checkLocationStatus}>
+                  <Text style={styles.retryBtnText}>{t('history.retry')}</Text>
                 </TouchableOpacity>
-            </View>
-          ) : (
-            <Loader label={t('general.locating')} />
-          )}
-        </View>
+              </View>
+            ) : <Loader label={t('general.locating')} />}
+          </View>
+        )}
+      </Animated.View>
+
+      {/* ── Floating Header & Pill (only IDLE) ── */}
+      {isIdle && (
+        <>
+          <TopBar
+            userName={user?.name}
+            profilePhoto={user?.profilePhoto || user?.avatarUrl}
+            onAvatarPress={() => navigation.navigate('PassengerProfile')}
+            theme={theme}
+          />
+          <DriverPill count={activeDriversCount} animatedIndex={animatedIndex} />
+        </>
       )}
 
+      {/* Driver found banner (during SEARCHING) */}
       {showDriverBanner && (
         <View style={styles.topDriverBanner}>
-          <Text style={styles.topDriverBannerText}>{t('general.bidsReceived', { count: '' }).replace('0 ', '').replace('1 ', '')}...</Text>
+          <View style={styles.topDriverBannerDot} />
+          <Text style={styles.topDriverBannerText}>Buscando tu ride…</Text>
         </View>
       )}
 
-      {/* Main BottomSheet — dinámico aislado, sin re-render del MapView */}
+      {/* ── Main BottomSheet ── */}
       <BottomSheet
         ref={bottomSheetRef}
-        index={1}
-        snapPoints={[
-          '12%',
-          isSearching ? '75%' : isActiveRide ? '35%' : '52%',
-          '90%',
-        ]}
-        backgroundStyle={{ backgroundColor: theme.colors.surface, borderRadius: 36 }}
-        handleIndicatorStyle={{ backgroundColor: theme.colors.border, width: 44, height: 4 }}
-        style={theme.shadows.lg}
+        index={isIdle ? 0 : 1}
+        snapPoints={snapPoints}
+        animatedIndex={animatedIndex}
+        backgroundStyle={{ backgroundColor: 'rgba(13,5,32,0.92)' }}
+        handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.20)', width: 36, height: 4 }}
+        keyboardBehavior="extend"
+        enablePanDownToClose={false}
       >
-        <BottomSheetScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
-        {/* ── IDLE: formulario de solicitud ── */}
-        {rideStatus === 'IDLE' && (
-          <View style={{ paddingHorizontal: theme.spacing.xl }}>
-            {activeDriversCount === 0 && (
-              <View style={styles.idleStatusBanner}>
-                <Ionicons name="moon" size={16} color={theme.colors.textMuted} />
-                <View style={{ marginLeft: 8 }}>
-                  <Text style={styles.idleStatusBannerText}>{t('driver.offlineTitle')}</Text>
-                  <Text style={styles.idleStatusBannerSubtext}>{t('driver.tryAgainLater')}</Text>
-                </View>
-              </View>
-            )}
-            <Text style={styles.cardHeader}>{t('form.whereAreYouGoing')}</Text>
+        {isIdle ? (
+          <View style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}>
+            <View style={{ flex: 1 }}>
+              {/* Search Box / Autocomplete Area */}
+              <Animated.View style={{ flex: 1, minHeight: 56 }}>
+                 <AddressAutocomplete
+                    placeholder="¿A dónde te llevamos hoy?"
+                    onSelect={(place) => {
+                      setSelectedPlace(place);
+                      bottomSheetRef.current?.snapToIndex(1);
+                      Keyboard.dismiss();
+                    }}
+                    userLat={location?.coords.latitude}
+                    userLng={location?.coords.longitude}
+                 />
+              </Animated.View>
 
-            <View style={styles.formContainer}>
-              <View style={styles.dotContainer}>
-                <View style={styles.pickupDot} />
-                <View style={styles.line} />
-                <View style={styles.dropoffDot} />
-              </View>
-              <View style={styles.inputsSection}>
-                <TextInput
-                  style={styles.inputLocation}
-                  placeholder={t('form.currentLocation')}
-                  placeholderTextColor={theme.colors.text}
-                  editable={false}
-                />
-                {/* Autocomplete integrado */}
-                <AddressAutocomplete
-                  placeholder={t('form.enterDestination')}
-                  onSelect={(place) => setSelectedPlace(place)}
-                  value={selectedPlace?.displayName}
-                  userLat={location?.coords.latitude}
-                  userLng={location?.coords.longitude}
-                />
-              </View>
-            </View>
+              {/* Contenido Secundario (Favoritos y Pago) que desaparece si se arrastra hasta abajo o arriba del todo */}
+              <Animated.View style={[{ overflow: 'hidden' }, useAnimatedStyle(() => {
+                // Hacer opaco en index 1 (60%). Ocultarlo en index 0 (100px) o index 2 (92%)
+                const opacity = interpolate(animatedIndex.value, [0, 0.4, 1, 1.6, 2], [0, 0, 1, 0, 0], Extrapolate.CLAMP);
+                const height = interpolate(animatedIndex.value, [0, 0.5, 1, 1.5, 2], [0, 40, 120, 40, 0], Extrapolate.CLAMP);
+                return { opacity, height };
+              })]}>
+                {/* Favoritos */}
+                <FavoritesList favorites={user?.favorites} onSelect={(fav: any) => {
+                   // Mock select logic
+                   bottomSheetRef.current?.snapToIndex(1);
+                   Haptics.selectionAsync();
+                }} />
 
-            <PaymentMethodSelector />
+                {/* Payment Mini Chip */}
+                <PaymentMiniChip />
+              </Animated.View>
 
-            {/* UX Improvement: Discretely toggle promo input instead of occupying 100% space by default */}
-            <View style={{ marginBottom: 16, alignItems: 'center' }}>
-                {!promoDiscount ? (
-                  !promoInputOpen ? (
-                    <TouchableOpacity onPress={() => setPromoInputOpen(true)}>
-                       <Text style={{ color: theme.colors.primary, fontWeight: '600' }}>+ Agregar Código Promo</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
-                        <TextInput 
-                          style={[styles.inputLocation, { flex: 1, backgroundColor: theme.colors.surfaceHigh, paddingVertical: 8 }]} 
-                          placeholder="Ingrese el código"
-                          placeholderTextColor={theme.colors.textMuted}
-                          value={promoCode}
-                          onChangeText={text => setPromoCode(text.toUpperCase())}
-                          autoCapitalize="characters"
-                          autoFocus
-                        />
-                        <TouchableOpacity 
-                           style={{ backgroundColor: theme.colors.surfaceHigh, paddingHorizontal: 16, borderRadius: theme.borderRadius.m, borderWidth: 1, borderColor: theme.colors.borderLight, justifyContent: 'center' }}
-                           onPress={handleApplyPromo}
-                           disabled={!promoCode || promoApplying}
-                        >
-                           {promoApplying ? (
-                              <ActivityIndicator size="small" color={theme.colors.primary} />
-                           ) : (
-                              <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>Aplicar</Text>
-                           )}
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                           style={{ justifyContent: 'center', paddingHorizontal: 8 }}
-                           onPress={() => setPromoInputOpen(false)}
-                        >
-                           <Ionicons name="close" size={20} color={theme.colors.textMuted} />
-                        </TouchableOpacity>
+              {/* Selected Destination Details (Visible when destination selected but ride not confirmed) */}
+              {selectedPlace && (
+                <View style={[styles.selectedDestCard, { marginTop: 20 }]}>
+                  <View style={styles.selectedDestRow}>
+                    <View style={styles.destDot} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.selectedDestLabel}>Destino actual</Text>
+                      <Text style={styles.selectedDestName} numberOfLines={2}>{selectedPlace.displayName}</Text>
+                      {distanceKm > 0 && <Text style={styles.selectedDestMeta}>{distanceKm} km · ~{estimatedTimeMin} min</Text>}
                     </View>
-                  )
-                ) : (
-                  <View style={{ backgroundColor: theme.colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                    <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Promo Aplicada: {promoCode}</Text>
                   </View>
-                )}
-            </View>
-
-                <TouchableOpacity
-                  style={[styles.requestButton, { width: '100%' }, (!selectedPlace || distanceKm > 100) && styles.requestButtonDisabled]}
-                  onPress={() => setPriceSheetVisible(true)}
-                  disabled={!selectedPlace || distanceKm > 100}
-                >
-                  <Text style={styles.requestButtonText}>
-                    {selectedPlace ? t('form.searchDriver', {defaultValue: 'Ofrecer tarifa y buscar conductor'}) : t('form.selectDestination', {defaultValue: 'Selecciona un destino'})}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ alignSelf: 'center', paddingVertical: 8 }}
-                  onPress={() => setScheduleModalVisible(true)}
-                  disabled={!selectedPlace || distanceKm > 100}
-                >
-                  <Text style={[{ color: theme.colors.text, fontWeight: '600', fontSize: 16 }, (!selectedPlace || distanceKm > 100) && { opacity: 0.5 }]}>
-                    Programar para después
-                  </Text>
-                </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* ── REQUESTING / REQUESTED / NEGOTIATING ── */}
-        {isSearching && (
-          <View style={{ paddingHorizontal: theme.spacing.xl }}>
-
-            {/* States without bids */}
-            {(rideStatus === 'REQUESTING' ||
-              rideStatus === 'REQUESTED' ||
-              rideStatus === 'SEARCHING' ||
-              (rideStatus === 'NEGOTIATING' && bids.length === 0)) && (
-              <>
-              <SearchingDriversView
-                activeDriversCount={activeDriversCount}
-                onCancel={handleCancelRequest}
-              />
-              {/* Price raise stepper */}
-              {price && Number(price) > 0 && (
-                <View style={{ marginTop: 16, alignItems: 'center' }}>
-                  <Text style={{ ...theme.typography.caption, color: theme.colors.textSecondary, marginBottom: 8 }}>
-                    {t('form.adjustPrice')}
-                  </Text>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: theme.colors.primary, marginBottom: 12 }}>
-                    {formatPrice(convertToUsd(price))}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    {[5, 10, 15].map(add => (
-                      <TouchableOpacity
-                        key={add}
-                        style={{
-                          backgroundColor: theme.colors.primaryLight,
-                          borderRadius: theme.borderRadius.pill,
-                          paddingHorizontal: 20,
-                          paddingVertical: 10,
-                          borderWidth: 1,
-                          borderColor: theme.colors.primary,
-                        }}
-                        onPress={() => {
-                          const newPrice = (Number(price) + add).toFixed(2);
-                          setPrice(newPrice);
-                          if (currentRideId) {
-                            socketService.emitWithAck('update_ride_price', {
-                              rideId: currentRideId,
-                              passengerId: user?._id,
-                              newPrice: Number(newPrice),
-                            }).catch(() => {});
-                          }
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        }}
-                      >
-                        <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 15 }}>+${add}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                  <TouchableOpacity
+                    style={[styles.ctaButton, { marginTop: 12 }]}
+                    onPress={() => setPriceSheetVisible(true)}
+                  >
+                    <Text style={styles.ctaButtonText}>Pedir Ride</Text>
+                  </TouchableOpacity>
                 </View>
               )}
-              </>
-            )}
-
-            {/* NEGOTIATING with bids → bid list + cancel */}
-            {rideStatus === 'NEGOTIATING' && bids.length > 0 && (
-              <View style={styles.searchingContainer}>
-                <View style={styles.searchingContent}>
-                  <Text style={styles.statusTitle}>
-                    {bids.length === 1
-                      ? t('general.bidsReceived', { count: bids.length })
-                      : t('general.bidsReceivedPlural', { count: bids.length })}
-                  </Text>
-
-                  {paymentAuthorizing && (
-                    <View style={styles.authStripeBox}>
-                      <Loader size="sm" color="#635BFF" />
-                      <Text style={styles.authStripeText}>
-                         {paymentStatusText || t('general.holdingFunds', { defaultValue: 'Procesando pago seguro...' })}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={{ marginTop: 8, width: '100%', paddingBottom: 20 }}>
+            </View>
+          </View>
+        ) : isSearching ? (
+          <BottomSheetScrollView
+            contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View>
+              {(rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || (rideStatus === 'NEGOTIATING' && bids.length === 0)) && (
+                <>
+                  <SearchingDriversView activeDriversCount={activeDriversCount} onCancel={handleCancelRequest} />
+                </>
+              )}
+              {rideStatus === 'NEGOTIATING' && bids.length > 0 && (
+                <View style={styles.searchingContainer}>
+                  <Text style={styles.statusTitle}>¡Ofertas Recibidas!</Text>
+                  <View style={{ marginTop: 8, paddingBottom: 20 }}>
                     {bids.map((item: any) => (
-                      <BidCard
-                        key={item._id}
-                        bid={{...item, isProcessing: acceptingBidId === item._id}}
-                        isBest={item._id === bestBidId}
-                        pickupLat={location?.coords.latitude}
-                        pickupLng={location?.coords.longitude}
-                        onAccept={handleAcceptBid}
-                      />
+                      <BidCard key={item._id} bid={item} isBest={item._id === bestBidId} onAccept={handleAcceptBid} />
                     ))}
                   </View>
+                  <TouchableOpacity style={styles.cancelRequestBtn} onPress={handleCancelRequest}>
+                    <Text style={styles.cancelRequestBtnText}>Cancelar</Text>
+                  </TouchableOpacity>
                 </View>
-
-                <TouchableOpacity style={styles.cancelRequestBtn} onPress={handleCancelRequest}>
-                  <Text style={styles.cancelRequestBtnText}>{t('searching.cancel')}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ── ACTIVE: viaje en curso ── */}
-        {isActiveRide && (
-          <View style={styles.activeRideCardPassenger}>
-
-            {/* Fase */}
-            <View style={styles.activePhaseRow}>
-              <View style={[styles.activePhasePill, {
-                backgroundColor: rideStatus === 'IN_PROGRESS' ? theme.colors.successLight : theme.colors.primaryLight,
-                borderColor: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
-              }]}>
-                <View style={[styles.activePhaseDot, {
-                  backgroundColor: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
-                }]} />
-                <Text style={[styles.activePhaseText, {
-                  color: rideStatus === 'IN_PROGRESS' ? theme.colors.success : theme.colors.primary,
-                }]}>
-                  {rideStatus === 'ARRIVED'     ? 'Tu conductor llegó' :
-                   rideStatus === 'IN_PROGRESS' ? 'En camino a tu destino' :
-                                                  'Conductor en camino'}
-                </Text>
-              </View>
+              )}
             </View>
-
-            {/* Destino */}
-            <Text style={styles.activeDestTextPassenger} numberOfLines={2}>
-              {rideStatus === 'IN_PROGRESS'
-                ? `→ ${selectedPlace?.displayName ?? selectedPlace?.address ?? 'Tu destino'}`
-                : 'Tu conductor se dirige hacia ti'}
-            </Text>
-
-            {/* Botones de acción */}
-            <View style={styles.activePassengerActions}>
-              <TouchableOpacity style={styles.activeActionBtn} onPress={() => setChatVisible(true)}>
-                <Ionicons name="chatbubble-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.activeActionText}>Chat</Text>
-              </TouchableOpacity>
-
-              {/* SOS */}
-              <SOSButton rideId={currentRideId ?? ''} style={styles.sosInline} />
-
-              <TouchableOpacity style={styles.activeActionBtn} onPress={() => {/* share */}}>
-                <Ionicons name="share-outline" size={20} color={theme.colors.primary} />
-                <Text style={styles.activeActionText}>Compartir</Text>
-              </TouchableOpacity>
+          </BottomSheetScrollView>
+        ) : isActiveRide ? (
+          <View style={{ paddingHorizontal: 16 }}>
+            <View style={styles.activeRideCard}>
+              <Text style={{ color: '#00CED1', fontWeight: 'bold' }}>{activeStatusLabel()}</Text>
+              <Text style={styles.activeDestText}>{selectedPlace?.displayName ?? 'Tu destino'}</Text>
             </View>
-
           </View>
-        )}
-        </BottomSheetScrollView>
+        ) : null}
       </BottomSheet>
 
-      {/* Chat Sheet — flotante en 52%, no bloquea el mapa */}
-      <ChatSheet
-        rideId={currentRideId}
-        myUserId={user?._id}
-        visible={chatVisible}
-        onClose={() => setChatVisible(false)}
-      />
-
-      <Modal visible={scheduleModalVisible} transparent animationType="slide">
-         <View style={styles.modalOverlay}>
-            <View style={[styles.bottomSheet, { paddingBottom: 40 }]}>
-                 <Text style={[styles.title, { marginBottom: 20 }]}>Programar Viaje</Text>
-                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(1)}>
-                    <Text style={styles.requestButtonText}>En 1 hora</Text>
-                 </TouchableOpacity>
-                 <View style={{ height: 10 }} />
-                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(2)}>
-                    <Text style={styles.requestButtonText}>En 2 horas</Text>
-                 </TouchableOpacity>
-                 <View style={{ height: 10 }} />
-                 <TouchableOpacity style={styles.requestButton} onPress={() => handleScheduleRide(24)}>
-                    <Text style={styles.requestButtonText}>Mañana a esta hora</Text>
-                 </TouchableOpacity>
-                 <View style={{ height: 10 }} />
-                 <TouchableOpacity style={[styles.requestButton, { backgroundColor: theme.colors.surfaceHigh }]} onPress={() => setScheduleModalVisible(false)}>
-                    <Text style={[styles.requestButtonText, { color: theme.colors.text }]}>Cancelar</Text>
-                 </TouchableOpacity>
-            </View>
-         </View>
-      </Modal>
-      <PriceInputSheet
-        visible={priceSheetVisible}
-        onClose={() => setPriceSheetVisible(false)}
-        onConfirm={handleRequestRide}
-        categoryOptions={categoryOptions}
-        loadingQuotes={loadingQuotes}
-        destAddress={selectedPlace?.displayName || selectedPlace?.address}
-      />
-    </KeyboardAvoidingView>
+      {/* Sheets & Modals */}
+      <ChatSheet rideId={currentRideId} myUserId={user?._id} visible={chatVisible} onClose={() => setChatVisible(false)} />
+      <RatingModal visible={!!completedRide} targetName="el conductor" onSubmit={handleRateDriver} onSkip={handleSkipRating} />
+      <PriceInputSheet visible={priceSheetVisible} onClose={() => setPriceSheetVisible(false)} onConfirm={handleRequestRide} categoryOptions={categoryOptions} loadingQuotes={loadingQuotes} destAddress={selectedPlace?.displayName} />
+    </View>
   );
 }
 
-// ─── BidCard styles ──────────────────────────────────────────────────────────
-const getBidStyles = (theme: Theme) => StyleSheet.create({
-  card: {
+
+// ─── Main styles ──────────────────────────────────────────────────────────────
+
+const getStyles = (theme: Theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.colors.background },
+
+  // ── Loader / Error states
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 32,
+  },
+  errorCard: {
+    alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.l,
-    padding: theme.spacing.m,
-    marginBottom: theme.spacing.m,
+    borderRadius: 24,
+    padding: 32,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
+    ...theme.shadows.md,
   },
-  bestCard: {
-    borderColor: theme.colors.primary,
-    borderWidth: 2,
-    backgroundColor: theme.colors.primaryLight,
-  },
-  bestBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+  errorTitle: {
+    ...theme.typography.title,
+    color: theme.colors.text,
+    textAlign: 'center',
     marginBottom: 8,
   },
-  bestBadgeText: {
-    color: theme.colors.primaryText,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+  errorBody: {
+    ...theme.typography.bodyMuted,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  row: {
+  retryBtn: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: 28,
+    paddingVertical: 13,
+    borderRadius: theme.borderRadius.pill,
+  },
+  retryBtnText: {
+    color: theme.colors.primaryText,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+
+  // ── Banners
+  topDriverBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 56 : 24,
+    left: 16,
+    right: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    zIndex: 100,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
+    ...theme.shadows.md,
   },
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: theme.colors.surfaceHigh,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarBest: {
+  topDriverBannerDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: theme.colors.primary,
   },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  info: {
-    flex: 1,
-  },
-  driverName: {
+  topDriverBannerText: {
     ...theme.typography.body,
     fontWeight: '600',
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  ratingValue: {
-    ...theme.typography.bodyMuted,
-    fontSize: 12,
-    marginLeft: 2,
-  },
-  eta: {
-    ...theme.typography.bodyMuted,
-    fontSize: 12,
-    color: theme.colors.primary,
-  },
-  priceCol: {
-    alignItems: 'flex-end',
-    gap: 6,
-  },
-  price: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: theme.colors.success,
-  },
-  priceBest: {
-    color: theme.colors.primary,
-  },
-  acceptBtn: {
-    backgroundColor: theme.colors.text,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: theme.borderRadius.pill,
-    minWidth: 90,
-    alignItems: 'center',
-  },
-  acceptBtnDisabled: {
-    opacity: 0.7,
-  },
-  acceptBtnBest: {
-    backgroundColor: theme.colors.primary,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 5,
-  },
-  acceptBtnText: {
-    color: theme.colors.primaryText,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-});
-
-
-
-// ─── Main styles ─────────────────────────────────────────────────────────────
-const getStyles = (theme: Theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  floatingHeader: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 56 : 16,
-    left: 16, right: 16, zIndex: 20,
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.colors.overlay,
-    borderRadius: theme.borderRadius.pill,
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderWidth: 1, borderColor: theme.colors.borderLight,
-  },
-  headerAvatar: { position: 'relative' },
-  headerAvatarImg: { width: 36, height: 36, borderRadius: 18 },
-  headerAvatarFallback: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: theme.colors.primaryLight,
-    borderWidth: 1.5, borderColor: theme.colors.primary,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  headerAvatarInitials: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
-  headerOnlineDot: {
-    position: 'absolute', bottom: 0, right: 0,
-    width: 10, height: 10, borderRadius: 5,
-    backgroundColor: theme.colors.success,
-    borderWidth: 1.5, borderColor: theme.colors.background,
-  },
-  headerGreeting: { flex: 1 },
-  headerGreetingText: { fontSize: 14, fontWeight: '700', color: theme.colors.text },
-  headerGreetingSubtext: { fontSize: 11, color: theme.colors.textMuted },
-  headerIconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: theme.colors.surfaceHigh,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: theme.colors.border,
-  },
-  
-  activeRideCardPassenger: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.l, margin: theme.spacing.m,
-    padding: theme.spacing.l, borderWidth: 1, borderColor: theme.colors.border,
-  },
-  activePhaseRow: { marginBottom: theme.spacing.m },
-  activePhasePill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: theme.borderRadius.pill, borderWidth: 1.5,
-  },
-  activePhaseDot: { width: 6, height: 6, borderRadius: 3 },
-  activePhaseText: { fontSize: 12, fontWeight: '700' },
-  activeDestTextPassenger: { ...theme.typography.title, fontSize: 16, marginBottom: theme.spacing.l },
-  activePassengerActions: {
-    flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'space-around',
-  },
-  activeActionBtn: { alignItems: 'center', gap: 4, flex: 1 },
-  activeActionText: { ...theme.typography.caption, color: theme.colors.textSecondary, fontSize: 11 },
-  sosInline: { width: 56, height: 56, borderRadius: 28 },
-
-  headerOverlay: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: 20, right: 20,
-    zIndex: 10,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: theme.spacing.l,
-    paddingVertical: theme.spacing.m,
-    borderRadius: theme.borderRadius.l,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  logoutButton: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.pill,
-  },
-  logoutText: { ...theme.typography.body, fontWeight: '600', color: theme.colors.error },
-  title: { ...theme.typography.header, fontSize: 22 },
-  subtitle: { ...theme.typography.bodyMuted, fontSize: 14, marginBottom: 2 },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background },
-  loaderText: { ...theme.typography.bodyMuted, marginTop: theme.spacing.m },
-  bottomOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
-  biddingCard: {
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? theme.spacing.xxxl : theme.spacing.xl,
-    borderTopLeftRadius: 36,
-    borderTopRightRadius: 36,
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: -12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 24,
-  },
-  statusCard: { alignItems: 'center' },
-  dragHandle: { width: 48, height: 5, backgroundColor: theme.colors.border, borderRadius: 3, alignSelf: 'center', marginBottom: theme.spacing.l },
-  cardHeader: { ...theme.typography.title, marginBottom: theme.spacing.l },
-  formContainer: { flexDirection: 'row', marginBottom: theme.spacing.l },
-  dotContainer: { alignItems: 'center', paddingTop: 16, marginRight: theme.spacing.m },
-  pickupDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.primary },
-  line: { flex: 1, width: 2, backgroundColor: theme.colors.border, marginVertical: 4 },
-  dropoffDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.text },
-  inputsSection: { flex: 1, gap: 8 },
-  inputLocation: {
-    backgroundColor: 'transparent',
-    padding: 12,
-    fontSize: 16,
     color: theme.colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    fontWeight: '500',
   },
-  pricingSection: { marginBottom: theme.spacing.xl },
-  pricingCard: {
+
+  // ── IDLE Bottom sheet content
+  selectedDestCard: {
     backgroundColor: theme.colors.surfaceHigh,
-    padding: theme.spacing.m,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadows.sm,
+  },
+  selectedDestRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  destDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: theme.colors.text,
+    marginTop: 6,
+  },
+  selectedDestLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+  },
+  selectedDestName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.text,
+    lineHeight: 22,
+    marginBottom: 4,
+  },
+  selectedDestMeta: {
+    fontSize: 13,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  changeDestBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: theme.colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  emptyDestCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    marginBottom: 16,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    gap: 10,
+  },
+  emptyDestText: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+
+  // ── Promo
+  promoLink: {
+    color: theme.colors.primary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  promoInput: {
+    flex: 1,
+    backgroundColor: theme.colors.surfaceHigh,
+    padding: 12,
+    fontSize: 15,
+    color: theme.colors.text,
     borderRadius: theme.borderRadius.m,
     borderWidth: 1,
     borderColor: theme.colors.border,
-  },
-  pricingMainRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    paddingBottom: 8,
-  },
-  pricingInfo: {
-    flexDirection: 'column',
-  },
-  pricingDetails: {
-    alignItems: 'flex-end',
-  },
-  suggestedPriceLabel: {
-    ...theme.typography.label,
-    marginBottom: 2,
-    color: theme.colors.textSecondary,
-  },
-  suggestedPriceValue: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.primary,
-  },
-  pricingSubtext: {
-    ...theme.typography.bodyMuted,
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  tripDataRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  tripDataText: {
-    ...theme.typography.body,
-    fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.text,
   },
-  pricingInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  adjustPriceLabel: {
-    ...theme.typography.label,
-    color: theme.colors.textSecondary,
-  },
-  priceRowCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.s,
-    paddingHorizontal: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    width: 100,
-  },
-  currencyCompact: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginRight: 4,
-  },
-  priceInputCompact: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-    paddingVertical: 6,
-  },
-  noDriversBadge: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 140 : 120,
-    alignSelf: 'center',
+  promoApplyBtn: {
     backgroundColor: theme.colors.surfaceHigh,
     paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 72,
+    paddingVertical: 12,
+  },
+  promoAppliedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.primaryLight,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: theme.borderRadius.pill,
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    zIndex: 10,
   },
-  noDriversBadgeText: {
-    ...theme.typography.label,
-    color: theme.colors.textSecondary,
-    fontSize: 12,
+  promoAppliedText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    fontSize: 13,
   },
 
-  requestButton: {
+  // ── CTA button
+  ctaButton: {
     backgroundColor: theme.colors.primary,
-    padding: 18,
+    paddingVertical: 18,
     borderRadius: theme.borderRadius.pill,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 10,
+    marginTop: 4,
   },
-  requestButtonDisabled: {
-    backgroundColor: theme.colors.border,
+  ctaButtonDisabled: {
+    backgroundColor: theme.colors.surfaceHigh,
     shadowOpacity: 0,
     elevation: 0,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  requestButtonText: { ...theme.typography.button, fontSize: 18 },
-  statusTitle: { ...theme.typography.header, color: theme.colors.text, marginBottom: theme.spacing.s, textAlign: 'center' },
-  statusText: { ...theme.typography.body, textAlign: 'center' },
-  infoText: { ...theme.typography.bodyMuted, textAlign: 'center', marginTop: theme.spacing.m },
+  ctaButtonText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: theme.colors.primaryText,
+    letterSpacing: -0.2,
+  },
+  ctaButtonTextDisabled: {
+    color: theme.colors.textMuted,
+  },
+
+  // ── Searching / Negotiating
+  priceAdjustCard: {
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  priceAdjustLabel: {
+    fontSize: 12,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  priceAdjustValue: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    letterSpacing: -0.5,
+  },
+  priceStepBtn: {
+    backgroundColor: theme.colors.primaryLight,
+    borderRadius: theme.borderRadius.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  priceStepBtnText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
   searchingContainer: {
     width: '100%',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: 24,
-    paddingBottom: 32,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   searchingContent: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.l,
   },
-  searchingTitle: {
+  statusTitle: {
     ...theme.typography.title,
-    textAlign: 'center',
-    marginTop: theme.spacing.l,
-    marginBottom: theme.spacing.xs,
     color: theme.colors.text,
-  },
-  searchingSubtitle: {
-    ...theme.typography.bodyMuted,
+    marginBottom: theme.spacing.s,
     textAlign: 'center',
-    fontSize: 14,
   },
-  loaderWrapper: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.surface,
-    justifyContent: 'center',
+  authStripeBox: {
+    backgroundColor: theme.colors.surfaceHigh,
+    borderColor: theme.colors.primary,
+    borderWidth: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: 'rgba(13,5,32,0.5)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: theme.borderRadius.m,
+    marginBottom: 8,
+    width: '100%',
+  },
+  authStripeText: {
+    marginLeft: 10,
+    color: theme.colors.primary,
+    fontWeight: '600',
+    fontSize: 14,
   },
   cancelRequestBtn: {
     marginTop: theme.spacing.m,
     alignSelf: 'center',
     backgroundColor: theme.colors.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    paddingVertical: 13,
+    paddingHorizontal: 32,
     borderRadius: 100,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1431,70 +1252,135 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
   },
-  authStripeBox: {
-    backgroundColor: theme.colors.surfaceHigh, 
-    borderColor: theme.colors.primary, 
-    borderWidth: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderRadius: theme.borderRadius.m,
-    marginBottom: 8
-  },
-  authStripeText: {
-    marginLeft: 10,
-    color: theme.colors.primary,
-    fontWeight: '600',
-    fontSize: 14
-  },
-  chatBtn: {
-    marginTop: theme.spacing.l,
+
+  // ── Active ride card
+  activeRideCard: {
     backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: 22,
+    padding: 20,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.pill,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignSelf: 'center',
-  },
-  chatBtnText: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  topDriverBanner: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 50 : 20,
-    left: 16,
-    right: 16,
-    backgroundColor: theme.colors.surface,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.s,
-    padding: 16,
-    zIndex: 100,
+    borderColor: theme.colors.border,
     ...theme.shadows.md,
   },
-  topDriverBannerText: {
-    ...theme.typography.body,
+  activePhaseRow: { marginBottom: 14 },
+  activePhasePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.pill,
+    borderWidth: 1.5,
+  },
+  activePhaseDot: { width: 6, height: 6, borderRadius: 3 },
+  activePhaseText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+  activeDestText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 18,
+    letterSpacing: -0.3,
+    lineHeight: 24,
+  },
+  activeActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    marginTop: 4,
+    paddingTop: 16,
+  },
+  activeActionBtn: {
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  activeActionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: theme.colors.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  activeActionText: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: '600',
+  },
+  sosInline: { width: 56, height: 56, borderRadius: 28 },
+
+  // ── Schedule modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  scheduleSheet: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 28,
+    paddingBottom: Platform.OS === 'ios' ? 48 : 32,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+    borderBottomWidth: 0,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: theme.colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 24,
+  },
+  scheduleTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: theme.colors.text,
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  scheduleSubtitle: {
+    fontSize: 14,
+    color: theme.colors.textMuted,
+    marginBottom: 24,
+    fontWeight: '500',
+  },
+  scheduleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderLight,
+  },
+  scheduleOptionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.primary,
+  },
+  scheduleOptionText: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: '600',
     color: theme.colors.text,
   },
-  idleStatusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceHigh,
-    padding: 12,
-    borderRadius: theme.borderRadius.m,
-    marginBottom: 16,
+  scheduleCancelBtn: {
+    marginTop: 20,
+    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
   },
-  idleStatusBannerText: {
-    ...theme.typography.body,
-    fontWeight: '600',
-  },
-  idleStatusBannerSubtext: {
-    ...theme.typography.caption,
+  scheduleCancelText: {
+    fontSize: 15,
     color: theme.colors.textMuted,
+    fontWeight: '600',
   },
 });

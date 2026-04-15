@@ -1,8 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import {
-  ScrollView, Text, StyleSheet, Platform, SafeAreaView,
+  ScrollView, Text, StyleSheet, Platform,
   TouchableOpacity, View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../hooks/useAppTheme';
 

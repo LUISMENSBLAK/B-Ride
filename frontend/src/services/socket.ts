@@ -62,7 +62,7 @@ class SocketService {
       timeout: 20000,
     });
 
-    eventManager.reconnectSocketBindings();
+    eventManager.reconnectSocketBindings(this.socket);
 
     this.socket.on('connect', () => {
       if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);

@@ -20,6 +20,13 @@
         "EXPO_PUBLIC_SOCKET_URL": "http://localhost:5000"
       }
     },
+    "device": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": false
+      }
+    },
     "preview": {
       "distribution": "internal",
       "ios": {

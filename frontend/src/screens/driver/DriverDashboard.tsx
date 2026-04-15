@@ -165,7 +165,7 @@ export default function DriverDashboard() {
             setLocation(newLoc);
           }
         );
-      } catch (err) {
+      } catch (err: unknown) {
         if (isMounted) {
             console.error('[GPS Error]', err);
             setErrorMsg(t('driver.locationDenied', { defaultValue: 'GPS fallback: revisa tus permisos para geolocalización o señal débil.' }));
@@ -265,7 +265,7 @@ export default function DriverDashboard() {
       try {
         const res = await client.get(`/rides/${ride._id}/details`);
         if (res.data?.success) enrichedRide = res.data.data;
-      } catch (e) {
+      } catch (e: unknown) {
         // Continuar con datos parciales
       }
     }
@@ -1094,25 +1094,125 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ── Active Ride ───────────────────────────────────────────────────────────
-  activeRideContainer: {
-    paddingTop: theme.spacing.m,
+  // ── Active Ride (Rediseño) ────────────────────────────────────────────────
+  activeRideCard: {
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.xl,
+  },
+  tripProgressBar: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.xl,
   },
-  activeBadge: {
-    alignSelf: 'center',
-    marginBottom: theme.spacing.l,
+  tripStep: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderWidth: 2,
+    borderColor: theme.colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
   },
-  activeDestLabel: {
+  tripStepActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryLight,
+  },
+  tripStepDone: {
+    backgroundColor: theme.colors.success,
+    borderColor: theme.colors.success,
+  },
+  tripStepNum: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textMuted,
+  },
+  tripStepNumActive: {
+    color: theme.colors.text,
+  },
+  tripStepLine: {
+    flex: 1,
+    height: 3,
+    backgroundColor: theme.colors.border,
+    marginHorizontal: -2,
+    zIndex: 1,
+  },
+  tripStepLineDone: {
+    backgroundColor: theme.colors.success,
+  },
+  activePhaseLabelNew: {
     ...theme.typography.label,
+    textAlign: 'center',
     marginBottom: 6,
   },
-  activeDestAddress: {
+  activeAddressNew: {
     ...theme.typography.title,
-    fontSize: 20,
+    fontSize: 22,
     textAlign: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.l,
     paddingHorizontal: theme.spacing.m,
+  },
+  activeMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.l,
+    paddingVertical: 14,
+    marginBottom: theme.spacing.l,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  activeMetric: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  activeMetricVal: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  activeMetricUnit: {
+    fontSize: 11,
+    color: theme.colors.textMuted,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  activeMetricDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: theme.colors.borderLight,
+  },
+  navigateBtnNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.text,
+    paddingVertical: 14,
+    borderRadius: theme.borderRadius.m,
+    marginBottom: theme.spacing.m,
+    gap: 8,
+  },
+  navigateBtnText: {
+    color: theme.colors.primaryText,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  activeActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  chatBtnSmall: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.surfaceHigh,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   advanceBtn: {
     marginBottom: theme.spacing.l,

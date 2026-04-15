@@ -9,20 +9,15 @@ class EventManager {
 
   constructor() {
     // Escuchar universalmente desde el socket singleton
-    const socket = socketService.getSocket();
-    if (socket) {
-      // Capturador genérico (Socket.IO maneja .onAny)
-      socket.onAny((eventName, ...args) => {
-        this.dispatch(eventName, ...args);
-      });
-    }
+    // NOTA: Se ha removido el fetching directo de socketService.getSocket()
+    // para evitar la dependencia circular (Error: Cannot read property 'getSocket' of undefined).
+    // Ahora, explícitamente se suscribe mediante reconnectSocketBindings()
   }
 
-  reconnectSocketBindings() {
-      const socket = socketService.getSocket();
-      if (socket) {
-          socket.offAny();
-          socket.onAny((eventName, ...args) => {
+  reconnectSocketBindings(socketInstance: any) {
+      if (socketInstance) {
+          socketInstance.offAny();
+          socketInstance.onAny((eventName: string, ...args: any[]) => {
              this.dispatch(eventName, ...args);
           });
       }

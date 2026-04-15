@@ -310,14 +310,24 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
         </Marker>
       )}
 
-      {/* Route polyline — curved */}
+      {/* Route polyline — double line: dark base + gold top */}
       {polylinePoints && (
-        <Polyline
-          coordinates={polylinePoints}
-          strokeColor={theme.wixarika.mapRoute}
-          strokeWidth={4}
-          lineDashPattern={Platform.OS === 'ios' ? undefined : [1]}
-        />
+        <>
+          {/* Shadow / base layer — dark thick */}
+          <Polyline
+            coordinates={polylinePoints}
+            strokeColor="rgba(0,0,0,0.45)"
+            strokeWidth={9}
+            lineDashPattern={Platform.OS === 'ios' ? undefined : [1]}
+          />
+          {/* Top layer — brand gold */}
+          <Polyline
+            coordinates={polylinePoints}
+            strokeColor={theme.wixarika.mapRoute}
+            strokeWidth={5}
+            lineDashPattern={Platform.OS === 'ios' ? undefined : [1]}
+          />
+        </>
       )}
 
       {/* Endpoint marker */}
@@ -398,18 +408,18 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   locateBtn: {
     position: 'absolute',
     right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8,
-    borderWidth: 1,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 12,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
   }
 });

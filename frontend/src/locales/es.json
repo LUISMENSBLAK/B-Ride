@@ -25,10 +25,10 @@
   "searching": {
     "sending": "Enviando solicitud...",
     "sendingSubtitle": "Conectando con el servidor",
-    "looking": "Buscando conductor...",
+    "looking": "Buscando tu ride...",
     "lookingSubtitle": "Buscando conductores cercanos a tu zona",
     "rotating": [
-      "Buscando conductor...",
+      "Buscando tu ride...",
       "Encontrando la mejor opción...",
       "Conectando con conductores cercanos..."
     ],
@@ -38,12 +38,12 @@
     "holdingFunds": "Reteniendo fondos con Stripe..."
   },
   "ride": {
-    "confirmed": "¡Viaje Confirmado!",
-    "arrivedTitle": "🚗 ¡Tu chofer ha llegado!",
-    "arrivedSub": "El coche te está esperando. ¡Sube!",
-    "inProgress": "🛣 Viaje en Curso",
-    "enRoute": "En camino hacia ti",
-    "enRouteGps": "En camino hacia ti (GPS...)",
+    "confirmed": "¡Ride Confirmado!",
+    "arrivedTitle": "🚗 ¡Tu conductor llegó!",
+    "arrivedSub": "Tu ride te está esperando. ¡Sube!",
+    "inProgress": "Disfruta tu Ride",
+    "enRoute": "Tu ride está en camino",
+    "enRouteGps": "Tu ride está en camino (GPS...)",
     "heading": "Dirigiéndose a:",
     "status": {
       "confirmed": "Confirmado",

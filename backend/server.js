@@ -51,7 +51,7 @@ app.use(express.json({ limit: '10mb' }));
 // Rate limiting — 300 reqs / 15min global
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 300,
+    max: process.env.NODE_ENV === 'production' ? 300 : 50000,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Demasiadas solicitudes, intenta más tarde.' },
@@ -61,7 +61,7 @@ app.use('/api/', limiter);
 // Auth routes stricter limit — 20 attempts / 15min
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: process.env.NODE_ENV === 'production' ? 20 : 10000, // Elevado en dev para evitar lockouts
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Demasiados intentos de autenticación, intenta más tarde.' },

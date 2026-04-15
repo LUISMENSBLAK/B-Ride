@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView,
+  ActivityIndicator, Alert, KeyboardAvoidingView,
   Platform, Image
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -95,10 +96,11 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         clearJustRegistered();
       }
     } catch (error: unknown) {
+      const err = error as { message?: string; code?: string; response?: any };
       triggerShake();
       setCode(['', '', '', '', '', '']);
       inputs.current[0]?.focus();
-      Alert.alert('Código incorrecto', error.response?.data?.message || 'El código es incorrecto o ha expirado.');
+      Alert.alert('Código incorrecto', err.response?.data?.message || 'El código es incorrecto o ha expirado.');
     } finally {
       setLoading(false);
     }
@@ -115,7 +117,8 @@ export default function VerifyEmailScreen({ route, navigation }: any) {
         inputs.current[0]?.focus();
       }
     } catch (error: unknown) {
-      Alert.alert('Error', error.response?.data?.message || 'No se pudo reenviar el código.');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error', err.response?.data?.message || 'No se pudo reenviar el código.');
     } finally {
       setResendLoading(false);
     }

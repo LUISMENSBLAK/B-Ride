@@ -43,7 +43,8 @@ export function useAppleAuth() {
       return backendResponse.data;
     } catch (error: unknown) {
       setLoading(false);
-      if (error.code === 'ERR_REQUEST_CANCELED') return null;
+      const err = error as { message?: string; code?: string; response?: any };
+      if (err.code === 'ERR_REQUEST_CANCELED') return null;
       throw error;
     }
   }, []);

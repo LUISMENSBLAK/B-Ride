@@ -84,12 +84,13 @@ async function uploadTokenToBackend(token: string) {
         await client.put('/auth/push-token', { token });
         if (__DEV__) console.log('[NotificationService] Push token registrado en backend:', token);
     } catch (error: unknown) {
+        const err = error as { message?: string; code?: string; response?: any };
         // Silently ignore 401 — user may not be fully authenticated yet
-        if (error?.response?.status === 401) {
+        if (err?.response?.status === 401) {
             if (__DEV__) console.log('[NotificationService] 401 al subir push token — ignorado');
             return;
         }
-        console.error('[NotificationService] Error enviando token al backend:', error);
+        console.error('[NotificationService] Error enviando token al backend:', err);
     }
 }
 
@@ -108,11 +109,12 @@ export async function removeTokenFromBackend(token: string) {
         await client.delete('/auth/push-token', { data: { token } });
         if (__DEV__) console.log('[NotificationService] Push token removido del backend:', token);
     } catch (error: unknown) {
-        if (error?.response?.status === 401) {
+        const err = error as { message?: string; code?: string; response?: any };
+        if (err?.response?.status === 401) {
             if (__DEV__) console.log('[NotificationService] 401 al remover push token — ignorado');
             return;
         }
-        if (__DEV__) console.log('[NotificationService] Error removiendo token del backend (no-fatal):', error?.message);
+        if (__DEV__) console.log('[NotificationService] Error removiendo token del backend (no-fatal):', err?.message);
     }
 }
 

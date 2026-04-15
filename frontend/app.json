@@ -18,6 +18,7 @@
       "config": {
         "googleMapsApiKey": "AIzaSyBZCGxCJOhOIa3KrlAo0IeLHBbyARjdLLI"
       },
+      "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "com.apple.developer.location.push": true
       },
@@ -35,6 +36,7 @@
           "apiKey": "AIzaSyBZCGxCJOhOIa3KrlAo0IeLHBbyARjdLLI"
         }
       },
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0A",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -54,6 +56,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
       [
         "expo-location",
         {
@@ -74,6 +78,9 @@
           "merchantIdentifier": "merchant.com.bride.app",
           "enableGooglePay": true
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin"
       ]
     ],
     "extra": {

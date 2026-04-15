@@ -1,21 +1,29 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * Firebase configuration for B-Ride.
+ *
+ * Uses ONLY @react-native-firebase (native SDK).
+ * The native SDK reads credentials automatically from:
+ *   - iOS:     ios/BRide/GoogleService-Info.plist
+ *   - Android: android/app/google-services.json
+ *
+import { initializeApp, getApps } from '@react-native-firebase/app';
+import auth from '@react-native-firebase/auth';
 
-// Config del proyecto galeria-81094
-const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY!,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN!,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID!,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET!,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID!,
-};
+// By default, @react-native-firebase/app initializes natively via GoogleService-Info.plist.
+// If the native module fails to find it (e.g., due to cached builds), this acts as a fallback to prevent crashes.
+if (getApps().length === 0) {
+  try {
+    initializeApp({
+      apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY as string,
+      appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID as string,
+      projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID as string,
+      messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID as string,
+      storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET as string,
+    });
+    console.log('[Firebase] Explicit fallback initialization complete.');
+  } catch (e) {
+    console.warn('[Firebase] Fallback initialization error:', e);
+  }
+}
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-
-export const firebaseAuth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage),
-});
-
-export default app;
+export { auth };

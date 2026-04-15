@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import client from '../../api/client';
 import { useAppTheme } from '../../hooks/useAppTheme';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -30,7 +31,8 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
                 setSuccessMsg('Se ha enviado un enlace de recuperación a tu correo electrónico. Sigue las instrucciones para restablecer tu contraseña.');
             }
         } catch (error: unknown) {
-            Alert.alert('Error', error.response?.data?.message || 'No se pudo procesar la solicitud.');
+            const err = error as { message?: string; code?: string; response?: any };
+            Alert.alert('Error', err.response?.data?.message || 'No se pudo procesar la solicitud.');
         } finally {
             setLoading(false);
         }

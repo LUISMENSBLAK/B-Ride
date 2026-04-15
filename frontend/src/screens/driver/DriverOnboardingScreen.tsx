@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, Alert, Platform, ActivityIndicator, SafeAreaView, Image
+  ScrollView, Alert, Platform, ActivityIndicator, Image
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSequence,
@@ -146,7 +147,8 @@ export default function DriverOnboardingScreen() {
         setStep('WAITING');
       }
     } catch (error: unknown) {
-      Alert.alert('Error', e.response?.data?.message || 'Error al guardar');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error', err.response?.data?.message || 'Error al guardar');
     } finally {
       setLoading(false);
     }

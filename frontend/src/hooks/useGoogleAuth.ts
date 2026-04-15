@@ -3,23 +3,18 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import auth from '@react-native-firebase/auth';
 import client from '../api/client';
 
-// WEB_CLIENT_ID: se obtiene de Firebase Console → Authentication → Google → 
-// Web SDK configuration → Web client ID
-// También está en google-services.json como "client_id" con "client_type": 3
-const WEB_CLIENT_ID = 'TU_WEB_CLIENT_ID.apps.googleusercontent.com';
+// Client IDs extraídos de los archivos de credenciales de Firebase:
+// Web (client_type 3) → google-services.json
+// iOS (client_type 2) → GoogleService-Info.plist
+const WEB_CLIENT_ID = '268090641188-e0it1i3nuin2pg9vglsakfdtctuafblc.apps.googleusercontent.com';
+const IOS_CLIENT_ID = '268090641188-76v04oaddhnl4p7e01okmff3j49803ro.apps.googleusercontent.com';
 
-// Configuración robusta de Google Sign-In
-// En iOS, si no existe GoogleService-Info.plist, iosClientId es OBLIGATORIO.
-try {
-  GoogleSignin.configure({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'PENDIENTE_WEB',
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'PENDIENTE_IOS',
-    offlineAccess: true,
-    scopes: ['profile', 'email'],
-  });
-} catch (configError: any) {
-  console.warn('[GoogleSignin] Error de configuración inicial:', configError.message);
-}
+GoogleSignin.configure({
+  webClientId: WEB_CLIENT_ID,
+  iosClientId: IOS_CLIENT_ID,
+  offlineAccess: true,
+  scopes: ['profile', 'email'],
+});
 
 export function useGoogleAuth() {
   const [loading, setLoading] = useState(false);
@@ -52,8 +47,9 @@ export function useGoogleAuth() {
       return backendResponse.data;
     } catch (error: unknown) {
       setLoading(false);
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) return null;
-      if (error.code === statusCodes.IN_PROGRESS) return null;
+      const err = error as { message?: string; code?: string; response?: any };
+      if (err.code === statusCodes.SIGN_IN_CANCELLED) return null;
+      if (err.code === statusCodes.IN_PROGRESS) return null;
       throw error;
     }
   }, []);

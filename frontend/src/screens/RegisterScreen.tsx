@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, SafeAreaView, KeyboardAvoidingView,
+  ActivityIndicator, Alert, KeyboardAvoidingView,
   Platform, ScrollView, Image
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import client from '../api/client';
 import { useAuthStore } from '../store/authStore';
@@ -24,6 +25,7 @@ export default function RegisterScreen({ navigation }: any) {
   const [role, setRole] = useState('USER');
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { t } = useTranslation();
 
   const register = useAuthStore(state => state.register);
@@ -55,10 +57,11 @@ export default function RegisterScreen({ navigation }: any) {
         await register(res.data.data);
       }
     } catch (error: unknown) {
-      if (error.message === 'Network Error' || error.message.includes('fetch failed')) {
+      const err = error as { message?: string; code?: string; response?: any };
+      if (err.message === 'Network Error' || err.message?.includes('fetch failed')) {
         Alert.alert('Error de red', 'No hay conexión con el servidor. Revisa tu conexión de red o asegura que el servidor esté activo.');
       } else {
-        const backendMessage = error.response?.data?.message || t('auth.somethingWentWrong');
+        const backendMessage = err.response?.data?.message || t('auth.somethingWentWrong');
         if (backendMessage.includes('ya está registrado') || backendMessage.includes('already exists')) {
           Alert.alert(
             'Cuenta Existente',
@@ -86,7 +89,8 @@ export default function RegisterScreen({ navigation }: any) {
         await login(result.data);
       }
     } catch (error: unknown) {
-      Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Google');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error', err.message || 'No se pudo iniciar sesión con Google');
     }
   };
 
@@ -99,7 +103,8 @@ export default function RegisterScreen({ navigation }: any) {
         await login(result.data);
       }
     } catch (error: unknown) {
-      Alert.alert('Error', error.message || 'No se pudo iniciar sesión con Apple');
+      const err = error as { message?: string; code?: string; response?: any };
+      Alert.alert('Error', err.message || 'No se pudo iniciar sesión con Apple');
     }
   };
 
@@ -193,16 +198,29 @@ export default function RegisterScreen({ navigation }: any) {
               />
               <View style={{ height: 12 }} />
 
-              <TextInput
-                ref={passRef}
-                style={styles.input}
-                placeholder={t('auth.passwordPlaceholder')}
-                placeholderTextColor={theme.colors.inputPlaceholder}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                returnKeyType="done"
-              />
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  ref={passRef}
+                  style={styles.passwordInput}
+                  placeholder={t('auth.passwordPlaceholder')}
+                  placeholderTextColor={theme.colors.inputPlaceholder}
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword(v => !v)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color={theme.colors.textMuted}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <Text style={styles.roleLabel}>{t('auth.registerAs')}</Text>
@@ -334,6 +352,27 @@ const getStyles = (theme: any) => StyleSheet.create({
   input: {
     backgroundColor: theme.colors.surfaceHigh, padding: 16, borderRadius: theme.borderRadius.m,
     marginBottom: theme.spacing.m, fontSize: 16, color: theme.colors.text, borderWidth: 1, borderColor: theme.colors.border,
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.m,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginBottom: theme.spacing.m,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingLeft: 16,
+    paddingRight: 4,
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
   },
   roleLabel: { ...theme.typography.body, fontWeight: '600', marginBottom: theme.spacing.s },
   roleContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: theme.spacing.l },
