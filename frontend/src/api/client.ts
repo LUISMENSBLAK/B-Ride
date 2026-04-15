@@ -42,8 +42,9 @@ client.interceptors.response.use(
 
 
         if (!error.response) {
-            // Solo mostrar alerta si no es un retry interno
-            if (!originalRequest._networkAlertShown) {
+            // No mostrar alert en llamadas silenciosas (ej: checkAuth al boot)
+            const isSilent = originalRequest?._silent === true;
+            if (!isSilent && !originalRequest._networkAlertShown) {
                 originalRequest._networkAlertShown = true;
                 Alert.alert(
                     'Sin conexión',

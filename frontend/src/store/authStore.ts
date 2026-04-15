@@ -80,27 +80,35 @@ export const useAuthStore = create<AuthState>((set) => ({
             const token = await AsyncStorage.getItem('userToken');
             const userInfoStr = await AsyncStorage.getItem('userInfo');
 
-            if (token && userInfoStr) {
-                try {
-                    const res = await client.get('/auth/me', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    if (res.data?.data) {
-                        const userObj = JSON.parse(userInfoStr);
-                        const merged = { ...userObj, ...res.data.data, accessToken: token };
-                        await AsyncStorage.setItem('userInfo', JSON.stringify(merged));
-                        set({ user: merged });
-                    } else {
-                        await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
-                        set({ user: null });
-                    }
-                } catch {
-                    // Token expirado o inválido — limpiar sesión
+            if (!token || !userInfoStr) {
+                set({ user: null });
+                return;
+            }
+
+            // Restaurar inmediatamente desde AsyncStorage para evitar flash de login
+            const cachedUser = JSON.parse(userInfoStr);
+            set({ user: cachedUser });
+
+            try {
+                // Verificar token con el backend (silencioso, sin mostrar alert)
+                const res = await client.get('/auth/me', {
+                    headers: { Authorization: `Bearer ${token}` },
+                    // @ts-ignore — flag interno para suprimir alert de red en el interceptor
+                    _silent: true,
+                });
+                if (res.data?.data) {
+                    const merged = { ...cachedUser, ...res.data.data, accessToken: token };
+                    await AsyncStorage.setItem('userInfo', JSON.stringify(merged));
+                    set({ user: merged });
+                }
+            } catch (apiErr: any) {
+                const status = apiErr?.response?.status;
+                if (status === 401 || status === 403) {
+                    // Token inválido o expirado — cerrar sesión
                     await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
                     set({ user: null });
                 }
-            } else {
-                set({ user: null });
+                // Cualquier otro error (red, timeout, 5xx) → mantener sesión local
             }
         } catch (e) {
             set({ user: null });

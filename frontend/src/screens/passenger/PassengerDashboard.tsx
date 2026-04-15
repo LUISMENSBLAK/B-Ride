@@ -3,7 +3,7 @@ import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
-  ActivityIndicator, Image,
+  ActivityIndicator, Image, Keyboard,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolate, withSequence, runOnJS } from 'react-native-reanimated';
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
+import { useSocketStore } from '../../store/useSocketStore';
 import socketService from '../../services/socket';
 import client from '../../api/client';
 import { useAppTheme } from '../../hooks/useAppTheme';
@@ -236,6 +237,7 @@ const paymentChipStyles = StyleSheet.create({
 export default function PassengerDashboard() {
   const { user } = useAuthStore();
   const navigation = useNavigation<any>();
+  const socketStatus = useSocketStore(s => s.status);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -804,6 +806,23 @@ export default function PassengerDashboard() {
         )}
       </Animated.View>
 
+      {/* ── Socket connection status banner ── */}
+      {socketStatus !== 'connected' && (
+        <View style={[
+          styles.connectionBanner,
+          { backgroundColor: socketStatus === 'reconnecting' ? 'rgba(245,197,24,0.92)' : 'rgba(229,57,53,0.92)' }
+        ]}>
+          <Ionicons
+            name={socketStatus === 'reconnecting' ? 'wifi-outline' : 'cloud-offline-outline'}
+            size={14}
+            color="#0D0520"
+          />
+          <Text style={styles.connectionBannerText}>
+            {socketStatus === 'reconnecting' ? 'Reconectando…' : 'Sin conexión en tiempo real'}
+          </Text>
+        </View>
+      )}
+
       {/* ── Floating Header & Pill (only IDLE) ── */}
       {isIdle && (
         <>
@@ -821,7 +840,7 @@ export default function PassengerDashboard() {
       {showDriverBanner && (
         <View style={styles.topDriverBanner}>
           <View style={styles.topDriverBannerDot} />
-          <Text style={styles.topDriverBannerText}>Buscando tu ride…</Text>
+          <Text style={styles.topDriverBannerText}>Encontrando tu ride…</Text>
         </View>
       )}
 
@@ -931,7 +950,7 @@ export default function PassengerDashboard() {
       {/* Sheets & Modals */}
       <ChatSheet rideId={currentRideId} myUserId={user?._id} visible={chatVisible} onClose={() => setChatVisible(false)} />
       <RatingModal visible={!!completedRide} targetName="el conductor" onSubmit={handleRateDriver} onSkip={handleSkipRating} />
-      <PriceInputSheet visible={priceSheetVisible} onClose={() => setPriceSheetVisible(false)} onConfirm={handleRequestRide} categoryOptions={categoryOptions} loadingQuotes={loadingQuotes} destAddress={selectedPlace?.displayName} />
+      <PriceInputSheet visible={priceSheetVisible} onClose={() => setPriceSheetVisible(false)} onConfirm={handleRequestRide} categoryOptions={categoryOptions} loadingQuotes={loadingQuotes} destAddress={selectedPlace?.displayName} distanceKm={distanceKm} estimatedMinutes={estimatedTimeMin} />
     </View>
   );
 }
@@ -1012,6 +1031,25 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     ...theme.typography.body,
     fontWeight: '600',
     color: theme.colors.text,
+  },
+  connectionBanner: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 44 : 16,
+    left: '10%',
+    right: '10%',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 999,
+  },
+  connectionBannerText: {
+    color: '#0D0520',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // ── IDLE Bottom sheet content

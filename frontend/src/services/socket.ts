@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
+import { useSocketStore } from '../store/useSocketStore';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import eventManager from './EventManager';
@@ -65,6 +66,8 @@ class SocketService {
     eventManager.reconnectSocketBindings(this.socket);
 
     this.socket.on('connect', () => {
+      useSocketStore.getState().setStatus('connected');
+      useSocketStore.getState().resetReconnectAttempts();
       if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);
       const userState = useAuthStore.getState().user;
       if (userState) {
@@ -92,10 +95,17 @@ class SocketService {
     });
 
     this.socket.on('disconnect', (reason) => {
+      useSocketStore.getState().setStatus('disconnected');
       console.warn('[Socket] Disconnected:', reason);
     });
 
+    this.socket.on('reconnect_attempt', () => {
+      useSocketStore.getState().setStatus('reconnecting');
+      useSocketStore.getState().incrementReconnectAttempts();
+    });
+
     this.socket.on('connect_error', (err) => {
+      useSocketStore.getState().setStatus('disconnected');
       console.error('[Socket] Connection error:', err);
     });
   }
