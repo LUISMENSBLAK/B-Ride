@@ -81,6 +81,14 @@
       ],
       [
         "@react-native-google-signin/google-signin"
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
       ]
     ],
     "extra": {

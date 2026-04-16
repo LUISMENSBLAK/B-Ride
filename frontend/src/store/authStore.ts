@@ -4,6 +4,7 @@ import client from '../api/client';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { removeTokenFromBackend } from '../services/notifications/NotificationService';
+import socketService from '../services/socket';
 
 interface User {
     _id: string;
@@ -72,6 +73,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
 
         await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
+        socketService.disconnect();
         set({ user: null });
     },
     checkAuth: async () => {

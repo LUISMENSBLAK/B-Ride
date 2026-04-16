@@ -46,22 +46,22 @@ export function useRetryRequest(options: UseRetryRequestOptions = {}) {
         setLoading(false);
         onSuccess?.(result);
         return result;
-      } catch (error: unknown) {
+      } catch (error: any) {
         retryCount.current++;
 
-        const status = err.response?.status;
+        const status = error.response?.status;
         // No reintentar en errores de cliente (4xx) excepto 429
         if (status && status >= 400 && status < 500 && status !== 429) {
           setLoading(false);
-          setError(err.response?.data?.message || 'Error del servidor');
-          onFail?.(err);
+          setError(error.response?.data?.message || 'Error del servidor');
+          onFail?.(error);
           return null;
         }
 
         if (retryCount.current > maxRetries) {
           setLoading(false);
           setError('Servidor no disponible');
-          onFail?.(err);
+          onFail?.(error);
           return null;
         }
 

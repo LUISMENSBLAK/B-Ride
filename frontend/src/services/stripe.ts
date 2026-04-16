@@ -93,13 +93,13 @@ export const stripeFrontendService = {
         state: 'error',
         error: response.data.message || 'Payment creation failed.',
       };
-    } catch (error: unknown) {
-      const isTimeout = err.message?.includes('timeout');
+    } catch (error: any) {
+      const isTimeout = error.message?.includes('timeout');
       return {
         state: 'error',
         error: isTimeout
           ? 'El pago tardó demasiado. Intenta de nuevo.'
-          : err.response?.data?.message || err.message || 'Error desconocido.',
+          : error.response?.data?.message || error.message || 'Error desconocido.',
       };
     } finally {
       _paymentInFlight = false;

@@ -474,7 +474,7 @@ export default function DriverDashboard() {
                await client.post(`/rides/${completedRide._id}/comment`, { text: comment });
            }
        } catch (error: unknown) {
-           Alert.alert(t('driver.ratingError'), error.message);
+           Alert.alert(t('driver.ratingError'), (error as any).message);
        }
     }
     setCompletedRide(null);
@@ -571,20 +571,20 @@ export default function DriverDashboard() {
           }}
           activeOpacity={1}
         >
-          <Animated.View style={[styles.onlineToggleNew, toggleBgStyle, toggleBorderStyle]}>
-            <View style={styles.onlineToggleDot}>
-              <View style={[styles.onlineDotInner, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.textMuted }]} />
+          <Animated.View style={[styles.onlineToggle, toggleBgStyle, toggleBorderStyle]}>
+            <View style={{ width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: isOnline ? theme.colors.surface : theme.colors.surfaceHigh }}>
+              <View style={[{ width: 8, height: 8, borderRadius: 4 }, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.textMuted }]} />
             </View>
-            <View style={styles.onlineToggleTextBlock}>
-              <Text style={[styles.onlineToggleLabelNew, { color: isOnline ? theme.colors.primaryText : theme.colors.textSecondary }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.onlineToggleText, { color: isOnline ? theme.colors.primaryText : theme.colors.textSecondary, fontWeight: 'bold' }]}>
                 {isOnline ? 'EN LÍNEA' : 'CONECTAR'}
               </Text>
-              <Text style={[styles.onlineToggleSubNew, { color: isOnline ? `${theme.colors.primaryText}99` : theme.colors.textMuted }]}>
+              <Text style={[styles.onlineToggleText, { color: isOnline ? `${theme.colors.primaryText}99` : theme.colors.textMuted }]}>
                 {isOnline ? 'Recibiendo viajes' : 'Toca para activar'}
               </Text>
             </View>
             {/* Indicador LED */}
-            <View style={[styles.ledDot, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.border }]} />
+            <View style={[{ width: 8, height: 8, borderRadius: 4, marginLeft: 4 }, { backgroundColor: isOnline ? theme.colors.primaryText : theme.colors.border }]} />
           </Animated.View>
         </TouchableOpacity>
       </View>
@@ -1147,6 +1147,51 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     ...theme.typography.label,
     textAlign: 'center',
     marginBottom: 6,
+  },
+  idleOnlineContainer: {
+    padding: theme.spacing.xl,
+  },
+  idleStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: theme.borderRadius.l,
+    padding: theme.spacing.m,
+    borderWidth: 1,
+    borderColor: theme.colors.borderLight,
+  },
+  idleStatCard: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  idleStatCardCenter: {
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  idleStatValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  idleStatLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    fontSize: 11,
+  },
+  idleWaitText: {
+    ...theme.typography.body,
+    textAlign: 'center',
+    color: theme.colors.textSecondary,
+    marginTop: theme.spacing.xl,
+    marginBottom: theme.spacing.m,
+  },
+  idleDotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   activeAddressNew: {
     ...theme.typography.title,

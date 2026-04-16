@@ -113,6 +113,7 @@ export default function PriceInputSheet({
 }: PriceInputSheetProps) {
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
+  const styles = getStyles(theme, insets);
 
   const paymentMethod = useRideFlowStore(s => s.paymentMethod);
   const setPaymentMethod = useRideFlowStore(s => s.setPaymentMethod);
@@ -126,7 +127,7 @@ export default function PriceInputSheet({
 
   // Cursor parpadeante
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (visible) {
       setCursorVisible(true);
       interval = setInterval(() => setCursorVisible(v => !v), 500);

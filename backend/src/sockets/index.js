@@ -43,34 +43,40 @@ module.exports = {
         const User = require('../models/User');
 
         io.use(async (socket, next) => {
+            console.log(`[Socket] New connection attempt from IP: ${socket.handshake.address}`);
             try {
                 // Soportar token en header (extraHeaders) o en auth object
                 const authHeader = socket.handshake.headers.authorization;
                 const token = (authHeader && authHeader.split(' ')[1]) || socket.handshake.auth?.token;
-
+                
                 if (!token) {
                     return next(new Error('Authentication error: No token provided'));
                 }
 
-                const jwt = require('jsonwebtoken');
                 let user = null;
 
+                // 1. Intentar verificar como Firebase ID Token
                 try {
-                    // Intentar JWT propio (flujo principal — Firebase desactivado)
-                    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-                    user = await User.findById(decoded.id).select('isBlocked isBanned lockUntil role');
-                } catch (jwtErr) {
-                    // Fallback: Firebase ID Token (por si se reactiva en el futuro)
+                    const decodedFirebase = await admin.auth().verifyIdToken(token);
+                    user = await User.findOne({ firebaseUid: decodedFirebase.uid }).select('isBlocked isBanned lockUntil role');
+                    if (user && __DEV__) console.log(`[Socket Auth] Valid Firebase token for user: ${user._id}`);
+                } catch (firebaseErr) {
+                    // Fallback: tratar de descifrar como backend JWT local (Admin Panel & Legacy)
                     try {
-                        const admin = require('../config/firebase');
-                        const decoded = await admin.auth().verifyIdToken(token);
-                        user = await User.findOne({ firebaseUid: decoded.uid }).select('isBlocked isBanned lockUntil role');
-                    } catch (fbErr) {
+                        const jwt = require('jsonwebtoken');
+                        const decodedJwt = jwt.verify(token, process.env.JWT_SECRET);
+                        user = await User.findById(decodedJwt.id || decodedJwt.userId).select('isBlocked isBanned lockUntil role');
+                        if (user && __DEV__) console.log(`[Socket Auth] Valid JWT for user: ${user._id}`);
+                    } catch (jwtErr) {
+                        console.error('[Socket Auth] Invalid token error (Firebase & JWT):', jwtErr.message);
                         return next(new Error('Authentication error: Invalid token'));
                     }
                 }
 
-                if (!user) return next(new Error('Authentication error: User not found'));
+                if (!user) {
+                    console.error('[Socket Auth] User not found for provided token');
+                    return next(new Error('Authentication error: User not found'));
+                }
 
                 if (user.isBlocked || user.isBanned) {
                     return next(new Error('Authentication error: Account is banned'));

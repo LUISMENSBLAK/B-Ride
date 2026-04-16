@@ -21,8 +21,8 @@ export function useAppleAuth() {
       if (!appleCredential.identityToken) throw new Error('No se obtuvo identity token de Apple.');
 
       // Crear credencial de Firebase con el token de Apple
-      const { identityToken, nonce } = appleCredential;
-      const appleAuthProvider = auth.AppleAuthProvider.credential(identityToken, nonce);
+      const { identityToken } = appleCredential;
+      const appleAuthProvider = auth.AppleAuthProvider.credential(identityToken);
       const userCredential = await auth().signInWithCredential(appleAuthProvider);
 
       // Obtener Firebase ID Token

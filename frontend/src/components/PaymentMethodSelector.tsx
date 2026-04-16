@@ -9,33 +9,45 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface PaymentMethodSelectorProps {
   onSelected?: () => void;
+  visible?: boolean;
+  onClose?: () => void;
+  onSelect?: (method: PaymentMethodType) => void;
 }
 
 type PaymentMethodType = 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET';
 
 export default function PaymentMethodSelector({
- onSelected }: PaymentMethodSelectorProps) {
+  onSelected, visible: externalVisible, onClose, onSelect
+}: PaymentMethodSelectorProps) {
   const theme = useAppTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [internalVisible, setInternalVisible] = useState(false);
   const paymentMethod = useRideFlowStore(state => state.paymentMethod);
   const setPaymentMethod = useRideFlowStore(state => state.setPaymentMethod);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
+  const isVisible = externalVisible !== undefined ? externalVisible : internalVisible;
+
+  const handleClose = () => {
+    if (onClose) onClose();
+    else setInternalVisible(false);
+  };
+
   React.useEffect(() => {
-    if (modalVisible) {
+    if (isVisible) {
       client.get('/wallet/balance').then(res => {
         if (res.data.success) setWalletBalance(res.data.data.balance);
       }).catch(() => {});
     }
-  }, [modalVisible]);
+  }, [isVisible]);
 
   const selectMethod = (method: PaymentMethodType) => {
     setPaymentMethod(method);
-    setModalVisible(false);
+    if (onSelect) onSelect(method);
+    handleClose();
     if (onSelected) onSelected();
   };
 
@@ -54,7 +66,7 @@ export default function PaymentMethodSelector({
       case 'CASH': return <Banknote size={20} color={theme.colors.success} />;
       case 'CARD': return <CreditCard size={20} color={theme.colors.primary} />;
       case 'APPLE_PAY': return <Text style={{ fontSize: 20, color: theme.colors.text, fontWeight: '700' }}></Text>;
-      case 'WALLET': return <Wallet size={20} color={theme.colors.gold || '#F5C518'} />;
+      case 'WALLET': return <Wallet size={20} color={'#F5C518'} />;
       default: return <CreditCard size={20} color={theme.colors.textSecondary} />;
     }
   };
@@ -88,16 +100,18 @@ export default function PaymentMethodSelector({
 
   return (
     <>
-      <TouchableOpacity style={styles.selectorBtn} onPress={() => setModalVisible(true)}>
-        <View style={styles.leftRow}>
-          {getMethodIcon(paymentMethod)}
-          <Text style={styles.selectorText}>{getMethodLabel(paymentMethod)}</Text>
-        </View>
-        <Text style={styles.chevron}>▼</Text>
-      </TouchableOpacity>
+      {externalVisible === undefined && (
+        <TouchableOpacity style={styles.selectorBtn} onPress={() => setInternalVisible(true)}>
+          <View style={styles.leftRow}>
+            {getMethodIcon(paymentMethod)}
+            <Text style={styles.selectorText}>{getMethodLabel(paymentMethod)}</Text>
+          </View>
+          <Text style={styles.chevron}>▼</Text>
+        </TouchableOpacity>
+      )}
 
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
+      <Modal visible={isVisible} transparent animationType="slide" onRequestClose={handleClose}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleClose}>
           <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}
             onStartShouldSetResponder={() => true}
           >
@@ -119,7 +133,7 @@ export default function PaymentMethodSelector({
 
             {renderMethodRow(
               'WALLET',
-              <Wallet size={22} color={theme.colors.gold || '#F5C518'} />,
+              <Wallet size={22} color={'#F5C518'} />,
               'B-Ride Wallet',
               walletBalance !== null ? `Saldo: $${walletBalance.toFixed(2)}` : undefined,
             )}

@@ -148,28 +148,30 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   }, [latitude, longitude]);
 
   // BUG 12 FIX: Siempre actualizar firstDriverPing para asegurar que el marker se renderice.
-  // Usar animateMarkerToCoordinate solo como optimización cuando el marker ya está montado.
+  // Usar animateMarkerToCoordinate como optimización cuando el marker ya está montado
+  const mapUpdateThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useImperativeHandle(ref, () => ({
     updateDriverPosition: (lat: number, lng: number) => {
       // Calcular heading si hay posición previa
-      if (firstDriverPing) {
-        if (firstDriverPing.latitude !== lat || firstDriverPing.longitude !== lng) {
-          const dy = lat - firstDriverPing.latitude;
-          const dx = Math.cos(Math.PI / 180 * firstDriverPing.latitude) * (lng - firstDriverPing.longitude);
-          const angle = Math.atan2(dx, dy) * 180 / Math.PI;
-          setHeading(angle);
-        }
-      }
+      setFirstDriverPing((currentPing) => {
+         if (currentPing) {
+           if (currentPing.latitude !== lat || currentPing.longitude !== lng) {
+             const dy = lat - currentPing.latitude;
+             const dx = Math.cos(Math.PI / 180 * currentPing.latitude) * (lng - currentPing.longitude);
+             const angle = Math.atan2(dx, dy) * 180 / Math.PI;
+             setHeading(angle);
+           }
+         }
+         return { latitude: lat, longitude: lng };
+      });
 
-      // Intentar animación nativa si el marker ya está montado
+      // Animación nativa suave (Interpolación a 60fps vía Maps API)
       if (driverMarkerRef.current && typeof driverMarkerRef.current.animateMarkerToCoordinate === 'function') {
         driverMarkerRef.current.animateMarkerToCoordinate(
-          { latitude: lat, longitude: lng }, 1000
+          { latitude: lat, longitude: lng }, 1500
         );
       }
-
-      // Siempre actualizar el state para que React renderice/actualice el Marker
-      setFirstDriverPing({ latitude: lat, longitude: lng });
     }
   }));
 

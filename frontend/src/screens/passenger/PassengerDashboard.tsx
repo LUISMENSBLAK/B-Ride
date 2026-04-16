@@ -3,15 +3,17 @@ import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
-  ActivityIndicator, Image, Keyboard,
+  ActivityIndicator, Image, Keyboard, FlatList
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolate, withSequence, runOnJS } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolation, withSequence, runOnJS } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import { useSocketStore } from '../../store/useSocketStore';
@@ -34,7 +36,11 @@ import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
-import PriceInputSheet from '../../components/PriceInputSheet';
+import FareOfferSheet from './FareOfferSheet';
+import AddFavoriteSheet, {
+  loadFavorites, saveFavorite, deleteFavorite,
+  type Favorite,
+} from './AddFavoriteSheet';
 import { haversineKm } from '../../utils/geo';
 import { useCurrency } from '../../hooks/useCurrency';
 
@@ -113,7 +119,7 @@ const topBarStyles = StyleSheet.create({
 });
 
 // ── Pill de Conductores Cercanos ───────────────────────────────────────────
-const DriverPill = memo(({ count, animatedIndex }: { count: number, animatedIndex: Animated.SharedValue<number> }) => {
+const DriverPill = memo(({ count, animatedIndex }: { count: number, animatedIndex: any }) => {
   const isZero = count === 0;
   const pulseAnim = useSharedValue(0.6);
 
@@ -128,14 +134,21 @@ const DriverPill = memo(({ count, animatedIndex }: { count: number, animatedInde
     );
   }, [count]);
 
-  const stylez = useAnimatedStyle(() => ({
-    opacity: interpolate(animatedIndex.value, [1, 1.5, 2], [1, 0.5, 0], Extrapolate.CLAMP),
-    transform: [{ scale: interpolate(animatedIndex.value, [1, 2], [1, 0.9]) }]
-  }));
+  const stylez = useAnimatedStyle(() => {
+    let baseOpacity = count === 0 ? 0 : 1;
+    let indexOpacity = 1;
+    let indexScale = 1;
+    if (animatedIndex && animatedIndex.value !== undefined) {
+       indexOpacity = interpolate(animatedIndex.value, [1, 1.5, 2], [1, 0.5, 0], Extrapolation.CLAMP);
+       indexScale = interpolate(animatedIndex.value, [1, 2], [1, 0.9], Extrapolation.CLAMP);
+    }
+    return {
+      opacity: baseOpacity * indexOpacity,
+      transform: [{ scale: indexScale }]
+    };
+  });
 
   const iconStylez = useAnimatedStyle(() => ({ opacity: pulseAnim.value }));
-
-  if (count === 0) return null;
 
   return (
     <Animated.View style={[driverPillStyles.container, {
@@ -169,27 +182,70 @@ const driverPillStyles = StyleSheet.create({
   text: { fontSize: 13, fontWeight: '600' }
 });
 
-// ── Favoritos Dinámicos ───────────────────────────────────────────────
-const FavoritesList = memo(({ onSelect, favorites }: any) => {
-  const displayFavorites = favorites && favorites.length > 0
-    ? favorites
-    : [{ id: 'add', name: '+ Agregar favorito', isEmptyState: true }];
+// ── FavoritesList — dynamic from AsyncStorage ─────────────────────────────
+const FavoritesList = memo(({ favorites, onSelect, onAdd, onDelete }: {
+  favorites: Favorite[];
+  onSelect: (fav: Favorite) => void;
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+}) => {
+  const data: (Favorite | { id: '__add__'; isAdd: true })[] = [
+    ...favorites,
+    { id: '__add__', isAdd: true },
+  ];
 
   return (
-    <View style={{ marginTop: 16 }}>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        {displayFavorites.map((fav: any) => (
-          <TouchableOpacity key={fav.id} onPress={() => onSelect(fav)} activeOpacity={0.8}>
-            <View style={[favStyles.chip, fav.isEmptyState && favStyles.chipDashed]}>
-              <Ionicons name={fav.isEmptyState ? 'add' : 'star'} size={14} color={fav.isEmptyState ? 'rgba(255,255,255,0.4)' : '#F5C518'} />
-              <Text style={[favStyles.name, fav.isEmptyState && { color: 'rgba(255,255,255,0.6)' }]}>
-                {fav.name}
-              </Text>
-              {!fav.isEmptyState && fav.dist && <Text style={favStyles.dist}>{fav.dist}</Text>}
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
+    <View style={{ marginTop: 16, position: 'relative' }}>
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={data}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ gap: 10, paddingRight: 32 }}
+        renderItem={({ item }) => {
+          if ('isAdd' in item) {
+            return (
+              <TouchableOpacity onPress={onAdd} activeOpacity={0.8}>
+                <View style={favStyles.chipDashed}>
+                  <Ionicons name="add" size={14} color="#F5C518" />
+                  <Text style={favStyles.addText}>Agregar</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }
+          const fav = item as Favorite;
+          return (
+            <TouchableOpacity
+              onPress={() => onSelect(fav)}
+              onLongPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                Alert.alert(
+                  fav.emoji + ' ' + fav.name,
+                  'Eliminar este favorito?',
+                  [
+                    { text: 'Cancelar', style: 'cancel' },
+                    { text: 'Eliminar', style: 'destructive', onPress: () => onDelete(fav.id) },
+                  ],
+                );
+              }}
+              delayLongPress={500}
+              activeOpacity={0.8}
+            >
+              <View style={favStyles.chip}>
+                <Text style={favStyles.emoji}>{fav.emoji}</Text>
+                <Text style={favStyles.name}>{fav.name}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+      />
+      <LinearGradient
+        colors={['rgba(13,5,32,0)', 'rgba(13,5,32,0.92)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ position: 'absolute', right: -16, top: 0, bottom: 0, width: 32 }}
+        pointerEvents="none"
+      />
     </View>
   );
 });
@@ -200,21 +256,26 @@ const favStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
     borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
-    gap: 6
+    gap: 6,
   },
   chipDashed: {
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'transparent',
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+    gap: 6,
   },
+  emoji: { fontSize: 16 },
   name: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  dist: { color: 'rgba(255,255,255,0.5)', fontSize: 11 }
+  addText: { color: 'rgba(255,255,255,0.60)', fontSize: 13, fontWeight: '500' },
+  dist: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
 });
 
 // ── Payment Mini Chip ──────────────────────────────────────────────────────
-const PaymentMiniChip = memo(() => {
+const PaymentMiniChip = memo(({ onPress }: { onPress?: () => void }) => {
   return (
-    <TouchableOpacity style={paymentChipStyles.chip} activeOpacity={0.8}>
+    <TouchableOpacity style={paymentChipStyles.chip} activeOpacity={0.8} onPress={onPress}>
       <Ionicons name="cash-outline" size={16} color="#C4B8E0" />
       <Text style={paymentChipStyles.text}>Efectivo</Text>
       <Ionicons name="chevron-down" size={14} color="#C4B8E0" />
@@ -241,7 +302,29 @@ export default function PassengerDashboard() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
   const animatedIndex = useSharedValue(0);
+  const [showLocating, setShowLocating] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowLocating(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const searchGlowAnim = useSharedValue(0);
+  useEffect(() => {
+    searchGlowAnim.value = withRepeat(
+      withSequence(
+        withTiming(0.45, { duration: 1250 }),
+        withTiming(0, { duration: 1250 })
+      ),
+      -1,
+      true
+    );
+  }, []);
+  const searchGlowStyle = useAnimatedStyle(() => ({
+    shadowOpacity: currentSnapIndex === 0 ? searchGlowAnim.value : 0
+  }));
 
   const theme = useAppTheme();
   const { t } = useTranslation();
@@ -251,6 +334,39 @@ export default function PassengerDashboard() {
 
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+
+  // ── Ride history (AsyncStorage 'ride_history') ──
+  const [rideHistory, setRideHistory] = useState<PlaceResult[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem('ride_history').then(raw => {
+      if (raw) {
+        try { setRideHistory(JSON.parse(raw).slice(0, 3)); } catch {}
+      }
+    });
+  }, []);
+
+  const saveToHistory = useCallback(async (place: PlaceResult) => {
+    try {
+      const raw = await AsyncStorage.getItem('ride_history');
+      const prev: PlaceResult[] = raw ? JSON.parse(raw) : [];
+      const filtered = prev.filter(p => p.placeId !== place.placeId);
+      const updated = [place, ...filtered].slice(0, 3);
+      await AsyncStorage.setItem('ride_history', JSON.stringify(updated));
+      setRideHistory(updated);
+    } catch {}
+  }, []);
+
+  // ── User favorites (AsyncStorage 'user_favorites') ──
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [addFavVisible, setAddFavVisible] = useState(false);
+  useEffect(() => {
+    loadFavorites().then(setFavorites);
+  }, []);
+
+  const handleDeleteFav = useCallback(async (id: string) => {
+    const updated = await deleteFavorite(id);
+    setFavorites(updated);
+  }, []);
 
   // Trip state centralizado
   const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
@@ -275,6 +391,52 @@ export default function PassengerDashboard() {
   const [promoApplying, setPromoApplying] = useState(false);
   const [promoInputOpen, setPromoInputOpen] = useState(false);
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
+  const [paymentSelectorVisible, setPaymentSelectorVisible] = useState(false);
+
+  // ── Banner de conexión — NUNCA aparece en primer render ──
+  const hasEverConnected = useRef(false);
+  const [showBanner, setShowBanner] = useState(false);
+  const [bannerState, setBannerState] = useState<'hidden' | 'amber' | 'red'>('hidden');
+  const initialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (socketStatus === 'connected') {
+      hasEverConnected.current = true;
+      // Socket conectó — cancelar todos los timers y ocultar banner
+      if (initialTimerRef.current) { clearTimeout(initialTimerRef.current); initialTimerRef.current = null; }
+      if (redTimerRef.current) { clearTimeout(redTimerRef.current); redTimerRef.current = null; }
+      setShowBanner(false);
+      setBannerState('hidden');
+      return;
+    }
+
+    if (!hasEverConnected.current) {
+      // Primer intento de conexión — esperar 8s completos antes de mostrar NADA
+      if (!initialTimerRef.current) {
+        initialTimerRef.current = setTimeout(() => {
+          // Solo mostrar si el socket SIGUE sin conectar
+          if (!hasEverConnected.current) {
+            setShowBanner(true);
+            setBannerState('red');
+          }
+          initialTimerRef.current = null;
+        }, 8000);
+      }
+    } else {
+      // Perdió conexión DESPUÉS de haber conectado exitosamente
+      setShowBanner(true);
+      setBannerState('amber');
+      redTimerRef.current = setTimeout(() => {
+        setBannerState('red');
+        redTimerRef.current = null;
+      }, 15000);
+    }
+
+    return () => {
+      if (redTimerRef.current) { clearTimeout(redTimerRef.current); redTimerRef.current = null; }
+    };
+  }, [socketStatus]);
 
   // Auto-calcular distancia y tarifa sugerida
   useEffect(() => {
@@ -410,7 +572,7 @@ export default function PassengerDashboard() {
 
   // Timeout para cancelar la busqueda de conductores automaticamente con 5 min (300,000s)
   useEffect(() => {
-    let timeout: NodeJS.Timeout;
+    let timeout: ReturnType<typeof setTimeout>;
     if (rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING') {
       timeout = setTimeout(() => {
         Alert.alert('Aviso', 'No encontramos conductores disponibles en este momento. Inténtalo de nuevo en unos minutos.');
@@ -771,14 +933,17 @@ export default function PassengerDashboard() {
   // ─── Map Animated Scale ──────────────────────────────────────────────────
   const mapAnimatedStyle = useAnimatedStyle(() => {
     // Escala 1.0 en snappoints 0 y 1 ('25%', '60%'), 0.96 en snappoint 2 ('92%')
-    const scale = interpolate(animatedIndex.value, [0, 1, 2], [1, 1, 0.96], Extrapolate.CLAMP);
+    const scale = interpolate(animatedIndex.value, [0, 1, 2], [1, 1, 0.96], Extrapolation.CLAMP);
     return { transform: [{ scale }] };
   });
 
   return (
     <View style={styles.container}>
       {/* ── Background Map ── */}
-      <Animated.View style={[{ flex: 1, backgroundColor: '#0D0520' }, mapAnimatedStyle]}>
+      <Animated.View 
+        style={[{ flex: 1, backgroundColor: '#0D0520' }, mapAnimatedStyle]}
+        pointerEvents={currentSnapIndex === 2 ? 'none' : 'auto'}
+      >
         {location ? (
           <MapRenderer
             ref={mapRef}
@@ -791,7 +956,7 @@ export default function PassengerDashboard() {
                 : undefined
             }
           />
-        ) : (
+        ) : showLocating ? (
           <View style={styles.loaderContainer}>
             {errorMsg ? (
               <View style={styles.errorCard}>
@@ -803,22 +968,22 @@ export default function PassengerDashboard() {
               </View>
             ) : <Loader label={t('general.locating')} />}
           </View>
-        )}
+        ) : null}
       </Animated.View>
 
       {/* ── Socket connection status banner ── */}
-      {socketStatus !== 'connected' && (
+      {showBanner && bannerState !== 'hidden' && (
         <View style={[
           styles.connectionBanner,
-          { backgroundColor: socketStatus === 'reconnecting' ? 'rgba(245,197,24,0.92)' : 'rgba(229,57,53,0.92)' }
+          { backgroundColor: bannerState === 'amber' ? 'rgba(245,197,24,0.92)' : 'rgba(229,57,53,0.92)' }
         ]}>
           <Ionicons
-            name={socketStatus === 'reconnecting' ? 'wifi-outline' : 'cloud-offline-outline'}
+            name={bannerState === 'amber' ? 'wifi-outline' : 'cloud-offline-outline'}
             size={14}
             color="#0D0520"
           />
           <Text style={styles.connectionBannerText}>
-            {socketStatus === 'reconnecting' ? 'Reconectando…' : 'Sin conexión en tiempo real'}
+            {bannerState === 'amber' ? 'Reconectando…' : 'Sin conexión en tiempo real'}
           </Text>
         </View>
       )}
@@ -847,85 +1012,121 @@ export default function PassengerDashboard() {
       {/* ── Main BottomSheet ── */}
       <BottomSheet
         ref={bottomSheetRef}
-        index={isIdle ? 0 : 1}
-        snapPoints={snapPoints}
+        index={0}
+        snapPoints={['25%', '60%', '92%']}
         animatedIndex={animatedIndex}
+        onChange={(idx) => setCurrentSnapIndex(idx)}
         backgroundStyle={{ backgroundColor: 'rgba(13,5,32,0.92)' }}
         handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.20)', width: 36, height: 4 }}
-        keyboardBehavior="extend"
+        keyboardBehavior="interactive"
         enablePanDownToClose={false}
       >
-        {isIdle ? (
-          <View style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}>
-            <View style={{ flex: 1 }}>
-              {/* Search Box / Autocomplete Area */}
-              <Animated.View style={{ flex: 1, minHeight: 56 }}>
-                 <AddressAutocomplete
-                    placeholder="¿A dónde te llevamos hoy?"
-                    onSelect={(place) => {
-                      setSelectedPlace(place);
-                      bottomSheetRef.current?.snapToIndex(1);
-                      Keyboard.dismiss();
-                    }}
-                    userLat={location?.coords.latitude}
-                    userLng={location?.coords.longitude}
-                 />
-              </Animated.View>
-
-              {/* Contenido Secundario (Favoritos y Pago) que desaparece si se arrastra hasta abajo o arriba del todo */}
-              <Animated.View style={[{ overflow: 'hidden' }, useAnimatedStyle(() => {
-                // Hacer opaco en index 1 (60%). Ocultarlo en index 0 (100px) o index 2 (92%)
-                const opacity = interpolate(animatedIndex.value, [0, 0.4, 1, 1.6, 2], [0, 0, 1, 0, 0], Extrapolate.CLAMP);
-                const height = interpolate(animatedIndex.value, [0, 0.5, 1, 1.5, 2], [0, 40, 120, 40, 0], Extrapolate.CLAMP);
-                return { opacity, height };
-              })]}>
-                {/* Favoritos */}
-                <FavoritesList favorites={user?.favorites} onSelect={(fav: any) => {
-                   // Mock select logic
-                   bottomSheetRef.current?.snapToIndex(1);
-                   Haptics.selectionAsync();
-                }} />
-
-                {/* Payment Mini Chip */}
-                <PaymentMiniChip />
-              </Animated.View>
-
-              {/* Selected Destination Details (Visible when destination selected but ride not confirmed) */}
-              {selectedPlace && (
-                <View style={[styles.selectedDestCard, { marginTop: 20 }]}>
-                  <View style={styles.selectedDestRow}>
-                    <View style={styles.destDot} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.selectedDestLabel}>Destino actual</Text>
-                      <Text style={styles.selectedDestName} numberOfLines={2}>{selectedPlace.displayName}</Text>
-                      {distanceKm > 0 && <Text style={styles.selectedDestMeta}>{distanceKm} km · ~{estimatedTimeMin} min</Text>}
-                    </View>
+        <BottomSheetScrollView
+          contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) */}
+          <View style={{ flex: currentSnapIndex < 2 ? undefined : 1 }}>
+            {currentSnapIndex < 2 ? (
+              <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: isSearching || isActiveRide ? 'none' : 'flex' }]}>
+                <TouchableOpacity
+                  style={styles.searchInner}
+                  activeOpacity={1}
+                  onPress={() => bottomSheetRef.current?.snapToIndex(2)}
+                >
+                  <Ionicons name="search" size={20} color="#F5C518" style={{marginLeft: 16}} />
+                  <View style={{flex: 1, paddingLeft: 12}}>
+                    <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>¿A dónde te llevamos hoy?</Text>
+                    <Text style={{color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}}>Ubicación actual detectada</Text>
                   </View>
+                  {/* Arrow button — same action as tapping the bar */}
                   <TouchableOpacity
-                    style={[styles.ctaButton, { marginTop: 12 }]}
-                    onPress={() => setPriceSheetVisible(true)}
+                    style={styles.searchRightArrow}
+                    onPress={() => bottomSheetRef.current?.snapToIndex(2)}
+                    hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   >
-                    <Text style={styles.ctaButtonText}>Pedir Ride</Text>
+                    <Ionicons name="arrow-forward" size={16} color="#0D0520" />
                   </TouchableOpacity>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : (
+              <View style={{ flex: 1 }}>
+                <AddressAutocomplete
+                  placeholder="¿A dónde te llevamos hoy?"
+                  onSelect={(place) => {
+                    setSelectedPlace(place);
+                    saveToHistory(place);
+                    bottomSheetRef.current?.snapToIndex(0);
+                    Keyboard.dismiss();
+                    setPriceSheetVisible(true);
+                  }}
+                  userLat={location?.coords.latitude}
+                  userLng={location?.coords.longitude}
+                />
+                <View style={styles.historyPanel}>
+                  {rideHistory.length === 0 ? (
+                    <Text style={styles.historyEmpty}>Tus destinos recientes aparecerán aquí</Text>
+                  ) : (
+                    rideHistory.map((item, idx) => (
+                      <TouchableOpacity
+                        key={item.placeId || idx}
+                        style={[styles.historyItem, idx < rideHistory.length - 1 && styles.historyItemBorder]}
+                        onPress={() => {
+                          setSelectedPlace(item);
+                          bottomSheetRef.current?.snapToIndex(0);
+                          Keyboard.dismiss();
+                          setPriceSheetVisible(true);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.40)" style={{ marginRight: 12 }} />
+                        <Text style={styles.historyText} numberOfLines={1}>{item.displayName}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
                 </View>
-              )}
-            </View>
+              </View>
+            )}
+
+            {/* SIEMPRE visible en snap 1 y 0 (Favoritos) */}
+            <Animated.View style={[{ overflow: 'hidden' }, useAnimatedStyle(() => {
+              const opacity = interpolate(animatedIndex.value, [0, 1], [0, 1], Extrapolation.CLAMP);
+              const height = animatedIndex.value < 1 && currentSnapIndex === 0 ? 0 : 'auto';
+              return { opacity, height, display: isSearching || isActiveRide ? 'none' : 'flex' };
+            })]}>
+              <FavoritesList
+                favorites={favorites}
+                onSelect={(fav: Favorite) => {
+                  const place: PlaceResult = {
+                    displayName: fav.address,
+                    placeId: fav.placeId || fav.id,
+                    latitude: fav.latitude,
+                    longitude: fav.longitude,
+                  };
+                  setSelectedPlace(place);
+                  bottomSheetRef.current?.snapToIndex(0);
+                  Haptics.selectionAsync();
+                  setPriceSheetVisible(true);
+                }}
+                onAdd={() => setAddFavVisible(true)}
+                onDelete={handleDeleteFav}
+              />
+              <PaymentMiniChip onPress={() => setPaymentSelectorVisible(true)} />
+            </Animated.View>
+
+            {/* Removed Selected Destination Details Card */}
           </View>
-        ) : isSearching ? (
-          <BottomSheetScrollView
-            contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View>
+
+          {/* Buscando Conductor */}
+          {isSearching && (
+            <View style={{ paddingTop: 16 }}>
               {(rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || (rideStatus === 'NEGOTIATING' && bids.length === 0)) && (
-                <>
-                  <SearchingDriversView activeDriversCount={activeDriversCount} onCancel={handleCancelRequest} />
-                </>
+                <SearchingDriversView activeDriversCount={activeDriversCount} onCancel={handleCancelRequest} />
               )}
               {rideStatus === 'NEGOTIATING' && bids.length > 0 && (
                 <View style={styles.searchingContainer}>
                   <Text style={styles.statusTitle}>¡Ofertas Recibidas!</Text>
-                  <View style={{ marginTop: 8, paddingBottom: 20 }}>
+                  <View style={{ marginTop: 8, paddingBottom: 20, width: '100%' }}>
                     {bids.map((item: any) => (
                       <BidCard key={item._id} bid={item} isBest={item._id === bestBidId} onAccept={handleAcceptBid} />
                     ))}
@@ -936,21 +1137,53 @@ export default function PassengerDashboard() {
                 </View>
               )}
             </View>
-          </BottomSheetScrollView>
-        ) : isActiveRide ? (
-          <View style={{ paddingHorizontal: 16 }}>
-            <View style={styles.activeRideCard}>
-              <Text style={{ color: '#00CED1', fontWeight: 'bold' }}>{activeStatusLabel()}</Text>
-              <Text style={styles.activeDestText}>{selectedPlace?.displayName ?? 'Tu destino'}</Text>
+          )}
+
+          {/* Viaje Activo */}
+          {isActiveRide && (
+            <View style={{ marginTop: 16 }}>
+              <View style={styles.activeRideCard}>
+                <Text style={{ color: '#00CED1', fontWeight: 'bold' }}>{activeStatusLabel()}</Text>
+                <Text style={styles.activeDestText}>{selectedPlace?.displayName ?? 'Tu destino'}</Text>
+              </View>
             </View>
-          </View>
-        ) : null}
+          )}
+        </BottomSheetScrollView>
       </BottomSheet>
 
       {/* Sheets & Modals */}
       <ChatSheet rideId={currentRideId} myUserId={user?._id} visible={chatVisible} onClose={() => setChatVisible(false)} />
       <RatingModal visible={!!completedRide} targetName="el conductor" onSubmit={handleRateDriver} onSkip={handleSkipRating} />
-      <PriceInputSheet visible={priceSheetVisible} onClose={() => setPriceSheetVisible(false)} onConfirm={handleRequestRide} categoryOptions={categoryOptions} loadingQuotes={loadingQuotes} destAddress={selectedPlace?.displayName} distanceKm={distanceKm} estimatedMinutes={estimatedTimeMin} />
+      <FareOfferSheet 
+          visible={priceSheetVisible} 
+          onClose={() => setPriceSheetVisible(false)} 
+          onConfirm={(price, vehicle, payment) => {
+             handleRequestRide(price, vehicle);
+          }} 
+          suggestedPriceRange={{
+            min: Math.max(15, Math.floor(distanceKm * 8)),
+            max: Math.max(25, Math.floor(distanceKm * 14))
+          }}
+          destAddress={selectedPlace?.displayName}
+          distanceKm={distanceKm}
+          estimatedTimeMin={estimatedTimeMin}
+      />
+      {paymentSelectorVisible && (
+        <PaymentMethodSelector
+           visible={paymentSelectorVisible}
+           onClose={() => setPaymentSelectorVisible(false)}
+           onSelect={(method) => {
+             // To be implemented: set current payment method
+           }}
+        />
+      )}
+      <AddFavoriteSheet
+        visible={addFavVisible}
+        onClose={() => setAddFavVisible(false)}
+        onSaved={(fav) => setFavorites(prev => [...prev, fav])}
+        userLat={location?.coords.latitude}
+        userLng={location?.coords.longitude}
+      />
     </View>
   );
 }
@@ -959,6 +1192,62 @@ export default function PassengerDashboard() {
 // ─── Main styles ──────────────────────────────────────────────────────────────
 
 const getStyles = (theme: Theme) => StyleSheet.create({
+  searchProtagonist: {
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(245,197,24,0.40)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 16,
+    marginBottom: 8,
+    marginHorizontal: 2,
+    elevation: 4,
+  },
+  searchInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  searchRightArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5C518',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  // ── History panel ──
+  historyPanel: {
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    overflow: 'hidden',
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  historyItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  historyText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FFFFFF',
+  },
+  historyEmpty: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.30)',
+    paddingVertical: 20,
+  },
   container: { flex: 1, backgroundColor: theme.colors.background },
 
   // ── Loader / Error states

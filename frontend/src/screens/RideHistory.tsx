@@ -66,8 +66,8 @@ export default function RideHistory() {
           
           if (page >= res.data.pages) setHasMore(false);
         }
-      } catch (error: unknown) {
-        if (page === 1) setError(err.response?.data?.message || err.message || 'Error al obtener historial');
+      } catch (error: any) {
+        if (page === 1) setError(error.response?.data?.message || error.message || 'Error al obtener historial');
       } finally {
         setLoading(false);
         setLoadingMore(false);

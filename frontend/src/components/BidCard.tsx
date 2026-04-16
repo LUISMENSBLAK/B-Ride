@@ -52,7 +52,7 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
   // V3: Info del vehículo si está disponible
   const vehicle = bid.driver?.vehicle;
   const vehicleInfo = vehicle?.make
-    ? `${vehicle.color || ''} ${vehicle.make} ${vehicle.model || ''} • ${vehicle.plate || ''}`.trim()
+    ? `${vehicle.color || ''} ${vehicle.make} ${vehicle.model || ''} • ${vehicle.licensePlate || ''}`.trim()
     : null;
 
   // ── WEEK 1 FIX: Timer basado en createdAt del servidor ───────────────────
@@ -124,9 +124,9 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
       <View style={bidStyles.row}>
         {/* Avatar */}
         <View style={[bidStyles.avatarContainer]}>
-          {bid.driver?.profilePhoto || bid.driver?.avatarUrl ? (
+          {(bid.driver as any)?.profilePhoto || bid.driver?.avatarUrl ? (
             <Image
-              source={{ uri: bid.driver.profilePhoto || bid.driver.avatarUrl }}
+              source={{ uri: (bid.driver as any)?.profilePhoto || bid.driver?.avatarUrl }}
               style={[bidStyles.avatarImg, isBest && !expired && bidStyles.avatarImgBest]}
             />
           ) : (
