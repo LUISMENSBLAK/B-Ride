@@ -11,6 +11,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { useRideFlowStore } from '../store/useRideFlowStore';
 
+/**
+ * PriceInputSheet — Legacy Component
+ * ⚠️ DEPRECATED — No importar este componente en código nuevo.
+ * Usar: src/screens/passenger/FareOfferSheet.tsx
+ * Este archivo se mantiene solo por compatibilidad temporal.
+ */
+
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 export type VehicleCategory = 'ECONOMY' | 'COMFORT' | 'PREMIUM' | 'GROUP';
 

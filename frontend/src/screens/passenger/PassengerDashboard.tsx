@@ -12,7 +12,7 @@ import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolation, withSequence, runOnJS } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolation, withSequence, runOnJS, FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
@@ -289,6 +289,13 @@ export default function PassengerDashboard() {
   const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
   const animatedIndex = useSharedValue(0);
   const [showLocating, setShowLocating] = useState(true);
+
+  // MEJORA 3: Toast System
+  const [toast, setToast] = useState<{ msg: string; type: 'info'|'error'|'success' } | null>(null);
+  const showToast = useCallback((msg: string, type: 'info'|'error'|'success' = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
 
   // --- UBER STYLE DUAL MAP SELECTOR ---
   const [activeMapField, setActiveMapField] = useState<'destination' | 'pickup' | null>(null);
@@ -679,7 +686,7 @@ export default function PassengerDashboard() {
     let timeout: ReturnType<typeof setTimeout>;
     if (rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING') {
       timeout = setTimeout(() => {
-        Alert.alert(t('passenger.noDriversTitle'), t('passenger.noDriversTimeout'));
+        showToast(t('passenger.noDriversTimeout'), 'info');
       }, 300000);
     }
     return () => clearTimeout(timeout);
@@ -714,6 +721,7 @@ export default function PassengerDashboard() {
     socketService.setRideRoom(ride._id);
     localVersion.current = ride.version || 1;
     setRideStatus('SEARCHING');
+    bottomSheetRef.current?.snapToIndex(1); // BUG 6: Manual snap
   }, []));
 
   useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
@@ -756,7 +764,7 @@ export default function PassengerDashboard() {
         setPrice('');
         setAcceptingBidId(null);
         setSelectedPlace(null);
-        bottomSheetRef.current?.snapToIndex(1);
+        bottomSheetRef.current?.snapToIndex(0); // BUG 6: Manual snap on finish
         navigation.navigate('PassengerPayment', {
           price: finalPrice,
           rideId: updatedRide?._id,
@@ -800,7 +808,7 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('rating_submitted', useCallback(({ newAvg }) => {
-    Alert.alert(t('passenger.ratingThanks'), t('passenger.ratingThanksMsg', { avg: newAvg }));
+    showToast(t('passenger.ratingThanksMsg', { avg: newAvg }), 'success');
   }, []));
 
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
@@ -959,13 +967,13 @@ export default function PassengerDashboard() {
       const res = await client.post('/promos/validate', { code: promoCode, rideValue: convertToUsd(Number(price)) });
       if (res.data.success) {
         setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
-        Alert.alert(t('passenger.promoApplied'), t('passenger.promoAppliedMsg'));
+        showToast(t('passenger.promoAppliedMsg'), 'success');
       } else {
         setPrice(convertToUsd(res.data.price));
       }
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
-      Alert.alert(t('passenger.promoError'), err.response?.data?.message || 'Código inválido.');
+      showToast(err.response?.data?.message || 'Código inválido.', 'error');
       setPromoDiscount(null);
     } finally {
       setPromoApplying(false);
@@ -1033,18 +1041,14 @@ export default function PassengerDashboard() {
 
   const bestBidId = bids.length > 0 ? bids[0]._id : null;
 
-  // Determine bottom sheet snap points
-  const snapPoints = React.useMemo(() => [
-    100,
-    isSearching ? '72%' : isActiveRide ? '32%' : '60%',
-    '92%',
-  ], [isSearching, isActiveRide]);
+  // Determine bottom sheet snap points (BUG 6: constant snapPoints)
+  const snapPoints = React.useMemo(() => ['25%', '60%', '92%'], []);
 
-  // ─── Active ride status label ────────────────────────────────────────────
+  // BUG 8: Translation strings
   const activeStatusLabel = () => {
-    if (rideStatus === 'ARRIVED') return 'Tu conductor llegó';
-    if (rideStatus === 'IN_PROGRESS') return 'Disfruta tu ride';
-    return 'Tu ride está en camino';
+    if (rideStatus === 'ARRIVED') return t('ride.arrivedTitle');
+    if (rideStatus === 'IN_PROGRESS') return t('ride.inProgress');
+    return t('ride.enRoute');
   };
 
   // ─── Map Animated Scale ──────────────────────────────────────────────────
@@ -1113,6 +1117,35 @@ export default function PassengerDashboard() {
           </View>
         ) : null}
       </Animated.View>
+
+      {/* MEJORA 3: Toast Local */}
+      {toast && (
+        <Animated.View style={{
+          position: 'absolute',
+          top: insets.top + 120,
+          left: 20, right: 20,
+          backgroundColor: toast.type === 'error'
+            ? 'rgba(229,57,53,0.92)'
+            : toast.type === 'success'
+            ? 'rgba(57,199,122,0.92)'
+            : 'rgba(13,5,32,0.92)',
+          borderRadius: 16,
+          paddingVertical: 14,
+          paddingHorizontal: 20,
+          borderWidth: 1,
+          borderColor: toast.type === 'error'
+            ? 'rgba(229,57,53,0.50)'
+            : toast.type === 'success'
+            ? 'rgba(57,199,122,0.50)'
+            : 'rgba(255,255,255,0.12)',
+          zIndex: 500,
+          alignItems: 'center',
+        }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+            {toast.msg}
+          </Text>
+        </Animated.View>
+      )}
 
       {/* ── Socket connection status banner ── */}
       {showBanner && bannerState !== 'hidden' && (
@@ -1221,38 +1254,40 @@ export default function PassengerDashboard() {
 
       {/* BUG-2 FIX: botón flotante "Fijar en mapa" — position absolute, encima del sheet */}
       {isIdle && !isActiveRide && !isSearching && mapSelectionMode === 'none' && (
-        <TouchableOpacity
-          style={{
-            position: 'absolute',
-            bottom: 185,
-            alignSelf: 'center',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            backgroundColor: 'rgba(13,5,32,0.80)',
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: 'rgba(245,197,24,0.40)',
-            shadowColor: '#F5C518',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.20,
-            shadowRadius: 12,
-            elevation: 6,
-            zIndex: 56,
-          }}
-          onPress={() => {
-            setMapSelectionMode('pickup');
-            setPendingCoordinate(null);
-            setPendingAddress('');
-            bottomSheetRef.current?.snapToIndex(0);
-          }}
-          activeOpacity={0.80}
+        <Animated.View 
+          entering={ZoomIn.duration(300)} 
+          exiting={ZoomOut.duration(150)}
+          style={{ position: 'absolute', bottom: insets.bottom + 180, alignSelf: 'center', zIndex: 56 }}
         >
-          <Ionicons name="pin" size={16} color="#F5C518" />
-          <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              backgroundColor: 'rgba(13,5,32,0.80)',
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: 'rgba(245,197,24,0.40)',
+              shadowColor: '#F5C518',
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: 0.20,
+              shadowRadius: 12,
+              elevation: 6,
+            }}
+            onPress={() => {
+              setMapSelectionMode('pickup');
+              setPendingCoordinate(null);
+              setPendingAddress('');
+              bottomSheetRef.current?.snapToIndex(0);
+            }}
+            activeOpacity={0.80}
+          >
+            <Ionicons name="pin" size={16} color="#F5C518" />
+            <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
+          </TouchableOpacity>
+        </Animated.View>
       )}
       <BottomSheet
         ref={bottomSheetRef}
@@ -1311,19 +1346,32 @@ export default function PassengerDashboard() {
                        onPress={() => { setActiveMapField('destination'); bottomSheetRef.current?.snapToIndex(2); }}
                        hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
                     >
-                      <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>
-                        {selectedPlace?.displayName || t('passenger.searchingDest')}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5C518', marginRight: 8 }} />
+                        <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>
+                          {selectedPlace?.displayName || t('passenger.searchingDest')}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
+
+                    <View style={{
+                      height: 1,
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                      marginVertical: 4,
+                      marginHorizontal: -4,
+                    }} />
 
                     {/* Pickup Trigger */}
                     <TouchableOpacity 
                        onPress={() => { setActiveMapField('pickup'); bottomSheetRef.current?.snapToIndex(2); }}
                        hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
                     >
-                      <Text style={{color: activeMapField === 'pickup' ? '#F5C518' : 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}} numberOfLines={1}>
-                        {pickupLocation.displayName}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4C8', marginRight: 8 }} />
+                        <Text style={{color: activeMapField === 'pickup' ? '#F5C518' : 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}} numberOfLines={1}>
+                          {pickupLocation.displayName}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   </View>
                   {/* Arrow button — same action as tapping the bar */}
@@ -1350,8 +1398,7 @@ export default function PassengerDashboard() {
           {/* FIX-9: visibility via opacity+height en lugar de display:none para mantener estado del input montado */}
               <View style={{
                 flex: 1,
-                opacity: currentSnapIndex === 2 ? 1 : 0,
-                height: currentSnapIndex === 2 ? undefined : 0,
+                display: currentSnapIndex < 1 ? 'none' : 'flex',
                 overflow: 'hidden',
               }}>
                 <Text style={{color: '#F5C518', fontSize: 12, marginLeft: 8, marginBottom: 8, fontWeight: '600'}}>
@@ -1636,7 +1683,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   connectionBanner: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 44 : 16,
+    top: Platform.OS === 'ios' ? 110 : 72,
     left: '10%',
     right: '10%',
     paddingVertical: 6,

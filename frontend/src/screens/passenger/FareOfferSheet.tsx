@@ -12,6 +12,7 @@ import Animated, {
   withRepeat, withSequence, withTiming, withSpring,
 } from 'react-native-reanimated';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
+import PaymentMethodSelector from '../../components/PaymentMethodSelector';
 
 // ── Vehicle catalogue ───────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -318,39 +319,14 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
         </TouchableOpacity>
 
         {showPaymentPicker && (
-          <View style={s.paymentOptions}>
-            {(['CASH', 'CARD', 'APPLE_PAY', 'WALLET'] as const).map(m => {
-              const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
-                CASH: 'cash-outline', CARD: 'card-outline',
-                APPLE_PAY: 'logo-apple', WALLET: 'wallet-outline',
-              };
-              const labels: Record<string, string> = {
-                CASH: 'Efectivo', CARD: 'Tarjeta',
-                APPLE_PAY: 'Apple Pay', WALLET: 'Wallet',
-              };
-              const isActive = paymentMethod === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  style={[s.paymentOption, isActive && s.paymentOptionActive]}
-                  onPress={() => {
-                    setPaymentMethod(m);
-                    setShowPaymentPicker(false);
-                  }}
-                >
-                  <Ionicons
-                    name={icons[m]}
-                    size={18}
-                    color={isActive ? '#F5C518' : 'rgba(255,255,255,0.60)'}
-                  />
-                  <Text style={[s.paymentOptionText, isActive && s.paymentOptionTextActive]}>
-                    {labels[m]}
-                  </Text>
-                  {isActive && <Ionicons name="checkmark" size={16} color="#F5C518" />}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <PaymentMethodSelector
+            visible={showPaymentPicker}
+            onClose={() => setShowPaymentPicker(false)}
+            onSelect={(method) => {
+              setPaymentMethod(method);
+              setShowPaymentPicker(false);
+            }}
+          />
         )}
 
         {/* ── NUMPAD CUSTOM ── */}
