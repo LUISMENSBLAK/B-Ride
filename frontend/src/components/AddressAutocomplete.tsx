@@ -29,8 +29,9 @@ interface AddressAutocompleteProps {
   userLng?: number;
 }
 
-// Caché en memoria para consultas Nominatim — evita llamadas duplicadas en la sesión.
-const queryCache = new Map<string, PlaceResult[]>();
+// FIX-13: Caché con TTL de 5 minutos — evita resultados obsoletos
+const CACHE_TTL_MS = 5 * 60_000;
+const queryCache = new Map<string, { results: PlaceResult[]; ts: number }>();
 
 const GOOGLE_MAPS_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || '';
 
@@ -38,7 +39,9 @@ async function searchGooglePlaces(query: string, userLat?: number, userLng?: num
   if (!query || query.trim().length < 3) return [];
 
   const keyCache = query.trim().toLowerCase() + `_${userLat}_${userLng}`;
-  if (queryCache.has(keyCache)) return queryCache.get(keyCache)!;
+  // FIX-13: verificar TTL antes de devolver caché
+  const cached = queryCache.get(keyCache);
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.results;
 
   try {
     let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&language=es&key=${GOOGLE_MAPS_KEY}`;
@@ -62,7 +65,8 @@ async function searchGooglePlaces(query: string, userLat?: number, userLng?: num
       const firstKey = queryCache.keys().next().value;
       if (firstKey) queryCache.delete(firstKey);
     }
-    queryCache.set(keyCache, results);
+    // FIX-13: guardar con timestamp para habilitar TTL
+    queryCache.set(keyCache, { results, ts: Date.now() });
     return results;
   } catch (error) {
     return [];

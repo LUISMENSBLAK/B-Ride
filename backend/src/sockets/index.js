@@ -26,13 +26,20 @@ function isUserConnected(userId) {
     return !!(sockets && sockets.size > 0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// FIX-12: Limpieza periódica de entradas huérfanas en connectedUsers
+setInterval(() => {
+    for (const [uid, sockets] of connectedUsers.entries()) {
+        if (sockets.size === 0) connectedUsers.delete(uid);
+    }
+}, 60_000);
+
+// ─────────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
     init: (httpServer) => {
         io = require('socket.io')(httpServer, {
             pingInterval: 25000,
-            pingTimeout: 20000,
+            pingTimeout: 60000, // FIX-2: aumentado de 20s a 60s para tolerancia en cambios WiFi → datos
             upgradeTimeout: 10000,
             maxHttpBufferSize: 1e6,
             cors: {

@@ -409,6 +409,8 @@ export default function PassengerDashboard() {
 
   // Trip state centralizado
   const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
+  // FIX-7A: suscripción reactiva a activeRidePayload (getState() no re-renderiza)
+  const activeRidePayload = useRideFlowStore(s => s.activeRidePayload);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [price, setPrice] = useState('');
   const [completedRide, setCompletedRide] = useState<RideData | null>(null);
@@ -621,6 +623,16 @@ export default function PassengerDashboard() {
     return () => clearTimeout(timeout);
   }, [rideStatus]);
 
+  // FIX-10: limpiar el timer de reverseGeocode al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (mapCenterReverseGeocodeTimer.current) {
+        clearTimeout(mapCenterReverseGeocodeTimer.current);
+        mapCenterReverseGeocodeTimer.current = null;
+      }
+    };
+  }, []);
+
   const [activeDriversCount, setActiveDriversCount] = useState<number>(0);
   const [showDriverBanner, setShowDriverBanner] = useState<boolean>(false);
 
@@ -776,9 +788,10 @@ export default function PassengerDashboard() {
       await socketService.emitWithAck('requestRide', {
         passengerId: user?._id,
         pickupLocation: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          address: 'Mi Ubicación Actual',
+          // FIX-8: usar el pickupLocation seleccionado por el usuario en lugar de GPS crudo
+          latitude: pickupLocation.latitude ?? location.coords.latitude,
+          longitude: pickupLocation.longitude ?? location.coords.longitude,
+          address: pickupLocation.displayName || 'Mi Ubicación Actual',
         },
         dropoffLocation: {
           latitude: selectedPlace.latitude,
@@ -1100,7 +1113,7 @@ export default function PassengerDashboard() {
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
-        snapPoints={['25%', '60%', '92%']}
+        snapPoints={snapPoints}
         animatedIndex={animatedIndex}
         onChange={(idx) => setCurrentSnapIndex(idx)}
         backgroundStyle={{ backgroundColor: 'rgba(13,5,32,0.92)' }}
@@ -1156,7 +1169,13 @@ export default function PassengerDashboard() {
                 </View>
               </Animated.View>
             
-              <View style={{ flex: 1, display: currentSnapIndex === 2 ? 'flex' : 'none' }}>
+          {/* FIX-9: visibility via opacity+height en lugar de display:none para mantener estado del input montado */}
+              <View style={{
+                flex: 1,
+                opacity: currentSnapIndex === 2 ? 1 : 0,
+                height: currentSnapIndex === 2 ? undefined : 0,
+                overflow: 'hidden',
+              }}>
                 <Text style={{color: '#F5C518', fontSize: 12, marginLeft: 8, marginBottom: 8, fontWeight: '600'}}>
                    {activeMapField === 'pickup' ? 'Buscando: Punto de Recogida' : 'Buscando: Destino'}
                 </Text>
@@ -1237,8 +1256,8 @@ export default function PassengerDashboard() {
 
           {/* Viaje Activo — GAP VISUAL 7: usa ActiveRidePanel */}
           {isActiveRide && (() => {
-            const ride = useRideFlowStore.getState().activeRidePayload;
-            const driver = ride?.acceptedBid?.driver;
+            // FIX-7B: usar activeRidePayload desde hook reactivo, no getState()
+            const driver = activeRidePayload?.acceptedBid?.driver;
             return (
               <ActiveRidePanel
                 status={rideStatus}

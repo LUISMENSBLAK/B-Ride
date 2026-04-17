@@ -6,6 +6,8 @@ class EventManager {
   private processedEvents: Set<string> = new Set();
   private eventQueue: string[] = [];
   private MAX_PROCESSED_EVENTS = 100;
+  // FIX-3B: referencia al handler para poder removerlo sin offAny() sin args
+  private _anyHandler: ((...args: any[]) => void) | null = null;
 
   constructor() {
     // Escuchar universalmente desde el socket singleton
@@ -14,13 +16,17 @@ class EventManager {
     // Ahora, explícitamente se suscribe mediante reconnectSocketBindings()
   }
 
+  // FIX-3B: usa referencia al handler para no llamar offAny() sin argumentos
   reconnectSocketBindings(socketInstance: any) {
-      if (socketInstance) {
-          socketInstance.offAny();
-          socketInstance.onAny((eventName: string, ...args: any[]) => {
-             this.dispatch(eventName, ...args);
-          });
+    if (socketInstance) {
+      if (this._anyHandler) {
+        socketInstance.offAny(this._anyHandler);
       }
+      this._anyHandler = (eventName: string, ...args: any[]) => {
+        this.dispatch(eventName, ...args);
+      };
+      socketInstance.onAny(this._anyHandler);
+    }
   }
 
   subscribe(eventName: string, callback: (...args: any[]) => void) {
@@ -70,6 +76,13 @@ class EventManager {
    */
   emitLocalRideEvent(eventName: string, ...args: any[]) {
     this.dispatch(eventName, ...args);
+  }
+
+  // FIX-3A: limpiar listeners y eventos procesados al hacer logout
+  reset() {
+    this.listeners.clear();
+    this.processedEvents.clear();
+    this.eventQueue = [];
   }
 }
 

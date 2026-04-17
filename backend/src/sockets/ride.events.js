@@ -92,7 +92,7 @@ const rideEvents = (socket) => {
             const activeRide = await Ride.findOne({ ...activeRideQuery, status: { $in: activeStatus } })
                 .populate('passenger', 'name email phoneNumber')
                 .populate('driver', 'name email phoneNumber')
-                .populate('bids.driver', 'name email avgRating totalRatings');
+                .populate('bids.driver', 'name avgRating totalRatings') // FIX-15: email eliminado del payload
 
             if (activeRide) {
                 // Ensure room rejoin

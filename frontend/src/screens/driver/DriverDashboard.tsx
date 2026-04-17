@@ -177,7 +177,10 @@ export default function DriverDashboard() {
       if (locationSubscription) {
           locationSubscription.remove();
       }
-      socketService.getSocket()?.emit('setDriverStatus', { userId: user?._id, status: 'OFFLINE' });
+      // FIX-14: solo emitir OFFLINE si no hay viaje activo en curso
+      if (!activeRideRef.current) {
+        socketService.getSocket()?.emit('setDriverStatus', { userId: user?._id, status: 'OFFLINE' });
+      }
     };
   }, [user?._id]);
 

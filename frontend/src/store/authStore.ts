@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { removeTokenFromBackend } from '../services/notifications/NotificationService';
 import socketService from '../services/socket';
+import eventManager from '../services/EventManager'; // FIX-4: import para limpiar en logout
 
 interface User {
     _id: string;
@@ -73,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
 
         await AsyncStorage.multiRemove(['userToken', 'refreshToken', 'userInfo', 'lastCompletedRideId']);
+        eventManager.reset(); // FIX-4: limpiar listeners y eventos procesados antes de desconectar
         socketService.disconnect();
         set({ user: null });
     },

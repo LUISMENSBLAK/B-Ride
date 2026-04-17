@@ -92,103 +92,112 @@ async function refreshTokenIfNeeded(): Promise<string | null> {
 class SocketService {
   private socket: Socket | null = null;
   private currentRideId: string | null = null;
+  // FIX-1A: flag para evitar llamadas concurrentes a connect()
+  private _isConnecting: boolean = false;
 
   async connect() {
-    if (this.socket?.connected) {
-        return;
-    }
+    // FIX-1B: bloquear si ya conectado O si hay conexión en progreso
+    if (this.socket?.connected || this._isConnecting) return;
+    this._isConnecting = true;
+    try {
+      const user = useAuthStore.getState().user;
+      if (!user) return;
 
-    const user = useAuthStore.getState().user;
-    if (!user) return;
+      // Refrescar token ANTES de crear el socket — evita `jwt expired` en el primer intento
+      const validToken = await refreshTokenIfNeeded();
+      if (!validToken) return; // logout ya fue llamado
 
-    // Refrescar token ANTES de crear el socket — evita `jwt expired`
-    const validToken = await refreshTokenIfNeeded();
-    if (!validToken) return; // logout ya fue llamado
+      if (SOCKET_URL.includes('localhost') || SOCKET_URL.includes('10.0.2.2')) {
+        console.warn('[Socket] ⚠️ URL contiene localhost/10.0.2.2. En dispositivos físicos define EXPO_PUBLIC_SOCKET_URL en .env');
+      }
 
-    // BUG 8 FIX: Warning visible si la URL apunta a localhost/emulador en un entorno real
-    if (SOCKET_URL.includes('localhost') || SOCKET_URL.includes('10.0.2.2')) {
-      console.warn('[Socket] ⚠️ URL contiene localhost/10.0.2.2. En dispositivos físicos define EXPO_PUBLIC_SOCKET_URL en .env');
-    }
-    
-    if (this.socket) {
+      if (this.socket) {
         this.socket.removeAllListeners();
         this.socket.disconnect();
-    }
-
-    this.socket = io(SOCKET_URL, {
-      auth: { token: validToken },
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-    });
-
-    eventManager.reconnectSocketBindings(this.socket);
-
-    this.socket.on('reconnect_attempt', () => {
-      useSocketStore.getState().setStatus('reconnecting');
-      useSocketStore.getState().incrementReconnectAttempts();
-    });
-
-    this.socket.on('connect', () => {
-      useSocketStore.getState().setStatus('connected');
-      useSocketStore.getState().resetReconnectAttempts();
-      if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);
-      const userState = useAuthStore.getState().user;
-      if (userState) {
-        this.socket?.emit('join', userState._id);
-        
-        // Re-join dynamic room if active
-        if (this.currentRideId) {
-             this.socket?.emit('join_ride_room', this.currentRideId);
-        }
-
-        // BUG 10 FIX: Re-emitir driver:join tras reconexión si es conductor y hay ubicación conocida
-        if (userState.role === 'DRIVER' && _lastKnownDriverLocation) {
-          this.socket?.emit('driver:join', _lastKnownDriverLocation);
-          if (__DEV__) console.log('[Socket] Re-emitted driver:join tras reconexión');
-        }
-        
-        // WEBSOCKETS RECOVERY: Pedimos el active ride state
-        this.socket?.emit('sync_state', { userId: userState._id, role: userState.role }, (res: any) => {
-            if (res && res.success && res.activeRide) {
-                if (__DEV__) console.log('[Socket] Estado activo recuperado:', res.activeRide._id);
-                eventManager.emitLocalRideEvent('trip_state_changed', res.activeRide);
-            }
-        });
       }
-    });
 
-    this.socket.on('disconnect', (reason) => {
-      useSocketStore.getState().setStatus('disconnected');
-      console.warn('[Socket] Disconnected:', reason);
-    });
+      // FIX-1C: auth como callback asíncrono — cada reconexión obtiene el token más reciente
+      this.socket = io(SOCKET_URL, {
+        auth: async (cb: (data: object) => void) => {
+          const token = await refreshTokenIfNeeded();
+          cb({ token: token ?? '' });
+        },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
+      });
 
-    this.socket.on('connect_error', (err) => {
-      useSocketStore.getState().setStatus('disconnected');
-      console.warn('[Socket] Connection error:', err.message);
-      
-      const isAuthError = 
-        err.message.includes('Authentication') || 
-        err.message.includes('Invalid token') || 
-        err.message.includes('jwt');
+      eventManager.reconnectSocketBindings(this.socket);
 
-      if (isAuthError) {
-        refreshTokenIfNeeded().then((newToken) => {
-          if (newToken) {
-            this.socket?.disconnect();
-            setTimeout(() => this.connect(), 500);
-          } else {
+      this.socket.on('reconnect_attempt', () => {
+        useSocketStore.getState().setStatus('reconnecting');
+        useSocketStore.getState().incrementReconnectAttempts();
+      });
+
+      this.socket.on('connect', () => {
+        useSocketStore.getState().setStatus('connected');
+        useSocketStore.getState().resetReconnectAttempts();
+        if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);
+        const userState = useAuthStore.getState().user;
+        if (userState) {
+          this.socket?.emit('join', userState._id);
+
+          if (this.currentRideId) {
+            this.socket?.emit('join_ride_room', this.currentRideId);
+          }
+
+          if (userState.role === 'DRIVER' && _lastKnownDriverLocation) {
+            this.socket?.emit('driver:join', _lastKnownDriverLocation);
+            if (__DEV__) console.log('[Socket] Re-emitted driver:join tras reconexión');
+          }
+
+          this.socket?.emit('sync_state', { userId: userState._id, role: userState.role }, (res: any) => {
+            if (res && res.success && res.activeRide) {
+              if (__DEV__) console.log('[Socket] Estado activo recuperado:', res.activeRide._id);
+              eventManager.emitLocalRideEvent('trip_state_changed', res.activeRide);
+            }
+          });
+        }
+      });
+
+      this.socket.on('disconnect', (reason) => {
+        useSocketStore.getState().setStatus('disconnected');
+        console.warn('[Socket] Disconnected:', reason);
+      });
+
+      // FIX-1D: connect_error ya NO crea socket nuevo — deja que socket.io reintente solo
+      // El callback auth obtiene token fresco en cada intento, así que no hay loop
+      this.socket.on('connect_error', async (err) => {
+        useSocketStore.getState().setStatus('disconnected');
+        console.warn('[Socket] Connection error:', err.message);
+
+        const isAuthError =
+          err.message.includes('Authentication') ||
+          err.message.includes('Invalid token') ||
+          err.message.includes('jwt') ||
+          err.message.includes('expired');
+
+        if (isAuthError) {
+          // Refrescar token para el próximo intento AUTOMÁTICO de socket.io
+          const newToken = await refreshTokenIfNeeded();
+          if (!newToken) {
+            // Refresh falló — hacer logout
             this.socket?.removeAllListeners();
             this.socket?.disconnect();
             this.socket = null;
             useAuthStore.getState().logout();
           }
-        });
-      }
-    });
+          // Si hay newToken, no hacemos nada: el callback auth en el próximo
+          // intento automático de socket.io ya obtendrá el token fresco
+        }
+      });
+    } finally {
+      // FIX-1B: liberar el flag independientemente del resultado
+      this._isConnecting = false;
+    }
   }
 
   setRideRoom(rideId: string | null) {
@@ -234,11 +243,17 @@ class SocketService {
   disconnect() {
     if (this.socket) {
       if (__DEV__) console.log('Force closing socket cleanly...');
-      this.socket.removeAllListeners(); 
+      this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
       this.currentRideId = null;
     }
+  }
+
+  // FIX-1F: reset público para llamar en logout — limpia todo
+  reset() {
+    this.disconnect();
+    this.currentRideId = null;
   }
 
   getSocket() {

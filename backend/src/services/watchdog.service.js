@@ -78,6 +78,15 @@ class WatchdogService {
             // Silence IO init errors before it binds
         }
     }
+
+    // FIX-11: método destroy para limpiar el interval y evitar leaks
+    destroy() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+        this.heartbeats.clear();
+    }
 }
 
 module.exports = new WatchdogService();

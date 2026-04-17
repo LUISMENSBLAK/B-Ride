@@ -130,6 +130,9 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
     latitudeDelta: 0.05, longitudeDelta: 0.05,
   });
 
+  // FIX-6A: ref para saber si el usuario ya interactuó con el mapa (pan/zoom manual)
+  const userInteractedRef = useRef(false);
+
   // Driver tracking marker
   const [firstDriverPing, setFirstDriverPing] = useState<Coordinate | null>(null);
 
@@ -180,8 +183,11 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   }));
 
   // Camera auto-fit
+  // FIX-6C: QUITAR latitude/longitude de deps — solo recentrar al cambiar destino/fase/driver
   useEffect(() => {
     if (!mapRef.current) return;
+    // FIX-6C: Si el usuario ya movió el mapa manualmente, no interrumpir su vista
+    if (userInteractedRef.current) return;
 
     if (isDriver && driverPhase === 'TO_PICKUP' && isValidCoord(pickupCoordinate)) {
       mapRef.current.fitToCoordinates(
@@ -203,7 +209,8 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
         latitude, longitude, latitudeDelta: 0.05, longitudeDelta: 0.05,
       }, 800);
     }
-  }, [latitude, longitude, destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
+  // FIX-6D: dependencias sin latitude/longitude para evitar re-centrar en cada tick GPS
+  }, [destinationCoordinate, pickupCoordinate, dropoffCoordinate, driverPhase, isDriver]);
 
   // ── Compute polyline points ──
   const [polylinePoints, setPolylinePoints] = useState<Coordinate[] | null>(null);
@@ -307,7 +314,8 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       onRegionChange={onRegionChange}
       onRegionChangeComplete={onRegionChangeComplete}
       onTouchStart={() => {
-        // Detener cámara ajustándose sola al tocar
+        // FIX-6B: marcar interacción manual para evitar que la cámara peleree con el usuario
+        userInteractedRef.current = true;
       }}
     >
       {/* Own position marker */}
