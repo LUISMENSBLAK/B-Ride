@@ -280,6 +280,7 @@ const favStyles = StyleSheet.create({
 export default function PassengerDashboard() {
   const { user } = useAuthStore();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets(); // used by top banner and buttons
   const socketStatus = useSocketStore(s => s.status);
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1149,22 +1150,106 @@ export default function PassengerDashboard() {
         </View>
       )}
 
-      {/* ── MapPinOverlay: mode "Fijar en mapa" (new, full-featured) ── */}
+      {/* BUG-1 FIX: Pin full-screen absolute container — FUERA de ScrollView/BottomSheet.
+           pointerEvents="none" garantiza que los toques pasen al mapa. */}
       {mapSelectionMode !== 'none' && (
-        <MapPinOverlay
-          mode={mapSelectionMode}
-          isDragging={isDragging}
-          pendingAddress={pendingAddress}
-          onConfirm={handleConfirmMapPoint}
-          onCancel={() => {
-            setMapSelectionMode('none');
-            setPendingCoordinate(null);
-            setPendingAddress('');
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, bottom: 0,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 120,
+            zIndex: 55,
           }}
-        />
+        >
+          <MapPinOverlay
+            mode={mapSelectionMode}
+            isDragging={isDragging}
+            pendingAddress={pendingAddress}
+          />
+        </View>
       )}
 
-      {/* ── Main BottomSheet ── */}
+      {/* Instruction banner — needs pointer events (cancel button), separate from pin container */}
+      {mapSelectionMode !== 'none' && (
+        <View
+          style={{
+            position: 'absolute',
+            top: insets.top + 70,
+            left: 16,
+            right: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'rgba(13,5,32,0.85)',
+            borderRadius: 20,
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderWidth: 1,
+            borderColor: 'rgba(245,197,24,0.30)',
+            zIndex: 70,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.35,
+            shadowRadius: 12,
+            elevation: 8,
+          }}
+          pointerEvents="box-none"
+        >
+          <Text style={{ flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+            {mapSelectionMode === 'pickup'
+              ? 'Mueve el mapa a tu punto de recogida'
+              : 'Mueve el mapa a tu destino'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setMapSelectionMode('none');
+              setPendingCoordinate(null);
+              setPendingAddress('');
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="close" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* BUG-2 FIX: botón flotante "Fijar en mapa" — position absolute, encima del sheet */}
+      {isIdle && !isActiveRide && !isSearching && mapSelectionMode === 'none' && (
+        <TouchableOpacity
+          style={{
+            position: 'absolute',
+            bottom: 185,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            backgroundColor: 'rgba(13,5,32,0.80)',
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: 'rgba(245,197,24,0.40)',
+            shadowColor: '#F5C518',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.20,
+            shadowRadius: 12,
+            elevation: 6,
+            zIndex: 56,
+          }}
+          onPress={() => {
+            setMapSelectionMode('pickup');
+            setPendingCoordinate(null);
+            setPendingAddress('');
+            bottomSheetRef.current?.snapToIndex(0);
+          }}
+          activeOpacity={0.80}
+        >
+          <Ionicons name="pin" size={16} color="#F5C518" />
+          <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>Fijar en mapa</Text>
+        </TouchableOpacity>
+      )}
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
@@ -1179,6 +1264,37 @@ export default function PassengerDashboard() {
         <BottomSheetView
           style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}
         >
+          {/* BUG-4 FIX: En modo mapa mostrar solo botón de confirmar en el sheet */}
+          {mapSelectionMode !== 'none' ? (
+            <TouchableOpacity
+              disabled={isDragging || !pendingCoordinate}
+              onPress={handleConfirmMapPoint}
+              style={{
+                height: 52,
+                borderRadius: 16,
+                backgroundColor: (isDragging || !pendingCoordinate)
+                  ? 'rgba(255,255,255,0.06)'
+                  : '#F5C518',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: 8,
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={{
+                color: (isDragging || !pendingCoordinate) ? 'rgba(255,255,255,0.35)' : '#0D0520',
+                fontSize: 16,
+                fontWeight: '800',
+              }}>
+                {isDragging
+                  ? 'Suelta para confirmar...'
+                  : mapSelectionMode === 'pickup'
+                    ? '✓  Confirmar punto de recogida'
+                    : '✓  Confirmar destino'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+          <>
           {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) evitamos desmontar componente para no perder el state de búsqueda */}
           <View style={{ flex: currentSnapIndex < 2 ? undefined : 1 }}>
               <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: (isSearching || isActiveRide || currentSnapIndex === 2) ? 'none' : 'flex' }]}>
@@ -1224,34 +1340,8 @@ export default function PassengerDashboard() {
                 </View>
               </Animated.View>
 
-              {/* ── "Fijar en mapa" secondary button (visible only in idle/snap 0-1, not searching/riding) ── */}
-              {isIdle && !isActiveRide && currentSnapIndex < 2 && mapSelectionMode === 'none' && (
-                <TouchableOpacity
-                  style={{
-                    marginTop: 8,
-                    alignSelf: 'center',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                    paddingVertical: 8,
-                    paddingHorizontal: 16,
-                    backgroundColor: 'rgba(255,255,255,0.06)',
-                    borderRadius: 20,
-                    borderWidth: 1,
-                    borderColor: 'rgba(255,255,255,0.12)',
-                  }}
-                  onPress={() => {
-                    setMapSelectionMode('pickup');
-                    setPendingCoordinate(null);
-                    setPendingAddress('');
-                    bottomSheetRef.current?.snapToIndex(0);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="pin" size={14} color="rgba(255,255,255,0.60)" />
-                  <Text style={{ color: 'rgba(255,255,255,0.60)', fontSize: 13 }}>Fijar en mapa</Text>
-                </TouchableOpacity>
-              )}
+              {/* BUG-2 FIX: "Fijar en mapa" como botón flotante SOBRE el sheet,
+                   position absolute — nunca dentro de ScrollView */}
             
           {/* FIX-9: visibility via opacity+height en lugar de display:none para mantener estado del input montado */}
               <View style={{
@@ -1315,6 +1405,8 @@ export default function PassengerDashboard() {
 
             {/* Removed Selected Destination Details Card */}
           </View>
+          </> {/* END: mapSelectionMode === 'none' branch */}
+          )} {/* END: mapSelectionMode ternary */}
 
           {/* Buscando Conductor */}
           {isSearching && (

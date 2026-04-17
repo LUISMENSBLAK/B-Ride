@@ -1,24 +1,26 @@
 /**
- * MapPinOverlay
+ * MapPinOverlay — B-Ride v2
  * ─────────────────────────────────────────────────────────────
- * Overlay de selección de punto en el mapa (modo "Fijar en mapa").
+ * Componente PURO de presentación del pin central.
+ * NO contiene lógica de posicionamiento absoluto propio —
+ * el padre (PassengerDashboard) lo envuelve en el contenedor
+ * correcto (position:absolute, top:0/left:0/right:0/bottom:0,
+ * pointerEvents:"none", alignItems/justifyContent:center).
+ *
  * Renderiza:
- *  - Banner de instrucción (arriba, centrado)
- *  - Pin central fijo con animación de elevación al arrastrar
- *  - Bubble con dirección (cuando el usuario suelta el mapa)
- *  - Botón de confirmación (visible solo cuando no arrastra)
+ *  - Bubble de dirección (fade animado)
+ *  - Pin SVG B-Ride (halo + círculo + punto central)
+ *  - Sombra oval animada
  * ─────────────────────────────────────────────────────────────
  */
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../hooks/useAppTheme';
 
 type MapSelectionMode = 'none' | 'pickup' | 'destination';
@@ -27,210 +29,152 @@ interface MapPinOverlayProps {
   mode: MapSelectionMode;
   isDragging: boolean;
   pendingAddress: string;
-  onConfirm: () => void;
-  onCancel: () => void;
 }
 
 export default function MapPinOverlay({
   mode,
   isDragging,
   pendingAddress,
-  onConfirm,
-  onCancel,
 }: MapPinOverlayProps) {
-  const insets = useSafeAreaInsets();
   const theme = useAppTheme();
 
-  // ── Pin elevation animation ───────────────────────────────
-  const pinTranslateY = useSharedValue(0);
-  const shadowScale   = useSharedValue(1);
+  // ── Pin elevation ──────────────────────────────────────────
+  const pinY      = useSharedValue(0);
+  const haloSize  = useSharedValue(44);
+  const haloOpacity = useSharedValue(0.20);
+
+  // ── Shadow ─────────────────────────────────────────────────
+  const shadowW   = useSharedValue(20);
+  const shadowOp  = useSharedValue(0.35);
+
+  // ── Address bubble ─────────────────────────────────────────
+  const bubbleOp  = useSharedValue(pendingAddress && !isDragging ? 1 : 0);
 
   useEffect(() => {
     if (isDragging) {
-      pinTranslateY.value = withSpring(-10, { damping: 12, stiffness: 180 });
-      shadowScale.value   = withSpring(1.6, { damping: 14, stiffness: 160 });
+      pinY.value      = withSpring(-12, { damping: 12, stiffness: 180 });
+      haloSize.value  = withSpring(56,  { damping: 14, stiffness: 160 });
+      haloOpacity.value = withTiming(0.35, { duration: 150 });
+      shadowW.value   = withSpring(14,  { damping: 14, stiffness: 180 });
+      shadowOp.value  = withTiming(0.20, { duration: 150 });
+      bubbleOp.value  = withTiming(0,   { duration: 80 });
     } else {
-      pinTranslateY.value = withSpring(0, { damping: 14, stiffness: 200 });
-      shadowScale.value   = withSpring(1, { damping: 14, stiffness: 200 });
+      pinY.value      = withSpring(0,   { damping: 15, stiffness: 200 });
+      haloSize.value  = withSpring(44,  { damping: 15, stiffness: 200 });
+      haloOpacity.value = withTiming(0.20, { duration: 200 });
+      shadowW.value   = withSpring(20,  { damping: 15, stiffness: 200 });
+      shadowOp.value  = withTiming(0.35, { duration: 200 });
+      if (pendingAddress) {
+        bubbleOp.value = withTiming(1, { duration: 200 });
+      }
     }
-  }, [isDragging]);
+  }, [isDragging, pendingAddress]);
 
   const pinStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pinTranslateY.value }],
+    transform: [{ translateY: pinY.value }],
+    alignItems: 'center',
   }));
 
   const shadowStyle = useAnimatedStyle(() => ({
-    transform: [{ scaleX: shadowScale.value }],
-    opacity: isDragging ? 0.25 : 0.45,
+    width: shadowW.value,
+    opacity: shadowOp.value,
   }));
 
-  // ── Confirm button animation ──────────────────────────────
-  const btnScale   = useSharedValue(isDragging ? 0 : 1);
-  const btnOpacity = useSharedValue(isDragging ? 0 : 1);
-
-  useEffect(() => {
-    if (isDragging) {
-      btnOpacity.value = withTiming(0, { duration: 100 });
-      btnScale.value   = withTiming(0.85, { duration: 100 });
-    } else {
-      btnScale.value   = withSpring(1, { damping: 12, stiffness: 200 });
-      btnOpacity.value = withTiming(1, { duration: 200 });
-    }
-  }, [isDragging]);
-
-  const btnStyle = useAnimatedStyle(() => ({
-    opacity: btnOpacity.value,
-    transform: [{ scale: btnScale.value }],
+  const bubbleStyle = useAnimatedStyle(() => ({
+    opacity: bubbleOp.value,
   }));
 
-  if (mode === 'none') return null;
+  const haloStyle = useAnimatedStyle(() => ({
+    width: haloSize.value,
+    height: haloSize.value,
+    borderRadius: haloSize.value / 2,
+    opacity: haloOpacity.value,
+  }));
 
-  const isPickup      = mode === 'pickup';
-  const pinColor      = isPickup ? theme.colors.success : theme.colors.primary;
-  const bannerText    = isPickup
-    ? 'Mueve el mapa a tu punto de recogida'
-    : 'Mueve el mapa a tu destino';
-  const confirmLabel  = isPickup
-    ? '✓  Confirmar punto de recogida'
-    : '✓  Confirmar destino';
-
-  const bannerTop = insets.top + 70;
-  const btnBottom = insets.bottom + 100;
+  const isPickup = mode === 'pickup';
+  // Pickup → turquesa, Destination → gold
+  const pinColor = isPickup ? theme.colors.success : theme.colors.primary;
 
   return (
-    <>
-      {/* ── Instruction banner ─────────────────────────────── */}
-      <View
-        style={[styles.banner, { top: bannerTop }]}
-        pointerEvents="box-none"
-      >
-        <Text style={styles.bannerText}>{bannerText}</Text>
-        <TouchableOpacity onPress={onCancel} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={18} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.wrapper} pointerEvents="none">
 
-      {/* ── Center pin (pointer-events: none — never blocks map) ── */}
-      <View style={styles.pinWrapper} pointerEvents="none">
-        {/* Address bubble */}
-        {!isDragging && !!pendingAddress && (
-          <View style={styles.addressBubble}>
-            <Text style={styles.addressText} numberOfLines={2}>{pendingAddress}</Text>
-          </View>
+      {/* 1. Address bubble — fade animato */}
+      <Animated.View style={[styles.bubble, bubbleStyle]}>
+        {!!pendingAddress && (
+          <Text style={styles.bubbleText} numberOfLines={2}>{pendingAddress}</Text>
         )}
-
-        {/* Animated pin */}
-        <Animated.View style={pinStyle}>
-          <Ionicons name="location" size={44} color={pinColor} />
-        </Animated.View>
-
-        {/* Shadow ellipse */}
-        <Animated.View style={[styles.pinShadow, shadowStyle, { backgroundColor: pinColor }]} />
-      </View>
-
-      {/* ── Confirm button ─────────────────────────────────── */}
-      <Animated.View
-        style={[styles.confirmBtnWrapper, { bottom: btnBottom }, btnStyle]}
-        pointerEvents={isDragging ? 'none' : 'auto'}
-      >
-        <TouchableOpacity
-          style={[styles.confirmBtn, { backgroundColor: theme.colors.primary, ...theme.shadows.primary }]}
-          onPress={onConfirm}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.confirmBtnText, { color: theme.colors.primaryText }]}>
-            {confirmLabel}
-          </Text>
-        </TouchableOpacity>
       </Animated.View>
-    </>
+
+      {/* 2. Pin principal (halo + circle + dot) */}
+      <Animated.View style={pinStyle}>
+        {/* Halo exterior */}
+        <Animated.View style={[styles.haloBase, haloStyle, { backgroundColor: pinColor }]} />
+
+        {/* Círculo interior 28px */}
+        <View style={[styles.pinCircle, { backgroundColor: pinColor }]}>
+          {/* Punto central 10px */}
+          <View style={[styles.pinDot, { backgroundColor: theme.colors.background }]} />
+        </View>
+      </Animated.View>
+
+      {/* 3. Sombra oval */}
+      <Animated.View style={[styles.shadowBase, shadowStyle]} />
+
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // ── Banner
-  banner: {
-    position: 'absolute',
-    alignSelf: 'center',
-    flexDirection: 'row',
+  wrapper: {
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'rgba(13,5,32,0.85)',
-    borderRadius: 20,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(245,197,24,0.30)',
-    zIndex: 60,
-    // iOS blur not available natively without @react-native-community/blur,
-    // so we use a high-opacity dark background instead.
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-      android: { elevation: 8 },
-    }),
-  },
-  bannerText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
+    justifyContent: 'center',
   },
 
-  // ── Center pin
-  pinWrapper: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    // Shift so the TIP of the 44px icon is exactly on center:
-    // icon is ~44px tall, tip is at the bottom → offset up by 44px, left by 22px
-    marginLeft: -22,
-    marginTop: -44,
-    alignItems: 'center',
-    zIndex: 55,
-  },
-  addressBubble: {
-    backgroundColor: 'rgba(13,5,32,0.88)',
+  // ── Bubble
+  bubble: {
+    backgroundColor: 'rgba(13,5,32,0.90)',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(245,197,24,0.25)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 4,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(245,197,24,0.40)',
     maxWidth: 220,
+    marginBottom: 8,
   },
-  addressText: {
+  bubbleText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
   },
-  pinShadow: {
-    width: 18,
-    height: 6,
-    borderRadius: 9,
-    marginTop: -2,
-    opacity: 0.4,
-  },
 
-  // ── Confirm button
-  confirmBtnWrapper: {
+  // ── Halo (position absolute centered on the circle)
+  haloBase: {
     position: 'absolute',
     alignSelf: 'center',
-    zIndex: 60,
   },
-  confirmBtn: {
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+
+  // ── Circle
+  pinCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  confirmBtnText: {
-    fontSize: 16,
-    fontWeight: '800',
+
+  // ── Dot
+  pinDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+
+  // ── Shadow
+  shadowBase: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    marginTop: 2,
   },
 });
