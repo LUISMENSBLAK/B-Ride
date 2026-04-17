@@ -1405,8 +1405,9 @@ export default function PassengerDashboard() {
 
             {/* Removed Selected Destination Details Card */}
           </View>
-          </> {/* END: mapSelectionMode === 'none' branch */}
-          )} {/* END: mapSelectionMode ternary */}
+          </>
+          )}
+
 
           {/* Buscando Conductor */}
           {isSearching && (
