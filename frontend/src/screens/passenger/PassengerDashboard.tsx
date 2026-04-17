@@ -679,7 +679,7 @@ export default function PassengerDashboard() {
     let timeout: ReturnType<typeof setTimeout>;
     if (rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING') {
       timeout = setTimeout(() => {
-        Alert.alert('Aviso', 'No encontramos conductores disponibles en este momento. Inténtalo de nuevo en unos minutos.');
+        Alert.alert(t('passenger.noDriversTitle'), t('passenger.noDriversTimeout'));
       }, 300000);
     }
     return () => clearTimeout(timeout);
@@ -717,7 +717,7 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
-    Alert.alert('Sin conductores', data.message);
+    Alert.alert(t('passenger.noDriversTitle'), data.message);
     resetFlow();
     setPrice('');
   }, []));
@@ -779,19 +779,19 @@ export default function PassengerDashboard() {
   }, [pushLocation]));
 
   useRideSocketEvent('rideError', useCallback((error) => {
-    Alert.alert('Error', error.message);
+    Alert.alert(t('passenger.connectionError'), error.message);
     resetFlow();
     setAcceptingBidId(null);
   }, []));
 
   useRideSocketEvent('driver_warning', useCallback((data: any) => {
-    Alert.alert('⚠️ Aviso del conductor', data?.message || 'El conductor reporta un problema en la ruta.');
+    Alert.alert(t('passenger.driverWarning'), data?.message || t('passenger.driverWarningDefault'));
   }, []));
 
   useRideSocketEvent('driver_disconnected', useCallback((data: any) => {
     Alert.alert(
-      '📡 Conductor desconectado',
-      'Se perdió la conexión con el conductor. Si persiste, contacta a soporte.',
+      t('passenger.driverDisconnectedTitle'),
+      t('passenger.driverDisconnectedMsg'),
       [
         { text: 'OK', style: 'default' },
         { text: 'SOS', style: 'destructive', onPress: () => {} },
@@ -800,7 +800,7 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('rating_submitted', useCallback(({ newAvg }) => {
-    Alert.alert('¡Gracias!', `Tu calificación fue enviada. Rating del conductor: ${newAvg} ★`);
+    Alert.alert(t('passenger.ratingThanks'), t('passenger.ratingThanksMsg', { avg: newAvg }));
   }, []));
 
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
@@ -813,7 +813,7 @@ export default function PassengerDashboard() {
     setEstimatedTimeMin(0);
     socketService.setRideRoom(null);
     bottomSheetRef.current?.snapToIndex(1);
-    Alert.alert('Ride Cancelado', 'El conductor ha cancelado. Puedes pedir un nuevo ride.');
+    Alert.alert(t('passenger.rideCancel'), t('passenger.rideCancelMsg'));
   }, [stopTracking]));
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -821,11 +821,11 @@ export default function PassengerDashboard() {
   const handleRequestRide = useCallback(async (finalPrice: number, finalCategory: any) => {
     if (!user?.avatarUrl && !user?.profilePhoto) {
       Alert.alert(
-        'Foto Obligatoria',
-        'Por seguridad, debes subir una foto de perfil antes de pedir un ride.',
+        t('passenger.photoRequired'),
+        t('passenger.photoRequiredMsg'),
         [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Subir Foto', onPress: () => navigation.navigate('PassengerProfile') }
+          { text: t('settings.cancel'), style: 'cancel' },
+          { text: t('passenger.uploadPhoto'), onPress: () => navigation.navigate('PassengerProfile') }
         ]
       );
       return;
@@ -868,7 +868,7 @@ export default function PassengerDashboard() {
       }, 3, 5000);
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
-      Alert.alert('Error de conexión', err.message || 'No se pudo enviar la solicitud.');
+      Alert.alert(t('passenger.connectionError'), err.message || t('passenger.connectionErrorMsg'));
       setRideStatus('IDLE');
     }
   }, [selectedPlace, location, user, convertToUsd, currency, paymentMethod, distanceKm, promoDiscount, promoCode]);
@@ -921,7 +921,7 @@ export default function PassengerDashboard() {
         });
       } catch (error: unknown) {
         const err = error as { message?: string; code?: string; response?: any };
-        Alert.alert('Transacción Detenida', err.message || 'No se pudo autorizar el pago.');
+        Alert.alert(t('passenger.paymentStopped'), err.message || t('errors.paymentFailed'));
         setAcceptingBidId(null);
       } finally {
         setPaymentAuthorizing(false);
@@ -959,11 +959,13 @@ export default function PassengerDashboard() {
       const res = await client.post('/promos/validate', { code: promoCode, rideValue: convertToUsd(Number(price)) });
       if (res.data.success) {
         setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
-        Alert.alert('Promoción aplicada', 'El descuento ha sido reflejado en el precio.');
+        Alert.alert(t('passenger.promoApplied'), t('passenger.promoAppliedMsg'));
+      } else {
+        setPrice(convertToUsd(res.data.price));
       }
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
-      Alert.alert('Error promo', err.response?.data?.message || 'Código inválido.');
+      Alert.alert(t('passenger.promoError'), err.response?.data?.message || 'Código inválido.');
       setPromoDiscount(null);
     } finally {
       setPromoApplying(false);
@@ -1124,29 +1126,31 @@ export default function PassengerDashboard() {
             color="#0D0520"
           />
           <Text style={styles.connectionBannerText}>
-            {bannerState === 'amber' ? 'Reconectando…' : 'Sin conexión en tiempo real'}
+            {bannerState === 'amber' ? t('passenger.reconnecting') : t('passenger.noConnection')}
           </Text>
         </View>
       )}
 
-      {/* ── Floating Header & Pill (only IDLE) ── */}
+      {/* ── TopBar: siempre visible cuando hay usuario ── */}
+      {!!user && (
+        <TopBar
+          userName={user?.name}
+          profilePhoto={user?.profilePhoto || user?.avatarUrl}
+          onAvatarPress={() => navigation.navigate('PassengerProfile')}
+          theme={theme}
+        />
+      )}
+
+      {/* ── DriverPill: solo en IDLE ── */}
       {isIdle && (
-        <>
-          <TopBar
-            userName={user?.name}
-            profilePhoto={user?.profilePhoto || user?.avatarUrl}
-            onAvatarPress={() => navigation.navigate('PassengerProfile')}
-            theme={theme}
-          />
-          <DriverPill count={activeDriversCount} animatedIndex={animatedIndex} />
-        </>
+        <DriverPill count={activeDriversCount} animatedIndex={animatedIndex} />
       )}
 
       {/* Driver found banner (during SEARCHING) */}
       {showDriverBanner && (
         <View style={styles.topDriverBanner}>
           <View style={styles.topDriverBannerDot} />
-          <Text style={styles.topDriverBannerText}>Encontrando tu ride…</Text>
+          <Text style={styles.topDriverBannerText}>{t('passenger.findingRide')}</Text>
         </View>
       )}
 
@@ -1199,8 +1203,8 @@ export default function PassengerDashboard() {
         >
           <Text style={{ flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
             {mapSelectionMode === 'pickup'
-              ? 'Mueve el mapa a tu punto de recogida'
-              : 'Mueve el mapa a tu destino'}
+              ? t('passenger.mapPickupInstruction')
+              : t('passenger.mapDestInstruction')}
           </Text>
           <TouchableOpacity
             onPress={() => {
@@ -1247,7 +1251,7 @@ export default function PassengerDashboard() {
           activeOpacity={0.80}
         >
           <Ionicons name="pin" size={16} color="#F5C518" />
-          <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>Fijar en mapa</Text>
+          <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
         </TouchableOpacity>
       )}
       <BottomSheet
@@ -1287,10 +1291,10 @@ export default function PassengerDashboard() {
                 fontWeight: '800',
               }}>
                 {isDragging
-                  ? 'Suelta para confirmar...'
+                  ? t('passenger.releaseToConfirm')
                   : mapSelectionMode === 'pickup'
-                    ? '✓  Confirmar punto de recogida'
-                    : '✓  Confirmar destino'}
+                    ? t('passenger.confirmPickup')
+                    : t('passenger.confirmDest')}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -1308,7 +1312,7 @@ export default function PassengerDashboard() {
                        hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
                     >
                       <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>
-                        {selectedPlace?.displayName || '¿A dónde te llevamos hoy?'}
+                        {selectedPlace?.displayName || t('passenger.searchingDest')}
                       </Text>
                     </TouchableOpacity>
 
@@ -1351,10 +1355,10 @@ export default function PassengerDashboard() {
                 overflow: 'hidden',
               }}>
                 <Text style={{color: '#F5C518', fontSize: 12, marginLeft: 8, marginBottom: 8, fontWeight: '600'}}>
-                   {activeMapField === 'pickup' ? 'Buscando: Punto de Recogida' : 'Buscando: Destino'}
+                   {activeMapField === 'pickup' ? t('passenger.pickupLabel') : t('passenger.destinationLabel')}
                 </Text>
                 <AddressAutocomplete
-                  placeholder={activeMapField === 'pickup' ? "¿Dónde te recogemos?" : "¿A dónde te llevamos hoy?"}
+                  placeholder={activeMapField === 'pickup' ? t('passenger.searchingPickup') : t('passenger.searchingDest')}
                   onSelect={handlePlaceSelect}
                   userLat={pickupLocation.latitude || location?.coords.latitude}
                   userLng={pickupLocation.longitude || location?.coords.longitude}

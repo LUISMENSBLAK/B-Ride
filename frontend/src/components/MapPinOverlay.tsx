@@ -107,13 +107,15 @@ export default function MapPinOverlay({
 
       {/* 2. Pin principal (halo + circle + dot) */}
       <Animated.View style={pinStyle}>
-        {/* Halo exterior */}
-        <Animated.View style={[styles.haloBase, haloStyle, { backgroundColor: pinColor }]} />
-
-        {/* Círculo interior 28px */}
-        <View style={[styles.pinCircle, { backgroundColor: pinColor }]}>
-          {/* Punto central 10px */}
-          <View style={[styles.pinDot, { backgroundColor: theme.colors.background }]} />
+        {/* Relative container so halo can be absolute-centered */}
+        <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+          {/* Halo exterior — absolute, centered via negative translate */}
+          <Animated.View style={[styles.haloBase, haloStyle, { backgroundColor: pinColor }]} />
+          {/* Círculo interior 28px */}
+          <View style={[styles.pinCircle, { backgroundColor: pinColor }]}>
+            {/* Punto central 10px */}
+            <View style={[styles.pinDot, { backgroundColor: theme.colors.background }]} />
+          </View>
         </View>
       </Animated.View>
 
@@ -148,10 +150,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Halo (position absolute centered on the circle)
+  // ── Halo — absolute, centered on the circle via negative translate
   haloBase: {
     position: 'absolute',
-    alignSelf: 'center',
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -22 }, { translateY: -22 }],
   },
 
   // ── Circle
