@@ -3,7 +3,7 @@ import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
-  ActivityIndicator, Image, Keyboard, FlatList
+  ActivityIndicator, Image, Keyboard, FlatList, BackHandler
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -44,6 +44,7 @@ import AddFavoriteSheet, {
 } from './AddFavoriteSheet';
 import { haversineKm } from '../../utils/geo';
 import { useCurrency } from '../../hooks/useCurrency';
+import MapPinOverlay from '../../components/MapPinOverlay';
 
 // ─── SUB-COMPONENTS WIXÁRIKA V3 ───────────────────────────────────────────────
 
@@ -297,6 +298,13 @@ export default function PassengerDashboard() {
   const [isMapDragging, setIsMapDragging] = useState(false);
   const mapCenterReverseGeocodeTimer = useRef<NodeJS.Timeout | null>(null);
 
+  // ─── MAP SELECTION MODE ("Fijar en mapa") ──────────────────────────────────
+  type MapSelectionMode = 'none' | 'pickup' | 'destination';
+  const [mapSelectionMode, setMapSelectionMode] = useState<MapSelectionMode>('none');
+  const [pendingCoordinate, setPendingCoordinate] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [pendingAddress, setPendingAddress] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
+
   // Initialize pickupLocation when GPS is found
   useEffect(() => {
     if (location && pickupLocation.placeId === 'default_pickup') {
@@ -313,26 +321,42 @@ export default function PassengerDashboard() {
     if (mapCenterReverseGeocodeTimer.current) {
       clearTimeout(mapCenterReverseGeocodeTimer.current);
     }
-  }, []);
+    if (mapSelectionMode !== 'none') setIsDragging(true);
+  }, [mapSelectionMode]);
 
   const handleRegionChangeComplete = useCallback(async (region: any) => {
     setIsMapDragging(false);
-    if (!activeMapField) return; // If no field active for map selection, ignore
+    setIsDragging(false);
 
-    // Avoid unnecessary API calls with a small debounce
+    // ── Map-selection mode: capture pending coord + reverse geocode ──
+    if (mapSelectionMode !== 'none') {
+      setPendingCoordinate({ latitude: region.latitude, longitude: region.longitude });
+      setPendingAddress('');
+      try {
+        const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
+        if (res && res.length > 0) {
+          const r = res[0];
+          const addr = r.street
+            ? `${r.street}${r.streetNumber ? ' ' + r.streetNumber : ''}, ${r.city || ''}`.trim()
+            : (r.name || 'Ubicación seleccionada');
+          setPendingAddress(addr);
+        }
+      } catch { setPendingAddress('Ubicación en el mapa'); }
+      return;
+    }
+
+    if (!activeMapField) return;
     mapCenterReverseGeocodeTimer.current = setTimeout(async () => {
       try {
         const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
         if (res && res.length > 0) {
           const address = res[0].street ? `${res[0].street} ${res[0].streetNumber || ''}, ${res[0].city || ''}`.trim() : (res[0].name || 'Ubicación seleccionada');
-          
           const newPlace: PlaceResult = {
              displayName: address,
              placeId: `map_${Date.now()}`,
              latitude: region.latitude,
              longitude: region.longitude
           };
-
           if (activeMapField === 'destination') {
              setSelectedPlace(newPlace);
           } else {
@@ -343,12 +367,49 @@ export default function PassengerDashboard() {
         console.log('Reverse geocode error', err);
       }
     }, 400);
-  }, [activeMapField]);
+  }, [activeMapField, mapSelectionMode]);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowLocating(false), 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  // ─── BackHandler: cancel map-selection on hardware back ────────────────────
+  useEffect(() => {
+    if (mapSelectionMode === 'none') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setMapSelectionMode('none');
+      setPendingCoordinate(null);
+      return true;
+    });
+    return () => sub.remove();
+  }, [mapSelectionMode]);
+
+  // ─── Confirm map-selected point ────────────────────────────────────────────
+  const handleConfirmMapPoint = useCallback(() => {
+    if (!pendingCoordinate) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const place: PlaceResult = {
+      displayName: pendingAddress || 'Ubicación en el mapa',
+      placeId: `mappin_${Date.now()}`,
+      latitude: pendingCoordinate.latitude,
+      longitude: pendingCoordinate.longitude,
+    };
+    if (mapSelectionMode === 'pickup') {
+      setPickupLocation(place);
+      setPendingCoordinate(null);
+      setPendingAddress('');
+      setMapSelectionMode('destination');
+    } else {
+      setSelectedPlace(place);
+      saveToHistory(place);
+      setMapSelectionMode('none');
+      setPendingCoordinate(null);
+      setPendingAddress('');
+      bottomSheetRef.current?.snapToIndex(0);
+      setTimeout(() => fareOfferSheetRef.current?.expand(), 300);
+    }
+  }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory]);
 
   const searchGlowAnim = useSharedValue(0);
   useEffect(() => {
@@ -1015,13 +1076,13 @@ export default function PassengerDashboard() {
     return undefined;
   }, [selectedPlace]);
 
-  // Center Pin Overlay Visibility
-  const showCenterPin = isIdle && activeMapField !== null && currentSnapIndex < 2;
+  // Center Pin Overlay Visibility (legacy search-field pin — only when NOT in map-selection mode)
+  const showCenterPin = isIdle && activeMapField !== null && currentSnapIndex < 2 && mapSelectionMode === 'none';
 
   return (
     <View style={styles.container}>
-      {/* ── Background Map ── */}
-      <Animated.View 
+      {/* ── Background Map: interactive except when sheet is fully expanded ── */}
+      <Animated.View
         style={[{ flex: 1, backgroundColor: '#0D0520' }, mapAnimatedStyle]}
         pointerEvents={currentSnapIndex === 2 ? 'none' : 'auto'}
       >
@@ -1088,25 +1149,19 @@ export default function PassengerDashboard() {
         </View>
       )}
 
-      {/* Floating Center Pin Overlay for manual map selection (Uber Style) */}
-      {showCenterPin && (
-        <View style={{
-          position: 'absolute', top: '50%', left: '50%',
-          marginTop: -24, marginLeft: -16,
-          zIndex: 40, pointerEvents: 'none',
-          alignItems: 'center',
-          transform: [{ translateY: isMapDragging ? -10 : 0 }]
-        }}>
-          <View style={{
-             backgroundColor: '#0D0520', paddingHorizontal: 10, paddingVertical: 4, 
-             borderRadius: 10, marginBottom: 4, borderWidth: 1, borderColor: '#F5C518'
-          }}>
-            <Text style={{color: '#F5C518', fontSize: 10, fontWeight: '700'}}>
-              {activeMapField === 'destination' ? 'Fijar Destino' : 'Fijar Recogida'}
-            </Text>
-          </View>
-          <Ionicons name="location" size={32} color={activeMapField === 'destination' ? "#F5C518" : "#FFFFFF"} />
-        </View>
+      {/* ── MapPinOverlay: mode "Fijar en mapa" (new, full-featured) ── */}
+      {mapSelectionMode !== 'none' && (
+        <MapPinOverlay
+          mode={mapSelectionMode}
+          isDragging={isDragging}
+          pendingAddress={pendingAddress}
+          onConfirm={handleConfirmMapPoint}
+          onCancel={() => {
+            setMapSelectionMode('none');
+            setPendingCoordinate(null);
+            setPendingAddress('');
+          }}
+        />
       )}
 
       {/* ── Main BottomSheet ── */}
@@ -1168,6 +1223,35 @@ export default function PassengerDashboard() {
                   </TouchableOpacity>
                 </View>
               </Animated.View>
+
+              {/* ── "Fijar en mapa" secondary button (visible only in idle/snap 0-1, not searching/riding) ── */}
+              {isIdle && !isActiveRide && currentSnapIndex < 2 && mapSelectionMode === 'none' && (
+                <TouchableOpacity
+                  style={{
+                    marginTop: 8,
+                    alignSelf: 'center',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.12)',
+                  }}
+                  onPress={() => {
+                    setMapSelectionMode('pickup');
+                    setPendingCoordinate(null);
+                    setPendingAddress('');
+                    bottomSheetRef.current?.snapToIndex(0);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="pin" size={14} color="rgba(255,255,255,0.60)" />
+                  <Text style={{ color: 'rgba(255,255,255,0.60)', fontSize: 13 }}>Fijar en mapa</Text>
+                </TouchableOpacity>
+              )}
             
           {/* FIX-9: visibility via opacity+height en lugar de display:none para mantener estado del input montado */}
               <View style={{
