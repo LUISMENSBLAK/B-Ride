@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import socketService from './socket';
 
 class EventManager {
@@ -77,12 +77,13 @@ const eventManager = new EventManager();
 
 // --- REACT HOOK DEFINITIVO PARA SOCKET EVENTS ---
 export function useRideSocketEvent(eventName: string, callback: (...args: any[]) => void) {
+  const callbackRef = useRef(callback);
+  useEffect(() => { callbackRef.current = callback; }); // actualiza sin re-sub
   useEffect(() => {
-    const unsubscribe = eventManager.subscribe(eventName, callback);
-    return () => {
-      unsubscribe();
-    };
-  }, [eventName, callback]); // callback suele ser useCallback
+    const stable = (...args: any[]) => callbackRef.current(...args);
+    const unsub = eventManager.subscribe(eventName, stable);
+    return unsub;
+  }, [eventName]); // solo re-subscribe si cambia el nombre del evento
 }
 
 export default eventManager;

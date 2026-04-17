@@ -288,6 +288,63 @@ export default function PassengerDashboard() {
   const animatedIndex = useSharedValue(0);
   const [showLocating, setShowLocating] = useState(true);
 
+  // --- UBER STYLE DUAL MAP SELECTOR ---
+  const [activeMapField, setActiveMapField] = useState<'destination' | 'pickup' | null>(null);
+  const [pickupLocation, setPickupLocation] = useState<PlaceResult>({
+    displayName: 'Mi Ubicación Actual',
+    placeId: 'default_pickup'
+  });
+  const [isMapDragging, setIsMapDragging] = useState(false);
+  const mapCenterReverseGeocodeTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize pickupLocation when GPS is found
+  useEffect(() => {
+    if (location && pickupLocation.placeId === 'default_pickup') {
+      setPickupLocation(prev => ({
+        ...prev,
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      }));
+    }
+  }, [location]);
+
+  const handleRegionChange = useCallback(() => {
+    setIsMapDragging(true);
+    if (mapCenterReverseGeocodeTimer.current) {
+      clearTimeout(mapCenterReverseGeocodeTimer.current);
+    }
+  }, []);
+
+  const handleRegionChangeComplete = useCallback(async (region: any) => {
+    setIsMapDragging(false);
+    if (!activeMapField) return; // If no field active for map selection, ignore
+
+    // Avoid unnecessary API calls with a small debounce
+    mapCenterReverseGeocodeTimer.current = setTimeout(async () => {
+      try {
+        const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
+        if (res && res.length > 0) {
+          const address = res[0].street ? `${res[0].street} ${res[0].streetNumber || ''}, ${res[0].city || ''}`.trim() : (res[0].name || 'Ubicación seleccionada');
+          
+          const newPlace: PlaceResult = {
+             displayName: address,
+             placeId: `map_${Date.now()}`,
+             latitude: region.latitude,
+             longitude: region.longitude
+          };
+
+          if (activeMapField === 'destination') {
+             setSelectedPlace(newPlace);
+          } else {
+             setPickupLocation(newPlace);
+          }
+        }
+      } catch (err) {
+        console.log('Reverse geocode error', err);
+      }
+    }, 400);
+  }, [activeMapField]);
+
   useEffect(() => {
     const timer = setTimeout(() => setShowLocating(false), 3000);
     return () => clearTimeout(timer);
@@ -416,6 +473,7 @@ export default function PassengerDashboard() {
     }
 
     return () => {
+      if (initialTimerRef.current) { clearTimeout(initialTimerRef.current); initialTimerRef.current = null; }
       if (redTimerRef.current) { clearTimeout(redTimerRef.current); redTimerRef.current = null; }
     };
   }, [socketStatus]);
@@ -919,6 +977,34 @@ export default function PassengerDashboard() {
     return { transform: [{ scale }] };
   });
 
+  const handlePlaceSelect = useCallback((place: PlaceResult) => {
+    if (activeMapField === 'pickup') {
+       setPickupLocation(place);
+       Keyboard.dismiss();
+       bottomSheetRef.current?.snapToIndex(0);
+       return;
+    }
+    
+    // Default handles Destination
+    setSelectedPlace(place);
+    saveToHistory(place);
+    Keyboard.dismiss();
+    bottomSheetRef.current?.snapToIndex(0);
+    setTimeout(() => {
+      fareOfferSheetRef.current?.expand();
+    }, 300);
+  }, [saveToHistory, activeMapField]);
+
+  const destinationCoord = React.useMemo(() => {
+    if (selectedPlace && selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined) {
+      return { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude };
+    }
+    return undefined;
+  }, [selectedPlace]);
+
+  // Center Pin Overlay Visibility
+  const showCenterPin = isIdle && activeMapField !== null && currentSnapIndex < 2;
+
   return (
     <View style={styles.container}>
       {/* ── Background Map ── */}
@@ -932,11 +1018,9 @@ export default function PassengerDashboard() {
             latitude={location.coords.latitude}
             longitude={location.coords.longitude}
             title={t('general.locating')}
-            destinationCoordinate={
-              (selectedPlace && selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined)
-                ? { latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }
-                : undefined
-            }
+            destinationCoordinate={destinationCoord}
+            onRegionChange={handleRegionChange}
+            onRegionChangeComplete={handleRegionChangeComplete}
           />
         ) : showLocating ? (
           <View style={styles.loaderContainer}>
@@ -991,6 +1075,27 @@ export default function PassengerDashboard() {
         </View>
       )}
 
+      {/* Floating Center Pin Overlay for manual map selection (Uber Style) */}
+      {showCenterPin && (
+        <View style={{
+          position: 'absolute', top: '50%', left: '50%',
+          marginTop: -24, marginLeft: -16,
+          zIndex: 40, pointerEvents: 'none',
+          alignItems: 'center',
+          transform: [{ translateY: isMapDragging ? -10 : 0 }]
+        }}>
+          <View style={{
+             backgroundColor: '#0D0520', paddingHorizontal: 10, paddingVertical: 4, 
+             borderRadius: 10, marginBottom: 4, borderWidth: 1, borderColor: '#F5C518'
+          }}>
+            <Text style={{color: '#F5C518', fontSize: 10, fontWeight: '700'}}>
+              {activeMapField === 'destination' ? 'Fijar Destino' : 'Fijar Recogida'}
+            </Text>
+          </View>
+          <Ionicons name="location" size={32} color={activeMapField === 'destination' ? "#F5C518" : "#FFFFFF"} />
+        </View>
+      )}
+
       {/* ── Main BottomSheet ── */}
       <BottomSheet
         ref={bottomSheetRef}
@@ -1006,45 +1111,60 @@ export default function PassengerDashboard() {
         <BottomSheetView
           style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}
         >
-          {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) */}
+          {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) evitamos desmontar componente para no perder el state de búsqueda */}
           <View style={{ flex: currentSnapIndex < 2 ? undefined : 1 }}>
-            {currentSnapIndex < 2 ? (
-              <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: isSearching || isActiveRide ? 'none' : 'flex' }]}>
-                <TouchableOpacity
-                  style={styles.searchInner}
-                  activeOpacity={1}
-                  onPress={() => bottomSheetRef.current?.snapToIndex(2)}
-                >
-                  <Ionicons name="search" size={20} color="#F5C518" style={{marginLeft: 16}} />
-                  <View style={{flex: 1, paddingLeft: 12}}>
-                    <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>¿A dónde te llevamos hoy?</Text>
-                    <Text style={{color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}}>Ubicación actual detectada</Text>
+              <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: (isSearching || isActiveRide || currentSnapIndex === 2) ? 'none' : 'flex' }]}>
+                {/* 2-part Search Bar maintaining exact visual layout but enabling separate taps */}
+                <View style={[styles.searchInner, {flexDirection: 'row', alignItems: 'center'}]}>
+                  <Ionicons name="search" size={20} color={activeMapField === 'destination' ? "#F5C518" : "rgba(255,255,255,0.5)"} style={{marginLeft: 16}} />
+                  <View style={{flex: 1, paddingLeft: 12, paddingVertical: 6}}>
+                    {/* Destination Trigger */}
+                    <TouchableOpacity 
+                       onPress={() => { setActiveMapField('destination'); bottomSheetRef.current?.snapToIndex(2); }}
+                       hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
+                    >
+                      <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>
+                        {selectedPlace?.displayName || '¿A dónde te llevamos hoy?'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Pickup Trigger */}
+                    <TouchableOpacity 
+                       onPress={() => { setActiveMapField('pickup'); bottomSheetRef.current?.snapToIndex(2); }}
+                       hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={{color: activeMapField === 'pickup' ? '#F5C518' : 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}} numberOfLines={1}>
+                        {pickupLocation.displayName}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                   {/* Arrow button — same action as tapping the bar */}
                   <TouchableOpacity
-                    style={styles.searchRightArrow}
-                    onPress={() => bottomSheetRef.current?.snapToIndex(2)}
+                    style={[styles.searchRightArrow, {backgroundColor: activeMapField === 'destination' && selectedPlace ? '#F5C518' : 'rgba(245,197,24,0.3)'}]}
+                    onPress={() => {
+                        if (activeMapField === 'destination' && selectedPlace) {
+                            fareOfferSheetRef.current?.expand();
+                        } else {
+                            setActiveMapField('destination');
+                            bottomSheetRef.current?.snapToIndex(2);
+                        }
+                    }}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                   >
                     <Ionicons name="arrow-forward" size={16} color="#0D0520" />
                   </TouchableOpacity>
-                </TouchableOpacity>
+                </View>
               </Animated.View>
-            ) : (
-              <View style={{ flex: 1 }}>
+            
+              <View style={{ flex: 1, display: currentSnapIndex === 2 ? 'flex' : 'none' }}>
+                <Text style={{color: '#F5C518', fontSize: 12, marginLeft: 8, marginBottom: 8, fontWeight: '600'}}>
+                   {activeMapField === 'pickup' ? 'Buscando: Punto de Recogida' : 'Buscando: Destino'}
+                </Text>
                 <AddressAutocomplete
-                  placeholder="¿A dónde te llevamos hoy?"
-                  onSelect={(place) => {
-                    setSelectedPlace(place);
-                    saveToHistory(place);
-                    Keyboard.dismiss();
-                    bottomSheetRef.current?.snapToIndex(0);
-                    setTimeout(() => {
-                      fareOfferSheetRef.current?.expand();
-                    }, 300);
-                  }}
-                  userLat={location?.coords.latitude}
-                  userLng={location?.coords.longitude}
+                  placeholder={activeMapField === 'pickup' ? "¿Dónde te recogemos?" : "¿A dónde te llevamos hoy?"}
+                  onSelect={handlePlaceSelect}
+                  userLat={pickupLocation.latitude || location?.coords.latitude}
+                  userLng={pickupLocation.longitude || location?.coords.longitude}
                 />
                 <View style={styles.historyPanel}>
                   {rideHistory.length === 0 ? (
@@ -1054,14 +1174,7 @@ export default function PassengerDashboard() {
                       <TouchableOpacity
                         key={item.placeId || idx}
                         style={[styles.historyItem, idx < rideHistory.length - 1 && styles.historyItemBorder]}
-                        onPress={() => {
-                          setSelectedPlace(item);
-                          Keyboard.dismiss();
-                          bottomSheetRef.current?.snapToIndex(0);
-                          setTimeout(() => {
-                            fareOfferSheetRef.current?.expand();
-                          }, 300);
-                        }}
+                        onPress={() => handlePlaceSelect(item)}
                         activeOpacity={0.7}
                       >
                         <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.40)" style={{ marginRight: 12 }} />
@@ -1071,9 +1184,6 @@ export default function PassengerDashboard() {
                   )}
                 </View>
               </View>
-            )}
-
-            {/* SIEMPRE visible en snap 1 y 0 (Favoritos) */}
             <Animated.View style={[{ overflow: 'hidden' }, useAnimatedStyle(() => {
               const opacity = interpolate(animatedIndex.value, [0, 1], [0, 1], Extrapolation.CLAMP);
               const height = animatedIndex.value < 1 && currentSnapIndex === 0 ? 0 : 'auto';

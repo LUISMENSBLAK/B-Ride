@@ -258,10 +258,12 @@ export default function AppNavigator() {
     useEffect(() => {
         if (!user) return;
 
-        // NetInfo: cada vez que la conectividad es true → intentar reconectar
         const unsubscribeNetwork = NetInfo.addEventListener((state) => {
             if (state.isConnected && state.isInternetReachable !== false) {
-                socketService.connect();
+                const sock = socketService.getSocket();
+                if (!sock?.connected) {
+                    socketService.connect();
+                }
             }
         });
 

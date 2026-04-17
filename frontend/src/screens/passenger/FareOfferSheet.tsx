@@ -178,12 +178,13 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
   useImperativeHandle(ref, () => ({
     expand: () => {
-      console.log('🟡 FareOfferSheet expand() llamado'); // <-- agrega esto
       Keyboard.dismiss();
       setPriceStr('');
       setVehicleType('ECONOMY');
       setShowPaymentPicker(false);
-      sheetRef.current?.snapToIndex(0);
+      setTimeout(() => {
+        sheetRef.current?.snapToIndex(0);
+      }, 80);
     },
     close: () => {
       sheetRef.current?.close();

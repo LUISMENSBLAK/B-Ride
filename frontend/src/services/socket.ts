@@ -12,8 +12,9 @@ import { Platform } from 'react-native';
 // Simulador iOS  → localhost
 // Emulador Android → 10.0.2.2
 // Dispositivo físico → EXPO_PUBLIC_SOCKET_URL en .env
-const defaultSocketURL =
-  Platform.OS === 'android' ? 'https://b-ride-production.up.railway.app' : 'https://b-ride-production.up.railway.app';
+const defaultSocketURL = __DEV__ 
+  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
+  : 'https://b-ride-production.up.railway.app';
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
 
@@ -116,7 +117,7 @@ class SocketService {
 
     this.socket = io(SOCKET_URL, {
       auth: { token: validToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -175,12 +176,17 @@ class SocketService {
         err.message.includes('jwt');
 
       if (isAuthError) {
-        // Matar el socket completamente. Sin reconectar aquí.
-        this.socket?.removeAllListeners();
-        this.socket?.disconnect();
-        this.socket = null;
-        // El usuario deberá hacer login de nuevo para reconectar
-        useAuthStore.getState().logout();
+        refreshTokenIfNeeded().then((newToken) => {
+          if (newToken) {
+            this.socket?.disconnect();
+            setTimeout(() => this.connect(), 500);
+          } else {
+            this.socket?.removeAllListeners();
+            this.socket?.disconnect();
+            this.socket = null;
+            useAuthStore.getState().logout();
+          }
+        });
       }
     });
   }

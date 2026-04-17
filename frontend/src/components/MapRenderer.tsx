@@ -31,6 +31,8 @@ interface MapRendererProps {
   dropoffCoordinate?: Coordinate;
   /** Driver phase: determines which polyline to show */
   driverPhase?: 'TO_PICKUP' | 'TO_DESTINATION' | null;
+  onRegionChange?: (region: Region) => void;
+  onRegionChangeComplete?: (region: Region) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,7 +111,9 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
   destinationCoordinate,
   pickupCoordinate,
   dropoffCoordinate,
-  driverPhase
+  driverPhase,
+  onRegionChange,
+  onRegionChangeComplete
 }, ref) => {
   const insets = useSafeAreaInsets();
   const theme = useAppTheme();
@@ -300,6 +304,11 @@ const MapRenderer = forwardRef<MapRendererHandle, MapRendererProps>(({
       showsUserLocation={false}
       showsMyLocationButton={false}
       showsCompass={false}
+      onRegionChange={onRegionChange}
+      onRegionChangeComplete={onRegionChangeComplete}
+      onTouchStart={() => {
+        // Detener cámara ajustándose sola al tocar
+      }}
     >
       {/* Own position marker */}
       {isDriver ? (

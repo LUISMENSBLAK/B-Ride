@@ -31,8 +31,14 @@ function isUserConnected(userId) {
 module.exports = {
     init: (httpServer) => {
         io = require('socket.io')(httpServer, {
+            pingInterval: 25000,
+            pingTimeout: 20000,
+            upgradeTimeout: 10000,
+            maxHttpBufferSize: 1e6,
             cors: {
-                origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
+                origin: process.env.CORS_ORIGIN
+                  ? process.env.CORS_ORIGIN.split(',')
+                  : (process.env.NODE_ENV === 'production' ? [] : '*'),
                 methods: ['GET', 'POST'],
                 credentials: true,
             }
