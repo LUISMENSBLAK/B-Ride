@@ -1,5 +1,5 @@
-import React, { useEffect, useState, Suspense } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, Suspense, useRef } from 'react';
+import { View, ActivityIndicator, AppState, AppStateStatus } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -10,6 +10,7 @@ import { useTranslation } from '../hooks/useTranslation';
 import { useAppTheme } from '../hooks/useAppTheme';
 import type { Theme } from '../theme';
 import socketService from '../services/socket';
+import NetInfo from '@react-native-community/netinfo';
 
 import {
   Map,
@@ -248,6 +249,34 @@ export default function AppNavigator() {
         } else {
             socketService.disconnect();
         }
+    }, [user?._id]);
+
+    // ─── Reconexión automática: red + AppState ───────────────────────────────
+    // Cuando el dispositivo recupera internet O la app vuelve al primer plano,
+    // forzamos un connect() si el usuario sigue autenticado (el servicio es
+    // idempotente: si ya está conectado, retorna de inmediato).
+    useEffect(() => {
+        if (!user) return;
+
+        // NetInfo: cada vez que la conectividad es true → intentar reconectar
+        const unsubscribeNetwork = NetInfo.addEventListener((state) => {
+            if (state.isConnected && state.isInternetReachable !== false) {
+                socketService.connect();
+            }
+        });
+
+        // AppState: cuando la app vuelve a primer plano → intentar reconectar
+        const handleAppStateChange = (nextState: AppStateStatus) => {
+            if (nextState === 'active') {
+                socketService.connect();
+            }
+        };
+        const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+
+        return () => {
+            unsubscribeNetwork();
+            appStateSub.remove();
+        };
     }, [user?._id]);
 
     useEffect(() => {

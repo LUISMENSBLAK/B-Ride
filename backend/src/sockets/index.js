@@ -59,16 +59,16 @@ module.exports = {
                 try {
                     const decodedFirebase = await admin.auth().verifyIdToken(token);
                     user = await User.findOne({ firebaseUid: decodedFirebase.uid }).select('isBlocked isBanned lockUntil role');
-                    if (user && __DEV__) console.log(`[Socket Auth] Valid Firebase token for user: ${user._id}`);
+                    if (user && process.env.NODE_ENV !== 'production') console.log(`[Socket Auth] Valid Firebase token for user: ${user._id}`);
                 } catch (firebaseErr) {
                     // Fallback: tratar de descifrar como backend JWT local (Admin Panel & Legacy)
                     try {
                         const jwt = require('jsonwebtoken');
                         const decodedJwt = jwt.verify(token, process.env.JWT_SECRET);
                         user = await User.findById(decodedJwt.id || decodedJwt.userId).select('isBlocked isBanned lockUntil role');
-                        if (user && __DEV__) console.log(`[Socket Auth] Valid JWT for user: ${user._id}`);
+                        if (user && process.env.NODE_ENV !== 'production') console.log(`[Socket Auth] Valid JWT for user: ${user._id}`);
                     } catch (jwtErr) {
-                        console.error('[Socket Auth] Invalid token error (Firebase & JWT):', jwtErr.message);
+                        if (process.env.NODE_ENV !== 'production') console.error('[Socket Auth] Invalid token error (Firebase & JWT):', jwtErr.message);
                         return next(new Error('Authentication error: Invalid token'));
                     }
                 }

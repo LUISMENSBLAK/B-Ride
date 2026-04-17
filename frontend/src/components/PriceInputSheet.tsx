@@ -1,3 +1,4 @@
+/** @deprecated Replaced by FareOfferSheet.tsx — do not use */
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,

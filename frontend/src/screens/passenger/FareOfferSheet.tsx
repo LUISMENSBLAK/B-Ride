@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, FlatList, ScrollView, Pressable,
+  Image, FlatList, ScrollView, Pressable, Keyboard,
 } from 'react-native';
 import BottomSheet from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,30 +16,42 @@ import { useRideFlowStore } from '../../store/useRideFlowStore';
 // ── Vehicle catalogue ───────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
   {
-    id: 'Pop Ride',
+    id: 'ECONOMY',
     name: 'Pop Ride',
+    descriptor: 'Tu ride del día',
     category: 'ECONOMY',
     image: require('../../../assets/vehicles/pop_ride.png'),
   },
   {
-    id: 'Flow Ride',
+    id: 'COMFORT', 
     name: 'Flow Ride',
+    descriptor: 'Viaja con estilo',
     category: 'COMFORT',
     image: require('../../../assets/vehicles/flow_ride.png'),
   },
   {
-    id: 'Black Ride',
-    name: 'Black Ride',
+    id: 'PREMIUM',
+    name: 'Black Ride', 
+    descriptor: 'Elegancia sin límites',
     category: 'PREMIUM',
     image: require('../../../assets/vehicles/black_ride.png'),
   },
   {
-    id: 'Big Ride',
+    id: 'XL',
     name: 'Big Ride',
-    category: 'XL',
+    descriptor: 'Espacio para todos',
+    category: 'GROUP',
     image: require('../../../assets/vehicles/big_ride.png'),
   },
 ];
+
+// Map vehicle display name -> API category key
+const CATEGORY_MAP: Record<string, string> = {
+  'Pop Ride': 'ECONOMY',
+  'Flow Ride': 'COMFORT',
+  'Black Ride': 'PREMIUM',
+  'Big Ride': 'GROUP',
+};
 
 const PAYMENT_LABELS: Record<string, string> = {
   CASH: 'Efectivo',
@@ -57,22 +69,25 @@ const PAYMENT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 
 // ── Props ───────────────────────────────────────────────────────────────────
 interface FareOfferSheetProps {
-  visible: boolean;
   onClose: () => void;
   onConfirm: (price: number, vehicleType: string, paymentMethod: string) => void;
   suggestedPriceRange?: { min: number; max: number };
   destAddress?: string;
   distanceKm?: number;
   estimatedTimeMin?: number;
+  // GAP VISUAL 5: real prices from /rides/quote
+  categoryOptions?: Record<string, { priceMXN?: number; etaMin?: number }> | null;
+  loadingQuotes?: boolean;
 }
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
 const VehicleCard = React.memo(({
-  item, isSelected, estimatedPrice, onPress,
+  item, isSelected, estimatedPrice, loadingPrice, onPress,
 }: {
   item: typeof VEHICLE_TYPES[0];
   isSelected: boolean;
   estimatedPrice?: number;
+  loadingPrice?: boolean;
   onPress: () => void;
 }) => {
   const scale = useSharedValue(1);
@@ -99,25 +114,39 @@ const VehicleCard = React.memo(({
         <Text style={[styles.vehicleName, isSelected ? styles.vehicleNameSel : styles.vehicleNameUnsel]}>
           {item.name}
         </Text>
-        {estimatedPrice !== undefined && (
+        <Text style={styles.vehicleDescriptor}>{item.descriptor}</Text>
+        {loadingPrice ? (
+          <Text style={styles.vehiclePrice}>···</Text>
+        ) : estimatedPrice !== undefined ? (
           <Text style={styles.vehiclePrice}>MX${estimatedPrice}</Text>
-        )}
+        ) : null}
       </Animated.View>
     </TouchableOpacity>
   );
 });
 
 // ── Main component ──────────────────────────────────────────────────────────
-export default function FareOfferSheet({
-  visible, onClose, onConfirm, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin
-}: FareOfferSheetProps) {
+export interface FareOfferSheetRef {
+  expand: () => void;
+  close: () => void;
+}
+
+const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props, ref) => {
+  const {
+    onConfirm, onClose, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin,
+    categoryOptions, loadingQuotes,
+  } = props;
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
 
-  // ── State (lógica intacta) ──
+  // ── State ──
   const [priceStr, setPriceStr] = useState('');
-  const [vehicleType, setVehicleType] = useState('Pop Ride');
+  const [vehicleType, setVehicleType] = useState('ECONOMY');
   const paymentMethod = useRideFlowStore(s => s.paymentMethod);
+  const setPaymentMethod = useRideFlowStore(s => s.setPaymentMethod);
+
+  // BUG 2: payment picker state
+  const [showPaymentPicker, setShowPaymentPicker] = useState(false);
 
   // ── Cursor parpadeante ──
   const cursorOpacity = useSharedValue(1);
@@ -147,18 +176,21 @@ export default function FareOfferSheet({
   }, [isValid]);
   const ctaAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: ctaScale.value }] }));
 
-  // ── Sheet open/close ──
-  useEffect(() => {
-    if (visible) {
+  useImperativeHandle(ref, () => ({
+    expand: () => {
+      console.log('🟡 FareOfferSheet expand() llamado'); // <-- agrega esto
+      Keyboard.dismiss();
       setPriceStr('');
-      setVehicleType('Pop Ride');
+      setVehicleType('ECONOMY');
+      setShowPaymentPicker(false);
       sheetRef.current?.snapToIndex(0);
-    } else {
+    },
+    close: () => {
       sheetRef.current?.close();
     }
-  }, [visible]);
+  }));
 
-  // ── Numpad handler (lógica sin tocar) ──
+  // ── Numpad handler ──
   const handleKeyPress = (val: string) => {
     if (val === 'back') { setPriceStr(p => p.slice(0, -1)); return; }
     if (val === '.') {
@@ -177,15 +209,33 @@ export default function FareOfferSheet({
   const paymentLabel = PAYMENT_LABELS[paymentMethod] ?? 'Efectivo';
   const paymentIcon  = PAYMENT_ICONS[paymentMethod]  ?? 'cash-outline';
 
+  // Compute estimated price per vehicle from API or fallback formula
+  const getEstimatedPrice = (item: typeof VEHICLE_TYPES[0]): number | undefined => {
+    const apiPrice = categoryOptions?.[item.category]?.priceMXN;
+    if (apiPrice !== undefined) return Math.round(apiPrice);
+    // fallback formula (uses suggestedPriceRange mid-point + multiplier)
+    if (suggestedPriceRange) {
+      const mid = (suggestedPriceRange.min + suggestedPriceRange.max) / 2;
+      const mult = (item.category === 'PREMIUM' || item.category === 'GROUP') ? 1.4
+        : item.category === 'COMFORT' ? 1.2 : 1.0;
+      return Math.round(mid * mult);
+    }
+    return undefined;
+  };
+
   return (
     <BottomSheet
       ref={sheetRef}
-      index={visible ? 0 : -1}
+      index={-1}
       snapPoints={['92%']}
       enablePanDownToClose
-      onClose={onClose}
       backgroundStyle={s.sheetBg}
-      handleComponent={null}
+      // GAP VISUAL 4: custom handle bar instead of null
+      handleComponent={() => (
+        <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.20)' }} />
+        </View>
+      )}
     >
       <ScrollView
         style={{ flex: 1 }}
@@ -236,11 +286,8 @@ export default function FareOfferSheet({
               <VehicleCard
                 item={item}
                 isSelected={vehicleType === item.id}
-                estimatedPrice={
-                  suggestedPriceRange
-                    ? Math.round(((((suggestedPriceRange.max - suggestedPriceRange.min)/2) + suggestedPriceRange.min) * (item.category === 'PREMIUM' || item.category === 'XL' ? 1.4 : item.category === 'COMFORT' ? 1.2 : 1)))
-                    : undefined
-                }
+                estimatedPrice={loadingQuotes ? undefined : getEstimatedPrice(item)}
+                loadingPrice={loadingQuotes}
                 onPress={() => setVehicleType(item.id)}
               />
             )}
@@ -254,12 +301,56 @@ export default function FareOfferSheet({
           />
         </View>
 
-        {/* ── SECCIÓN 4: Pago ── */}
-        <TouchableOpacity style={s.paymentRow} activeOpacity={0.75}>
+        {/* ── SECCIÓN 4: Pago (BUG 2 fix — onPress + picker inline) ── */}
+        <TouchableOpacity
+          style={s.paymentRow}
+          activeOpacity={0.75}
+          onPress={() => setShowPaymentPicker(v => !v)}
+        >
           <Ionicons name={paymentIcon} size={20} color="rgba(255,255,255,0.75)" />
           <Text style={s.paymentLabel}>{paymentLabel}</Text>
-          <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.40)" />
+          <Ionicons
+            name={showPaymentPicker ? 'chevron-up' : 'chevron-forward'}
+            size={16}
+            color="rgba(255,255,255,0.40)"
+          />
         </TouchableOpacity>
+
+        {showPaymentPicker && (
+          <View style={s.paymentOptions}>
+            {(['CASH', 'CARD', 'APPLE_PAY', 'WALLET'] as const).map(m => {
+              const icons: Record<string, keyof typeof Ionicons.glyphMap> = {
+                CASH: 'cash-outline', CARD: 'card-outline',
+                APPLE_PAY: 'logo-apple', WALLET: 'wallet-outline',
+              };
+              const labels: Record<string, string> = {
+                CASH: 'Efectivo', CARD: 'Tarjeta',
+                APPLE_PAY: 'Apple Pay', WALLET: 'Wallet',
+              };
+              const isActive = paymentMethod === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[s.paymentOption, isActive && s.paymentOptionActive]}
+                  onPress={() => {
+                    setPaymentMethod(m);
+                    setShowPaymentPicker(false);
+                  }}
+                >
+                  <Ionicons
+                    name={icons[m]}
+                    size={18}
+                    color={isActive ? '#F5C518' : 'rgba(255,255,255,0.60)'}
+                  />
+                  <Text style={[s.paymentOptionText, isActive && s.paymentOptionTextActive]}>
+                    {labels[m]}
+                  </Text>
+                  {isActive && <Ionicons name="checkmark" size={16} color="#F5C518" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* ── NUMPAD CUSTOM ── */}
         <View style={s.numpadContainer}>
@@ -285,7 +376,12 @@ export default function FareOfferSheet({
           <TouchableOpacity
             style={[s.ctaBtn, isValid ? s.ctaEnabled : s.ctaDisabled]}
             disabled={!isValid}
-            onPress={() => { onConfirm(currentPrice, vehicleType, paymentMethod); onClose(); }}
+            onPress={() => {
+              // BUG 1 fix: pass .category (e.g. 'ECONOMY') not the display name
+              const selectedVehicle = VEHICLE_TYPES.find(v => v.id === vehicleType);
+              onConfirm(currentPrice, selectedVehicle?.category ?? 'ECONOMY', paymentMethod);
+              onClose();
+            }}
             activeOpacity={0.88}
           >
             <Text style={[s.ctaText, isValid ? s.ctaTextEnabled : s.ctaTextDisabled]}>
@@ -296,8 +392,9 @@ export default function FareOfferSheet({
       </ScrollView>
     </BottomSheet>
   );
-}
+});
 
+export default FareOfferSheet;
 // ── Styles ──────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   sheetBg: { backgroundColor: 'rgba(13,5,32,0.97)', borderTopLeftRadius: 28, borderTopRightRadius: 28 },
@@ -306,7 +403,7 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginTop: 20,
+    marginTop: 8,
     paddingHorizontal: 20,
     marginBottom: 0,
   },
@@ -426,13 +523,13 @@ const s = StyleSheet.create({
   },
   vehicleImage: {
     width: '100%',
-    height: 70,
+    height: 65,
     resizeMode: 'contain',
   },
   vehicleName: {
     fontSize: 13,
     fontWeight: '700',
-    marginTop: 8,
+    marginTop: 6,
   },
   vehicleNameSel: {
     color: '#F5C518',
@@ -440,10 +537,15 @@ const s = StyleSheet.create({
   vehicleNameUnsel: {
     color: '#FFFFFF',
   },
-  vehiclePrice: {
-    fontSize: 12,
+  vehicleDescriptor: {
+    fontSize: 10,
     color: 'rgba(255,255,255,0.45)',
     marginTop: 2,
+  },
+  vehiclePrice: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.50)',
+    marginTop: 4,
   },
 
   // Payment row
@@ -465,6 +567,36 @@ const s = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     marginLeft: 12,
+  },
+  // Inline payment picker
+  paymentOptions: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  paymentOptionActive: {
+    backgroundColor: 'rgba(245,197,24,0.10)',
+  },
+  paymentOptionText: {
+    color: 'rgba(255,255,255,0.70)',
+    fontSize: 14,
+    flex: 1,
+  },
+  paymentOptionTextActive: {
+    color: '#F5C518',
   },
 
   // Numpad Custom
@@ -527,5 +659,5 @@ const s = StyleSheet.create({
   },
 });
 
-// Keep legacy style name alias so PassengerDashboard compile stays clean
+// Keep legacy alias so old imports compile cleanly
 const styles = s;

@@ -90,6 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             // Restaurar inmediatamente desde AsyncStorage para evitar flash de login
             const cachedUser = JSON.parse(userInfoStr);
             set({ user: cachedUser });
+            set({ isLoading: false }); // FIX 1: Desbloquea la UI de inmediato antes del API call
 
             try {
                 // Verificar token con el backend (silencioso, sin mostrar alert)

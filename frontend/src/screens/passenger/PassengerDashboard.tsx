@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +36,7 @@ import ChatSheet from '../../components/ChatSheet';
 import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
+import ActiveRidePanel from '../../components/ActiveRidePanel';
 import FareOfferSheet from './FareOfferSheet';
 import AddFavoriteSheet, {
   loadFavorites, saveFavorite, deleteFavorite,
@@ -272,27 +273,7 @@ const favStyles = StyleSheet.create({
   dist: { color: 'rgba(255,255,255,0.5)', fontSize: 11 },
 });
 
-// ── Payment Mini Chip ──────────────────────────────────────────────────────
-const PaymentMiniChip = memo(({ onPress }: { onPress?: () => void }) => {
-  return (
-    <TouchableOpacity style={paymentChipStyles.chip} activeOpacity={0.8} onPress={onPress}>
-      <Ionicons name="cash-outline" size={16} color="#C4B8E0" />
-      <Text style={paymentChipStyles.text}>Efectivo</Text>
-      <Ionicons name="chevron-down" size={14} color="#C4B8E0" />
-    </TouchableOpacity>
-  );
-});
 
-const paymentChipStyles = StyleSheet.create({
-  chip: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
-    marginTop: 12, gap: 6
-  },
-  text: { color: '#FFFFFF', fontSize: 13, fontWeight: '500' }
-});
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function PassengerDashboard() {
@@ -302,6 +283,7 @@ export default function PassengerDashboard() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const fareOfferSheetRef = useRef<any>(null); // Ref for FareOfferSheet
   const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
   const animatedIndex = useSharedValue(0);
   const [showLocating, setShowLocating] = useState(true);
@@ -1021,9 +1003,8 @@ export default function PassengerDashboard() {
         keyboardBehavior="interactive"
         enablePanDownToClose={false}
       >
-        <BottomSheetScrollView
-          contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
-          keyboardShouldPersistTaps="handled"
+        <BottomSheetView
+          style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}
         >
           {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) */}
           <View style={{ flex: currentSnapIndex < 2 ? undefined : 1 }}>
@@ -1056,9 +1037,11 @@ export default function PassengerDashboard() {
                   onSelect={(place) => {
                     setSelectedPlace(place);
                     saveToHistory(place);
-                    bottomSheetRef.current?.snapToIndex(0);
                     Keyboard.dismiss();
-                    setPriceSheetVisible(true);
+                    bottomSheetRef.current?.snapToIndex(0);
+                    setTimeout(() => {
+                      fareOfferSheetRef.current?.expand();
+                    }, 300);
                   }}
                   userLat={location?.coords.latitude}
                   userLng={location?.coords.longitude}
@@ -1073,9 +1056,11 @@ export default function PassengerDashboard() {
                         style={[styles.historyItem, idx < rideHistory.length - 1 && styles.historyItemBorder]}
                         onPress={() => {
                           setSelectedPlace(item);
-                          bottomSheetRef.current?.snapToIndex(0);
                           Keyboard.dismiss();
-                          setPriceSheetVisible(true);
+                          bottomSheetRef.current?.snapToIndex(0);
+                          setTimeout(() => {
+                            fareOfferSheetRef.current?.expand();
+                          }, 300);
                         }}
                         activeOpacity={0.7}
                       >
@@ -1104,14 +1089,15 @@ export default function PassengerDashboard() {
                     longitude: fav.longitude,
                   };
                   setSelectedPlace(place);
-                  bottomSheetRef.current?.snapToIndex(0);
                   Haptics.selectionAsync();
-                  setPriceSheetVisible(true);
+                  bottomSheetRef.current?.snapToIndex(0);
+                  setTimeout(() => {
+                    fareOfferSheetRef.current?.expand();
+                  }, 300);
                 }}
                 onAdd={() => setAddFavVisible(true)}
                 onDelete={handleDeleteFav}
               />
-              <PaymentMiniChip onPress={() => setPaymentSelectorVisible(true)} />
             </Animated.View>
 
             {/* Removed Selected Destination Details Card */}
@@ -1139,27 +1125,40 @@ export default function PassengerDashboard() {
             </View>
           )}
 
-          {/* Viaje Activo */}
-          {isActiveRide && (
-            <View style={{ marginTop: 16 }}>
-              <View style={styles.activeRideCard}>
-                <Text style={{ color: '#00CED1', fontWeight: 'bold' }}>{activeStatusLabel()}</Text>
-                <Text style={styles.activeDestText}>{selectedPlace?.displayName ?? 'Tu destino'}</Text>
-              </View>
-            </View>
-          )}
-        </BottomSheetScrollView>
+          {/* Viaje Activo — GAP VISUAL 7: usa ActiveRidePanel */}
+          {isActiveRide && (() => {
+            const ride = useRideFlowStore.getState().activeRidePayload;
+            const driver = ride?.acceptedBid?.driver;
+            return (
+              <ActiveRidePanel
+                status={rideStatus}
+                driverName={driver?.name}
+                driverPhotoUrl={driver?.avatarUrl}
+                driverRating={driver?.avgRating}
+                totalRatings={driver?.totalRatings}
+                vehicleMake={driver?.vehicle?.make}
+                vehicleModel={driver?.vehicle?.model}
+                vehiclePlate={driver?.vehicle?.licensePlate}
+                vehicleColor={driver?.vehicle?.color}
+                onChatPress={() => setChatVisible(true)}
+                onCallPress={() => {}}
+                onSosPress={() => {}}
+              />
+            );
+          })()}
+        </BottomSheetView>
       </BottomSheet>
 
       {/* Sheets & Modals */}
       <ChatSheet rideId={currentRideId} myUserId={user?._id} visible={chatVisible} onClose={() => setChatVisible(false)} />
       <RatingModal visible={!!completedRide} targetName="el conductor" onSubmit={handleRateDriver} onSkip={handleSkipRating} />
-      <FareOfferSheet 
-          visible={priceSheetVisible} 
-          onClose={() => setPriceSheetVisible(false)} 
+      {/* GAP VISUAL 5: pass API prices + loadingQuotes */}
+      <FareOfferSheet
+          ref={fareOfferSheetRef}
+          onClose={() => fareOfferSheetRef.current?.close()}
           onConfirm={(price, vehicle, payment) => {
              handleRequestRide(price, vehicle);
-          }} 
+          }}
           suggestedPriceRange={{
             min: Math.max(15, Math.floor(distanceKm * 8)),
             max: Math.max(25, Math.floor(distanceKm * 14))
@@ -1167,13 +1166,17 @@ export default function PassengerDashboard() {
           destAddress={selectedPlace?.displayName}
           distanceKm={distanceKm}
           estimatedTimeMin={estimatedTimeMin}
+          categoryOptions={categoryOptions}
+          loadingQuotes={loadingQuotes}
       />
+      {/* BUG 3: PaymentMethodSelector onSelect now calls setPaymentMethod */}
       {paymentSelectorVisible && (
         <PaymentMethodSelector
            visible={paymentSelectorVisible}
            onClose={() => setPaymentSelectorVisible(false)}
            onSelect={(method) => {
-             // To be implemented: set current payment method
+             useRideFlowStore.getState().setPaymentMethod(method);
+             setPaymentSelectorVisible(false);
            }}
         />
       )}

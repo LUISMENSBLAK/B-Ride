@@ -4,6 +4,8 @@ import { useSocketStore } from '../store/useSocketStore';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import eventManager from './EventManager';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 
 import { Platform } from 'react-native';
 
@@ -24,22 +26,83 @@ if (!process.env.EXPO_PUBLIC_SOCKET_URL) {
     );
 }
 
-// BUG 8: Ubicación conocida para re-emisión tras reconexiones (BUG 10)
+// BUG 8: Ubicación conocida para re-emisión tras reconexiones
 let _lastKnownDriverLocation: { lat: number; lng: number } | null = null;
+
+// ─── Helper: refresca el accessToken si ha expirado ─────────────────────────
+async function refreshTokenIfNeeded(): Promise<string | null> {
+  try {
+    const token = await AsyncStorage.getItem('userToken');
+    if (!token) return null;
+
+    // Decodificar payload del JWT sin verificar firma — compatible RN/Hermes
+    const parts = token.split('.');
+    if (parts.length !== 3) return token;
+    // Buffer está disponible en RN via react-native-get-random-values / Hermes
+    let payload: any = {};
+    try {
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      payload = JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
+    } catch {
+      return token; // Si no podemos decodificar, asumimos válido
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const isExpired = payload.exp && payload.exp < nowSec;
+
+    if (!isExpired) return token;
+
+    if (__DEV__) console.log('[Socket] accessToken expirado — intentando refresh...');
+
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      if (__DEV__) console.warn('[Socket] No hay refreshToken. Cerrando sesión.');
+      useAuthStore.getState().logout();
+      return null;
+    }
+
+    const baseURL = process.env.EXPO_PUBLIC_API_URL ||
+      (Platform.OS === 'android'
+        ? 'https://b-ride-production.up.railway.app/api'
+        : 'https://b-ride-production.up.railway.app/api');
+
+    const res = await axios.post(`${baseURL}/auth/refresh`, { token: refreshToken });
+    if (res.data?.success && res.data?.accessToken) {
+      const newAccess = res.data.accessToken;
+      const newRefresh = res.data.refreshToken;
+      await AsyncStorage.setItem('userToken', newAccess);
+      if (newRefresh) await AsyncStorage.setItem('refreshToken', newRefresh);
+      useAuthStore.getState().updateUser({
+        accessToken: newAccess,
+        ...(newRefresh && { refreshToken: newRefresh }),
+      });
+      if (__DEV__) console.log('[Socket] Token refrescado correctamente.');
+      return newAccess;
+    }
+
+    if (__DEV__) console.warn('[Socket] Refresh falló. Cerrando sesión.');
+    useAuthStore.getState().logout();
+    return null;
+  } catch (err) {
+    if (__DEV__) console.warn('[Socket] Error en refreshTokenIfNeeded:', err);
+    return null;
+  }
+}
 
 class SocketService {
   private socket: Socket | null = null;
   private currentRideId: string | null = null;
 
-  connect() {
+  async connect() {
     if (this.socket?.connected) {
         return;
     }
 
     const user = useAuthStore.getState().user;
-    const token = user?.accessToken; 
-    
-    if (!token) return;
+    if (!user) return;
+
+    // Refrescar token ANTES de crear el socket — evita `jwt expired`
+    const validToken = await refreshTokenIfNeeded();
+    if (!validToken) return; // logout ya fue llamado
 
     // BUG 8 FIX: Warning visible si la URL apunta a localhost/emulador en un entorno real
     if (SOCKET_URL.includes('localhost') || SOCKET_URL.includes('10.0.2.2')) {
@@ -52,10 +115,8 @@ class SocketService {
     }
 
     this.socket = io(SOCKET_URL, {
-      auth: (cb) => {
-         const currentUser = useAuthStore.getState().user;
-         cb({ token: currentUser?.accessToken });
-      },
+      auth: { token: validToken },
+      transports: ['websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -64,6 +125,11 @@ class SocketService {
     });
 
     eventManager.reconnectSocketBindings(this.socket);
+
+    this.socket.on('reconnect_attempt', () => {
+      useSocketStore.getState().setStatus('reconnecting');
+      useSocketStore.getState().incrementReconnectAttempts();
+    });
 
     this.socket.on('connect', () => {
       useSocketStore.getState().setStatus('connected');
@@ -99,14 +165,23 @@ class SocketService {
       console.warn('[Socket] Disconnected:', reason);
     });
 
-    this.socket.on('reconnect_attempt', () => {
-      useSocketStore.getState().setStatus('reconnecting');
-      useSocketStore.getState().incrementReconnectAttempts();
-    });
-
     this.socket.on('connect_error', (err) => {
       useSocketStore.getState().setStatus('disconnected');
-      console.error('[Socket] Connection error:', err);
+      console.warn('[Socket] Connection error:', err.message);
+      
+      const isAuthError = 
+        err.message.includes('Authentication') || 
+        err.message.includes('Invalid token') || 
+        err.message.includes('jwt');
+
+      if (isAuthError) {
+        // Matar el socket completamente. Sin reconectar aquí.
+        this.socket?.removeAllListeners();
+        this.socket?.disconnect();
+        this.socket = null;
+        // El usuario deberá hacer login de nuevo para reconectar
+        useAuthStore.getState().logout();
+      }
     });
   }
 
