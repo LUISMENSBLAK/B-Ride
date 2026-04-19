@@ -13,6 +13,7 @@ import { useTranslation } from '../hooks/useTranslation';
 import PhoneInput from '../components/PhoneInput';
 import { useGoogleAuth } from '../hooks/useGoogleAuth';
 import { useAppleAuth } from '../hooks/useAppleAuth';
+import auth from '@react-native-firebase/auth';
 
 export default function RegisterScreen({ navigation }: any) {
   const theme = useAppTheme();
@@ -26,6 +27,11 @@ export default function RegisterScreen({ navigation }: any) {
   const [loading, setLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [phoneConfirmation, setPhoneConfirmation] = useState<any>(null);
+  const [phoneOTP, setPhoneOTP] = useState('');
+  const [phoneStep, setPhoneStep] = useState<'input' | 'otp'>('input');
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const { t } = useTranslation();
 
   const register = useAuthStore(state => state.register);
@@ -105,6 +111,42 @@ export default function RegisterScreen({ navigation }: any) {
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
       Alert.alert('Error', err.message || 'No se pudo iniciar sesión con Apple');
+    }
+  };
+
+  const handleSendPhoneOTP = async () => {
+    if (!phoneNumber || phoneNumber.length < 8) {
+      Alert.alert('Error', 'Introduce un número con código de país. Ej: +521234567890');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const confirmation = await auth().signInWithPhoneNumber(phoneNumber);
+      setPhoneConfirmation(confirmation);
+      setPhoneStep('otp');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'No se pudo enviar el SMS. Verifica el número con código de país.');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOTP = async () => {
+    if (!phoneOTP || phoneOTP.length < 6) {
+      Alert.alert('Error', 'Introduce el código de 6 dígitos');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const userCredential = await phoneConfirmation.confirm(phoneOTP);
+      await auth().signOut().catch(() => {});
+      setPhoneVerified(true);
+      setPhoneStep('input');
+      Alert.alert('✅ Teléfono verificado', 'Tu número ha sido confirmado');
+    } catch (e: any) {
+      Alert.alert('Código incorrecto', 'El código SMS no es válido o expiró.');
+    } finally {
+      setPhoneLoading(false);
     }
   };
 
@@ -191,11 +233,104 @@ export default function RegisterScreen({ navigation }: any) {
               />
 
               {/* Phone Input with country selector */}
-              <PhoneInput
-                value={phoneNumber}
-                onChangePhone={setPhoneNumber}
-                placeholder={t('auth.phonePlaceholder', { defaultValue: 'Número de teléfono' })}
-              />
+              <View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <View style={{ flex: 1 }}>
+                    <PhoneInput
+                      value={phoneNumber}
+                      onChangePhone={(v) => {
+                        setPhoneNumber(v);
+                        setPhoneVerified(false);
+                        setPhoneStep('input');
+                        setPhoneOTP('');
+                      }}
+                      placeholder={t('auth.phonePlaceholder', { defaultValue: '+52 Número de teléfono' })}
+                      editable={phoneStep === 'input' && !phoneVerified}
+                    />
+                  </View>
+                  {!phoneVerified && phoneStep === 'input' && phoneNumber.length > 7 && (
+                    <TouchableOpacity
+                      onPress={handleSendPhoneOTP}
+                      disabled={phoneLoading}
+                      style={{
+                        backgroundColor: '#F5C518',
+                        borderRadius: 12,
+                        paddingHorizontal: 14,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        minWidth: 80,
+                      }}
+                    >
+                      {phoneLoading
+                        ? <ActivityIndicator size="small" color="#0D0520" />
+                        : <Text style={{ color: '#0D0520', fontWeight: '700', fontSize: 13 }}>Verificar</Text>
+                      }
+                    </TouchableOpacity>
+                  )}
+                  {phoneVerified && (
+                    <View style={{ justifyContent: 'center', paddingHorizontal: 12 }}>
+                      <Text style={{ color: '#22C55E', fontSize: 22 }}>✓</Text>
+                    </View>
+                  )}
+                </View>
+
+                {phoneStep === 'otp' && (
+                  <View style={{ marginTop: 10, gap: 8 }}>
+                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>
+                      Código enviado a {phoneNumber}
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput
+                        value={phoneOTP}
+                        onChangeText={setPhoneOTP}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        placeholder="• • • • • •"
+                        placeholderTextColor="rgba(255,255,255,0.2)"
+                        style={{
+                          flex: 1,
+                          backgroundColor: 'rgba(255,255,255,0.07)',
+                          borderRadius: 12,
+                          paddingHorizontal: 16,
+                          paddingVertical: 14,
+                          color: '#FFFFFF',
+                          fontSize: 22,
+                          letterSpacing: 8,
+                          textAlign: 'center',
+                          borderWidth: 1.5,
+                          borderColor: 'rgba(245,197,24,0.4)',
+                        }}
+                      />
+                      <TouchableOpacity
+                        onPress={handleVerifyPhoneOTP}
+                        disabled={phoneLoading || phoneOTP.length < 6}
+                        style={{
+                          backgroundColor: phoneOTP.length === 6 ? '#F5C518' : 'rgba(255,255,255,0.08)',
+                          borderRadius: 12,
+                          paddingHorizontal: 16,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          minWidth: 56,
+                        }}
+                      >
+                        {phoneLoading
+                          ? <ActivityIndicator size="small" color="#0D0520" />
+                          : <Text style={{
+                              color: phoneOTP.length === 6 ? '#0D0520' : 'rgba(255,255,255,0.3)',
+                              fontWeight: '700',
+                              fontSize: 15,
+                            }}>OK</Text>
+                        }
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity onPress={() => { setPhoneStep('input'); setPhoneOTP(''); setPhoneConfirmation(null); }}>
+                      <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 2 }}>
+                        ← Cambiar número
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
               <View style={{ height: 12 }} />
 
               <View style={styles.passwordContainer}>

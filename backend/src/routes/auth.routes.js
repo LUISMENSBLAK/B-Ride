@@ -56,4 +56,27 @@ router.put('/profile', protect, require('../controllers/auth.controller').update
 // Firebase Auth sync — llamado tras signIn exitoso en el frontend
 router.post('/firebase-sync', require('../middlewares/auth.middleware').protect, require('../controllers/auth.controller').firebaseSync);
 
+// Firebase Phone Verification — confirma número verificado vía Firebase Phone Auth
+router.post('/verify-phone-firebase',
+  require('../middlewares/auth.middleware').protect,
+  async (req, res) => {
+    try {
+      const { phoneNumber } = req.body;
+      if (!phoneNumber) {
+        return res.status(400).json({ success: false, message: 'phoneNumber requerido' });
+      }
+      const User = require('../models/User');
+      await User.findByIdAndUpdate(req.user._id, {
+        phoneNumber,
+        phoneVerified: true,
+        verificationOTP: undefined,
+        verificationOTPExpire: undefined,
+      });
+      res.json({ success: true, message: 'Teléfono verificado con Firebase' });
+    } catch (e) {
+      res.status(500).json({ success: false, message: e.message });
+    }
+  }
+);
+
 module.exports = router;

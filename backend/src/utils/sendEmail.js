@@ -16,6 +16,11 @@ const getEmailTemplate = (title, body) => `
 `;
 
 const sendEmail = async (options) => {
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('[Email] RESEND_API_KEY no configurada. Email no enviado a:', options.email);
+      if (options.code) console.log('[Email] OTP (dev fallback):', options.code);
+      return;
+    }
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     try {
