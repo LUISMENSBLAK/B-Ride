@@ -58,6 +58,9 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Server Healthcheck
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 // Auth routes stricter limit — 20 attempts / 15min
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

@@ -21,16 +21,19 @@ class PricingService {
           ECONOMY: 1.0,
           COMFORT: 1.35,
           PREMIUM: 1.80,
+          GROUP: 1.60,
         };
         this.CATEGORY_MIN_MXN = {
           ECONOMY: 45,
           COMFORT: 65,
           PREMIUM: 120,
+          GROUP: 90,
         };
         this.CATEGORY_LABELS = {
-          ECONOMY: { label: 'Viaje',   description: 'Económico · hasta 4 personas' },
-          COMFORT: { label: 'Confort', description: 'Autos más nuevos · comodidad extra' },
-          PREMIUM: { label: 'Premium', description: 'Vehículo de lujo · servicio VIP' },
+          ECONOMY: { label: 'Pop Ride', description: 'Económico · hasta 4 personas' },
+          COMFORT: { label: 'Flow Ride', description: 'Autos más nuevos · comodidad extra' },
+          PREMIUM: { label: 'Black Ride', description: 'Vehículo de lujo · servicio VIP' },
+          GROUP: { label: 'Big Ride', description: 'Van · hasta 7 personas' },
         };
 
         // Geopartitioning Truncation factor: `Math.floor(x * 50) / 50` ~= Grid de 2.22 km

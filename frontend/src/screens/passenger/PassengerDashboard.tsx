@@ -411,7 +411,7 @@ export default function PassengerDashboard() {
       return;
     }
 
-    if (!activeMapField) return;
+    if (!activeMapField || selectedPlace) return;
     mapCenterReverseGeocodeTimer.current = setTimeout(async () => {
       try {
         const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
@@ -1147,20 +1147,18 @@ export default function PassengerDashboard() {
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     if (activeMapField === 'pickup') {
-       setPickupLocation(place);
-       Keyboard.dismiss();
-       bottomSheetRef.current?.snapToIndex(0);
-       return;
+      setPickupLocation(place);
+      setActiveMapField(null);
+      Keyboard.dismiss();
+      bottomSheetRef.current?.snapToIndex(0);
+      return;
     }
-    
-    // Default handles Destination
     setSelectedPlace(place);
     saveToHistory(place);
+    setActiveMapField(null);
     Keyboard.dismiss();
     bottomSheetRef.current?.snapToIndex(0);
-    setTimeout(() => {
-      fareOfferSheetRef.current?.expand();
-    }, 300);
+    setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
   }, [saveToHistory, activeMapField]);
 
   const destinationCoord = React.useMemo(() => {
@@ -1276,7 +1274,7 @@ export default function PassengerDashboard() {
 
       {/* BUG-1 FIX: Pin full-screen absolute container — FUERA de ScrollView/BottomSheet.
            pointerEvents="none" garantiza que los toques pasen al mapa. */}
-      {mapSelectionMode !== 'none' && (
+      {(mapSelectionMode !== 'none' || showCenterPin) && (
         <View
           pointerEvents="none"
           style={{
@@ -1385,7 +1383,7 @@ export default function PassengerDashboard() {
         index={0}
         snapPoints={snapPoints}
         animatedIndex={animatedIndex}
-        onChange={(idx) => setCurrentSnapIndex(idx)}
+        onChange={(idx) => { setCurrentSnapIndex(idx); if (idx < 2) setActiveMapField(null); }}
         backgroundStyle={{ backgroundColor: 'rgba(13,5,32,0.92)' }}
         handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.20)', width: 36, height: 4 }}
         keyboardBehavior="interactive"
@@ -1534,11 +1532,12 @@ export default function PassengerDashboard() {
                   <TouchableOpacity
                     style={[styles.searchRightArrow, {backgroundColor: activeMapField === 'destination' && selectedPlace ? '#F5C518' : 'rgba(245,197,24,0.3)'}]}
                     onPress={() => {
-                        if (activeMapField === 'destination' && selectedPlace) {
-                            fareOfferSheetRef.current?.expand();
+                        if (selectedPlace) {
+                          bottomSheetRef.current?.snapToIndex(0);
+                          setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
                         } else {
-                            setActiveMapField('destination');
-                            bottomSheetRef.current?.snapToIndex(2);
+                          setActiveMapField('destination');
+                          bottomSheetRef.current?.snapToIndex(2);
                         }
                     }}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}

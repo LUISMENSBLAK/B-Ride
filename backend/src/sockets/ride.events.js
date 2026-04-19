@@ -160,13 +160,16 @@ const rideEvents = (socket) => {
             const passengerId = socket.userId;
             if (!passengerId) throw new Error('No autorizado');
 
+            const VALID_CATEGORIES = ['ECONOMY', 'COMFORT', 'PREMIUM', 'GROUP', 'STANDARD'];
+            const safeCategory = VALID_CATEGORIES.includes(vehicleCategory) ? vehicleCategory : 'ECONOMY';
+
             if (eventId && await idempotency.isDuplicate(eventId)) {
                 if(isAckRequired) ack({ success: true, status: 'duplicate_ignored' });
                 return;
             }
             const newRide = await rideService.createRideRequest(
                  passengerId, pickupLocation, dropoffLocation, proposedPrice, 
-                 { isScheduled, scheduledAt, promoCode, vehicleCategory }
+                 { isScheduled, scheduledAt, promoCode, vehicleCategory: safeCategory }
             );
 
 

@@ -2,6 +2,14 @@ const express = require('express');
 const { getMyRides } = require('../controllers/ride.controller');
 const { protect } = require('../middlewares/auth.middleware');
 const pricingService = require('../services/pricing.service');
+const rateLimit = require('express-rate-limit');
+
+const quoteLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => req.user?._id?.toString() || req.ip,
+  message: { success: false, message: 'Demasiadas solicitudes de cotización. Espera un momento.' }
+});
 
 const router = express.Router();
 
@@ -62,7 +70,7 @@ router.get('/estimate', protect, async (req, res) => {
 });
 
 // Cotización por categoría — llamada antes de solicitar el viaje
-router.get('/quote', protect, async (req, res) => {
+router.get('/quote', protect, quoteLimiter, async (req, res) => {
   try {
     const { originLat, originLng, destLat, destLng } = req.query;
     if (!originLat || !originLng || !destLat || !destLng) {

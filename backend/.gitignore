@@ -1,0 +1,5 @@
+public/uploads/*.heic
+public/uploads/*.jpg
+public/uploads/*.png
+public/uploads/*.jpeg
+!public/uploads/.gitkeep

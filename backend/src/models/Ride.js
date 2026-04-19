@@ -58,7 +58,7 @@ const rideSchema = new mongoose.Schema(
         },
         vehicleCategory: {
           type: String,
-          enum: ['ECONOMY', 'STANDARD', 'COMFORT', 'PREMIUM'],
+          enum: ['ECONOMY', 'STANDARD', 'COMFORT', 'PREMIUM', 'GROUP'],
           default: 'ECONOMY',
         },
         
@@ -125,7 +125,13 @@ rideSchema.index({ driver: 1, status: 1 });
 rideSchema.index({ status: 1, createdAt: -1 });
 rideSchema.index({ paymentStatus: 1 });
 
-// TTL Expiration: Elimina viajes abandonados automáticamente pasadas 3 horas
-rideSchema.index({ createdAt: 1 }, { expireAfterSeconds: 10800 });
+// TTL Expiration: Elimina viajes abandonados automáticamente
+rideSchema.index(
+  { createdAt: 1 },
+  {
+    expireAfterSeconds: 21600,
+    partialFilterExpression: { status: { $in: ['REQUESTED', 'CANCELLED'] } }
+  }
+);
 
 module.exports = mongoose.model('Ride', rideSchema);

@@ -39,14 +39,19 @@ class MatchingService {
         requestCooldowns.set(passengerId.toString(), Date.now());
     }
 
-    async findAndRankDrivers(latitude, longitude, radiusKm = 5, maxResults = 10) {
+    async findAndRankDrivers(latitude, longitude, radiusKm = 5, maxResults = 10, vehicleCategory = null) {
         const radiusMeters = radiusKm * 1000;
+
+        const categoryFilter = vehicleCategory
+            ? { 'vehicle.category': vehicleCategory }
+            : {};
 
         const drivers = await User.find({
             role: 'DRIVER',
             driverStatus: 'AVAILABLE',
             approvalStatus: 'APPROVED',
             isBlocked: { $ne: true },
+            ...categoryFilter,
             lastKnownLocation: {
                 $nearSphere: {
                     $geometry: {
@@ -82,14 +87,14 @@ class MatchingService {
         return ranked.slice(0, maxResults);
     }
 
-    async findWithFallback(latitude, longitude) {
-        let results = await this.findAndRankDrivers(latitude, longitude, 5);
+    async findWithFallback(latitude, longitude, vehicleCategory = null) {
+        let results = await this.findAndRankDrivers(latitude, longitude, 5, 10, vehicleCategory);
         if (results.length > 0) return { drivers: results, expandedRadius: false, radius: 5 };
 
-        results = await this.findAndRankDrivers(latitude, longitude, 10);
+        results = await this.findAndRankDrivers(latitude, longitude, 10, 10, vehicleCategory);
         if (results.length > 0) return { drivers: results, expandedRadius: true, radius: 10 };
 
-        results = await this.findAndRankDrivers(latitude, longitude, 20);
+        results = await this.findAndRankDrivers(latitude, longitude, 20, 10, vehicleCategory);
         return { drivers: results, expandedRadius: true, radius: 20, noDrivers: results.length === 0 };
     }
 
@@ -111,7 +116,7 @@ class MatchingService {
             const lng = coords[0];
             const lat = coords[1];
 
-            const { drivers, noDrivers } = await this.findWithFallback(lat, lng);
+            const { drivers, noDrivers } = await this.findWithFallback(lat, lng, rideObj.vehicleCategory);
 
             if (noDrivers || !drivers || drivers.length === 0) {
                 io.to(rideObj.passenger.toString()).emit('no_drivers_available', {

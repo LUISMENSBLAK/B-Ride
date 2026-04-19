@@ -151,6 +151,16 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const paymentMethod = useRideFlowStore(s => s.paymentMethod);
   const setPaymentMethod = useRideFlowStore(s => s.setPaymentMethod);
 
+  useEffect(() => {
+    if (!categoryOptions) return;
+    const selectedVehicle = VEHICLE_TYPES.find(v => v.id === vehicleType);
+    const category = selectedVehicle?.category ?? 'ECONOMY';
+    const opt = categoryOptions[category];
+    if (opt?.priceMXN && opt.priceMXN > 0) {
+      setPriceStr(Math.round(opt.priceMXN).toString());
+    }
+  }, [vehicleType, categoryOptions]);
+
   // BUG 2: payment picker state
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
 
@@ -171,7 +181,10 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   // ── CTA spring al habilitarse ──
   const ctaScale = useSharedValue(1);
   const currentPrice = parseFloat(priceStr || '0');
-  const isValid = currentPrice > 0;
+  const selectedVehicleCat = VEHICLE_TYPES.find(v => v.id === vehicleType)?.category ?? 'ECONOMY';
+  const minPrice = categoryOptions?.[selectedVehicleCat]?.minFareMXN ?? 45;
+  const isUnderMin = currentPrice > 0 && currentPrice < minPrice;
+  const isValid = currentPrice >= minPrice;
   useEffect(() => {
     if (isValid) {
       ctaScale.value = withSequence(
@@ -190,7 +203,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       setShowPaymentPicker(false);
       setTimeout(() => {
         sheetRef.current?.snapToIndex(0);
-      }, 80);
+      }, 200);
     },
     close: () => {
       sheetRef.current?.close();
@@ -347,10 +360,17 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
           <View style={s.priceRow}>
             <Text style={s.currencyPrefix}>MX$</Text>
             <Text style={s.priceNumber}>{priceStr || ''}</Text>
-            <Animated.View style={[s.cursor, cursorStyle]} />
+            {priceStr.length === 0 || priceStr.length < 4 ? (
+              <Animated.View style={[s.cursor, cursorStyle]} />
+            ) : null}
           </View>
           <View style={s.priceDivider} />
           <Text style={s.priceSuggLabel}>Precio sugerido: MX${suggestedPriceRange?.min ?? 0} – MX${suggestedPriceRange?.max ?? 0}</Text>
+          {isUnderMin && (
+            <Text style={{ color: '#FF5722', fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+              Mínimo MX${minPrice} — sube la oferta para atraer conductores
+            </Text>
+          )}
         </View>
 
         {/* ── SECCIÓN 3: Tipo de vehículo ── */}
@@ -397,14 +417,28 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
         </TouchableOpacity>
 
         {showPaymentPicker && (
-          <PaymentMethodSelector
-            visible={showPaymentPicker}
-            onClose={() => setShowPaymentPicker(false)}
-            onSelect={(method) => {
-              useRideFlowStore.getState().setPaymentMethod(method);
-              setShowPaymentPicker(false);
-            }}
-          />
+          <View style={s.paymentOptions}>
+            {(['CASH', 'CARD', 'APPLE_PAY', 'WALLET'] as const).map(method => (
+              <TouchableOpacity
+                key={method}
+                style={[s.paymentOption, paymentMethod === method && s.paymentOptionActive]}
+                onPress={() => {
+                  useRideFlowStore.getState().setPaymentMethod(method);
+                  setShowPaymentPicker(false);
+                }}
+              >
+                <Ionicons
+                  name={PAYMENT_ICONS[method]}
+                  size={18}
+                  color={paymentMethod === method ? '#F5C518' : 'rgba(255,255,255,0.6)'}
+                />
+                <Text style={[s.paymentOptionText, paymentMethod === method && s.paymentOptionTextActive]}>
+                  {PAYMENT_LABELS[method]}
+                </Text>
+                {paymentMethod === method && <Ionicons name="checkmark" size={16} color="#F5C518" />}
+              </TouchableOpacity>
+            ))}
+          </View>
         )}
 
         {/* ── NUMPAD CUSTOM ── */}
@@ -440,7 +474,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             activeOpacity={0.88}
           >
             <Text style={[s.ctaText, isValid ? s.ctaTextEnabled : s.ctaTextDisabled]}>
-              {isValid ? `Solicitar · MX$${priceStr}` : 'Ingresa un precio'}
+              {isValid ? `Solicitar · MX$${priceStr}` : `Mínimo MX$${minPrice}`}
             </Text>
           </TouchableOpacity>
         </Animated.View>

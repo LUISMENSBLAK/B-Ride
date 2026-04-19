@@ -10,5 +10,25 @@ services:
       - mongodb_data:/data/db
     restart: unless-stopped
 
+  backend:
+    build: backend/
+    container_name: backend_bride
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+    env_file:
+      - ./backend/.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - mongodb
+
 volumes:
   mongodb_data:

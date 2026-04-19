@@ -207,7 +207,7 @@ class SocketService {
         // Error de autenticación → refrescar token o hacer logout
         if (isAuthError) {
           this.authErrorCount++;
-          if (this.authErrorCount >= 2) {
+          if (this.authErrorCount >= 5) {
             console.log('[Socket] Token inválido definitivamente. Cerrando sesión.');
             this.authErrorCount = 0;
             this.socket?.removeAllListeners();
