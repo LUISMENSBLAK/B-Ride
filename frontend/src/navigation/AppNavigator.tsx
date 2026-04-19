@@ -270,7 +270,10 @@ export default function AppNavigator() {
         // AppState: cuando la app vuelve a primer plano → intentar reconectar
         const handleAppStateChange = (nextState: AppStateStatus) => {
             if (nextState === 'active') {
-                socketService.connect();
+                const sock = socketService.getSocket();
+                if (!sock?.connected) {
+                    socketService.connect();
+                }
             }
         };
         const appStateSub = AppState.addEventListener('change', handleAppStateChange);

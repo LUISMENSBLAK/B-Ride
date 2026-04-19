@@ -542,8 +542,7 @@ export default function PassengerDashboard() {
   const [distanceKm, setDistanceKm] = useState<number>(0);
   const [estimatedTimeMin, setEstimatedTimeMin] = useState<number>(0);
 
-  // PriceInputSheet states
-  const [priceSheetVisible, setPriceSheetVisible] = useState(false);
+  // Price sheet states (only category options, removed orphan visible state)
   const [categoryOptions, setCategoryOptions] = useState<any>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
 
@@ -1711,6 +1710,11 @@ export default function PassengerDashboard() {
           categoryOptions={categoryOptions}
           loadingQuotes={loadingQuotes}
           originAddress={pickupOverride?.address ?? pickupLocation?.displayName ?? 'Mi ubicación actual'}
+          onEditOrigin={() => {
+            fareOfferSheetRef.current?.close();
+            setRouteEditorInitialField('origin');
+            setTimeout(() => setRouteEditorVisible(true), 350);
+          }}
           onEditDest={() => {
             fareOfferSheetRef.current?.close();
             setSelectedPlace(null);

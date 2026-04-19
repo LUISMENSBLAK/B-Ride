@@ -125,14 +125,15 @@ class SocketService {
 
       this.socket = io(SOCKET_URL, {
         auth: { token: validToken },
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 2000,
+        reconnectionAttempts: 20,
+        reconnectionDelay: 1000,
         reconnectionDelayMax: 30000,
         timeout: 20000,
         secure: true,
         rejectUnauthorized: false,
+        forceNew: false,
       });
 
       eventManager.reconnectSocketBindings(this.socket);
@@ -261,7 +262,10 @@ class SocketService {
     const securedPayload = { ...payload, eventId: payload.eventId || uuidv4() };
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-       try {
+        if (!this.socket?.connected) {
+            throw new Error('Socket desconectado durante reintento');
+        }
+        try {
            const response = await this.socket.timeout(timeoutMs).emitWithAck(eventName, securedPayload);
            
            if (response && response.success === false) {

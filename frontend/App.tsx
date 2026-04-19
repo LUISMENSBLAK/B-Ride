@@ -14,6 +14,7 @@ import { useSettings } from './src/hooks/useSettings';
 // Silenciar warnings de WebSocket en desarrollo (ruido de reconexión cuando el backend local no está corriendo)
 if (__DEV__) {
   LogBox.ignoreLogs([
+    'Require cycle:',
     '[Socket] Connection error',
     'websocket error',
     'WebSocket connection',

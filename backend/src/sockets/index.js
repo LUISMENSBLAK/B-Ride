@@ -39,7 +39,7 @@ module.exports = {
     init: (httpServer) => {
         io = require('socket.io')(httpServer, {
             pingInterval: 25000,
-            pingTimeout: 60000, // FIX-2: aumentado de 20s a 60s para tolerancia en cambios WiFi → datos
+            pingTimeout: 20000, // Reduced from 60s to 20s as requested
             upgradeTimeout: 10000,
             maxHttpBufferSize: 1e6,
             cors: {

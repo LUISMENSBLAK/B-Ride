@@ -82,6 +82,7 @@ interface FareOfferSheetProps {
   // Route editing
   originAddress?: string;
   onEditDest?: () => void;
+  onEditOrigin?: () => void;
 }
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
@@ -139,7 +140,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const {
     onConfirm, onClose, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin,
     categoryOptions, loadingQuotes,
-    originAddress, onEditDest,
+    originAddress, onEditDest, onEditOrigin,
   } = props;
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
@@ -291,6 +292,20 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
               <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginTop: 1 }}
                 numberOfLines={1}>{originAddress ?? 'Mi ubicación actual'}</Text>
             </View>
+            {onEditOrigin && (
+              <TouchableOpacity
+                onPress={onEditOrigin}
+                style={{
+                  paddingHorizontal: 10, paddingVertical: 6,
+                  backgroundColor: 'rgba(61,142,240,0.10)',
+                  borderRadius: 8, borderWidth: 1,
+                  borderColor: 'rgba(61,142,240,0.25)',
+                }}>
+                <Text style={{ 
+                  color: '#3D8EF0', fontSize: 11, fontWeight: '700' 
+                }}>Cambiar</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Conector */}
