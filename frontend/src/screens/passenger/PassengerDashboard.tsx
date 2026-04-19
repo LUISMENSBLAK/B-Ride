@@ -38,6 +38,7 @@ import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
 import ActiveRidePanel from '../../components/ActiveRidePanel';
 import FareOfferSheet from './FareOfferSheet';
+import RouteEditorSheet from './RouteEditorSheet';
 import AddFavoriteSheet, {
   loadFavorites, saveFavorite, deleteFavorite,
   type Favorite,
@@ -279,6 +280,35 @@ const favStyles = StyleSheet.create({
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function PassengerDashboard() {
   const { user } = useAuthStore();
+  
+  // Trip state centralizado
+  const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
+  const activeRidePayload = useRideFlowStore(s => s.activeRidePayload);
+  
+  const isSearching = rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING';
+  const isActiveRide = rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED';
+  const isIdle = rideStatus === 'IDLE';
+
+  // ── Ride history (AsyncStorage 'ride_history') ──
+  const [rideHistory, setRideHistory] = useState<PlaceResult[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem('ride_history').then(raw => {
+      if (raw) {
+        try { setRideHistory(JSON.parse(raw).slice(0, 3)); } catch {}
+      }
+    });
+  }, []);
+
+  const saveToHistory = useCallback(async (place: PlaceResult) => {
+    try {
+      const raw = await AsyncStorage.getItem('ride_history');
+      const prev: PlaceResult[] = raw ? JSON.parse(raw) : [];
+      const filtered = prev.filter(p => p.placeId !== place.placeId);
+      const updated = [place, ...filtered].slice(0, 3);
+      await AsyncStorage.setItem('ride_history', JSON.stringify(updated));
+      setRideHistory(updated);
+    } catch {}
+  }, []);
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets(); // used by top banner and buttons
   const socketStatus = useSocketStore(s => s.status);
@@ -304,7 +334,7 @@ export default function PassengerDashboard() {
     placeId: 'default_pickup'
   });
   const [isMapDragging, setIsMapDragging] = useState(false);
-  const mapCenterReverseGeocodeTimer = useRef<NodeJS.Timeout | null>(null);
+  const mapCenterReverseGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── MAP SELECTION MODE ("Fijar en mapa") ──────────────────────────────────
   type MapSelectionMode = 'none' | 'pickup' | 'destination';
@@ -312,6 +342,15 @@ export default function PassengerDashboard() {
   const [pendingCoordinate, setPendingCoordinate] = useState<{ latitude: number; longitude: number } | null>(null);
   const [pendingAddress, setPendingAddress] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
+  // Custom pickup override (set via map, used instead of GPS in ride request)
+  const [pickupOverride, setPickupOverride] = useState<{ latitude: number; longitude: number; address: string } | null>(null);
+  // Whether we entered map-pickup mode from FareOfferSheet (so we can return to it)
+  const [isEditingOriginFromSheet, setIsEditingOriginFromSheet] = useState(false);
+
+  // REDISEÑO 3: Pickup Banner
+  const [showPickupBanner, setShowPickupBanner] = useState(false);
+  const pickupBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapSelectionGeocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize pickupLocation when GPS is found
   useEffect(() => {
@@ -324,32 +363,51 @@ export default function PassengerDashboard() {
     }
   }, [location]);
 
+  const enterMapSelectionMode = useCallback((mode: 'pickup' | 'destination') => {
+    setActiveMapField(null);
+    Keyboard.dismiss();
+    setMapSelectionMode(mode);
+    setPendingCoordinate(null);
+    setPendingAddress('');
+    bottomSheetRef.current?.snapToIndex(0);
+  }, []);
+
   const handleRegionChange = useCallback(() => {
     setIsMapDragging(true);
     if (mapCenterReverseGeocodeTimer.current) {
       clearTimeout(mapCenterReverseGeocodeTimer.current);
     }
     if (mapSelectionMode !== 'none') setIsDragging(true);
-  }, [mapSelectionMode]);
+
+    // Mostrar banner solo en IDLE sin modo de selección activo y en el snap 0
+    if (isIdle && mapSelectionMode === 'none' && currentSnapIndex === 0) {
+      setShowPickupBanner(true);
+      if (pickupBannerTimer.current) clearTimeout(pickupBannerTimer.current);
+      pickupBannerTimer.current = setTimeout(() => setShowPickupBanner(false), 4000);
+    }
+  }, [mapSelectionMode, isIdle, currentSnapIndex]);
 
   const handleRegionChangeComplete = useCallback(async (region: any) => {
     setIsMapDragging(false);
     setIsDragging(false);
 
-    // ── Map-selection mode: capture pending coord + reverse geocode ──
+    // ── Map-selection mode: capture pending coord + debounce reverse geocode ──
     if (mapSelectionMode !== 'none') {
       setPendingCoordinate({ latitude: region.latitude, longitude: region.longitude });
       setPendingAddress('');
-      try {
-        const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
-        if (res && res.length > 0) {
-          const r = res[0];
-          const addr = r.street
-            ? `${r.street}${r.streetNumber ? ' ' + r.streetNumber : ''}, ${r.city || ''}`.trim()
-            : (r.name || 'Ubicación seleccionada');
-          setPendingAddress(addr);
-        }
-      } catch { setPendingAddress('Ubicación en el mapa'); }
+      if (mapSelectionGeocodeTimer.current) clearTimeout(mapSelectionGeocodeTimer.current);
+      mapSelectionGeocodeTimer.current = setTimeout(async () => {
+        try {
+          const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
+          if (res && res.length > 0) {
+            const r = res[0];
+            const addr = r.street
+              ? `${r.street}${r.streetNumber ? ' ' + r.streetNumber : ''}, ${r.city || ''}`.trim()
+              : (r.name || 'Ubicación seleccionada');
+            setPendingAddress(addr);
+          }
+        } catch { setPendingAddress('Ubicación en el mapa'); }
+      }, 600);
       return;
     }
 
@@ -405,9 +463,25 @@ export default function PassengerDashboard() {
     };
     if (mapSelectionMode === 'pickup') {
       setPickupLocation(place);
-      setPendingCoordinate(null);
-      setPendingAddress('');
-      setMapSelectionMode('destination');
+      setPickupOverride({
+        latitude: pendingCoordinate.latitude,
+        longitude: pendingCoordinate.longitude,
+        address: pendingAddress || 'Ubicación en el mapa',
+      });
+      
+      if (isEditingOriginFromSheet) {
+        // Volver al FareOfferSheet con el nuevo origen
+        setIsEditingOriginFromSheet(false);
+        setMapSelectionMode('none');
+        setPendingCoordinate(null);
+        setPendingAddress('');
+        bottomSheetRef.current?.snapToIndex(0);
+        setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+      } else {
+        setPendingCoordinate(null);
+        setPendingAddress('');
+        setMapSelectionMode('none');
+      }
     } else {
       setSelectedPlace(place);
       saveToHistory(place);
@@ -417,7 +491,7 @@ export default function PassengerDashboard() {
       bottomSheetRef.current?.snapToIndex(0);
       setTimeout(() => fareOfferSheetRef.current?.expand(), 300);
     }
-  }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory]);
+  }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory, isEditingOriginFromSheet]);
 
   const searchGlowAnim = useSharedValue(0);
   useEffect(() => {
@@ -443,26 +517,7 @@ export default function PassengerDashboard() {
   // Search modal state
   const [searchModalVisible, setSearchModalVisible] = useState(false);
 
-  // ── Ride history (AsyncStorage 'ride_history') ──
-  const [rideHistory, setRideHistory] = useState<PlaceResult[]>([]);
-  useEffect(() => {
-    AsyncStorage.getItem('ride_history').then(raw => {
-      if (raw) {
-        try { setRideHistory(JSON.parse(raw).slice(0, 3)); } catch {}
-      }
-    });
-  }, []);
 
-  const saveToHistory = useCallback(async (place: PlaceResult) => {
-    try {
-      const raw = await AsyncStorage.getItem('ride_history');
-      const prev: PlaceResult[] = raw ? JSON.parse(raw) : [];
-      const filtered = prev.filter(p => p.placeId !== place.placeId);
-      const updated = [place, ...filtered].slice(0, 3);
-      await AsyncStorage.setItem('ride_history', JSON.stringify(updated));
-      setRideHistory(updated);
-    } catch {}
-  }, []);
 
   // ── User favorites (AsyncStorage 'user_favorites') ──
   const [favorites, setFavorites] = useState<Favorite[]>([]);
@@ -476,10 +531,7 @@ export default function PassengerDashboard() {
     setFavorites(updated);
   }, []);
 
-  // Trip state centralizado
-  const { status: rideStatus, setStatus: setRideStatus, rideId: currentRideId, setRideContext, bids, receiveBid, resetFlow, setActiveRide, paymentMethod } = useRideFlowStore();
-  // FIX-7A: suscripción reactiva a activeRidePayload (getState() no re-renderiza)
-  const activeRidePayload = useRideFlowStore(s => s.activeRidePayload);
+
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [price, setPrice] = useState('');
   const [completedRide, setCompletedRide] = useState<RideData | null>(null);
@@ -494,6 +546,10 @@ export default function PassengerDashboard() {
   const [priceSheetVisible, setPriceSheetVisible] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<any>(null);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
+
+  // Route editor modal
+  const [routeEditorVisible, setRouteEditorVisible] = useState(false);
+  const [routeEditorInitialField, setRouteEditorInitialField] = useState<'origin' | 'dest'>('dest');
 
   // Promos y agendado
   const [promoCode, setPromoCode] = useState('');
@@ -692,12 +748,20 @@ export default function PassengerDashboard() {
     return () => clearTimeout(timeout);
   }, [rideStatus]);
 
-  // FIX-10: limpiar el timer de reverseGeocode al desmontar el componente
+  // FIX-10: limpiar timers de geocode y banner al desmontar el componente
   useEffect(() => {
     return () => {
       if (mapCenterReverseGeocodeTimer.current) {
         clearTimeout(mapCenterReverseGeocodeTimer.current);
         mapCenterReverseGeocodeTimer.current = null;
+      }
+      if (mapSelectionGeocodeTimer.current) {
+        clearTimeout(mapSelectionGeocodeTimer.current);
+        mapSelectionGeocodeTimer.current = null;
+      }
+      if (pickupBannerTimer.current) {
+        clearTimeout(pickupBannerTimer.current);
+        pickupBannerTimer.current = null;
       }
     };
   }, []);
@@ -764,6 +828,10 @@ export default function PassengerDashboard() {
         setPrice('');
         setAcceptingBidId(null);
         setSelectedPlace(null);
+        setShowPickupBanner(false);
+        setMapSelectionMode('none');
+        setPendingCoordinate(null);
+        setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0); // BUG 6: Manual snap on finish
         navigation.navigate('PassengerPayment', {
           price: finalPrice,
@@ -776,6 +844,10 @@ export default function PassengerDashboard() {
         setPrice('');
         setAcceptingBidId(null);
         setSelectedPlace(null);
+        setShowPickupBanner(false);
+        setMapSelectionMode('none');
+        setPendingCoordinate(null);
+        setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(1);
         Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
       }
@@ -819,6 +891,10 @@ export default function PassengerDashboard() {
     setSelectedPlace(null);
     setDistanceKm(0);
     setEstimatedTimeMin(0);
+    setShowPickupBanner(false);
+    setMapSelectionMode('none');
+    setPendingCoordinate(null);
+    setPendingAddress('');
     socketService.setRideRoom(null);
     bottomSheetRef.current?.snapToIndex(1);
     Alert.alert(t('passenger.rideCancel'), t('passenger.rideCancelMsg'));
@@ -858,10 +934,10 @@ export default function PassengerDashboard() {
       await socketService.emitWithAck('requestRide', {
         passengerId: user?._id,
         pickupLocation: {
-          // FIX-8: usar el pickupLocation seleccionado por el usuario en lugar de GPS crudo
-          latitude: pickupLocation.latitude ?? location.coords.latitude,
-          longitude: pickupLocation.longitude ?? location.coords.longitude,
-          address: pickupLocation.displayName || 'Mi Ubicación Actual',
+          // Usar pickupOverride si el usuario lo selecionó en el mapa, si no, el GPS crudo
+          latitude: pickupOverride?.latitude ?? pickupLocation.latitude ?? location.coords.latitude,
+          longitude: pickupOverride?.longitude ?? pickupLocation.longitude ?? location.coords.longitude,
+          address: pickupOverride?.address ?? pickupLocation.displayName ?? 'Mi Ubicación Actual',
         },
         dropoffLocation: {
           latitude: selectedPlace.latitude,
@@ -957,6 +1033,10 @@ export default function PassengerDashboard() {
     setEstimatedTimeMin(0);
     setPromoCode('');
     setPromoDiscount(null);
+    setShowPickupBanner(false);
+    setMapSelectionMode('none');
+    setPendingCoordinate(null);
+    setPendingAddress('');
     bottomSheetRef.current?.snapToIndex(1);
   }, [user]);
 
@@ -969,7 +1049,7 @@ export default function PassengerDashboard() {
         setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
         showToast(t('passenger.promoAppliedMsg'), 'success');
       } else {
-        setPrice(convertToUsd(res.data.price));
+        setPrice(String(convertToUsd(res.data.price)));
       }
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
@@ -1033,11 +1113,7 @@ export default function PassengerDashboard() {
 
   const handleSkipRating = useCallback(() => setCompletedRide(null), []);
 
-  const isSearching =
-    rideStatus === 'REQUESTING' || rideStatus === 'REQUESTED' || rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING';
-  const isActiveRide =
-    rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS' || rideStatus === 'ACTIVE' || rideStatus === 'MAPPED';
-  const isIdle = rideStatus === 'IDLE';
+
 
   const bestBidId = bids.length > 0 ? bids[0]._id : null;
 
@@ -1057,6 +1133,18 @@ export default function PassengerDashboard() {
     const scale = interpolate(animatedIndex.value, [0, 1, 2], [1, 1, 0.96], Extrapolation.CLAMP);
     return { transform: [{ scale }] };
   });
+
+  const favoritesAnimatedStyle = useAnimatedStyle(() => {
+    const display = isSearching || isActiveRide || currentSnapIndex === 2 ? 'none' : 'flex';
+    const opacity = interpolate(animatedIndex.value, [0, 1, 2], [0, 1, 0], Extrapolation.CLAMP);
+    const height = animatedIndex.value < 1 ? 0 : 'auto';
+    return { opacity, height, display };
+  });
+
+  const confirmBtnScale = useSharedValue(1);
+  const confirmBtnAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: confirmBtnScale.value }]
+  }));
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
     if (activeMapField === 'pickup') {
@@ -1209,86 +1297,90 @@ export default function PassengerDashboard() {
         </View>
       )}
 
-      {/* Instruction banner — needs pointer events (cancel button), separate from pin container */}
+      {/* FIX 2 — BANNER SUPERIOR */}
       {mapSelectionMode !== 'none' && (
-        <View
+        <Animated.View
+          entering={FadeIn.duration(300)}
           style={{
             position: 'absolute',
             top: insets.top + 70,
-            left: 16,
-            right: 16,
+            alignSelf: 'center',
             flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: 'rgba(13,5,32,0.85)',
-            borderRadius: 20,
-            paddingHorizontal: 20,
+            gap: 8,
+            backgroundColor: 'rgba(13,5,32,0.82)',
+            borderRadius: 999,
+            paddingHorizontal: 16,
             paddingVertical: 10,
             borderWidth: 1,
             borderColor: 'rgba(245,197,24,0.30)',
-            zIndex: 70,
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.35,
-            shadowRadius: 12,
-            elevation: 8,
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            zIndex: 70,
           }}
-          pointerEvents="box-none"
+          pointerEvents="none"
         >
-          <Text style={{ flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
-            {mapSelectionMode === 'pickup'
-              ? t('passenger.mapPickupInstruction')
-              : t('passenger.mapDestInstruction')}
+          <Ionicons name="navigate-circle-outline" size={16} color="#F5C518" />
+          <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600' }}>
+            Mueve el mapa para ajustar
           </Text>
-          <TouchableOpacity
-            onPress={() => {
-              setMapSelectionMode('none');
-              setPendingCoordinate(null);
-              setPendingAddress('');
-            }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Ionicons name="close" size={18} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
-
-      {/* BUG-2 FIX: botón flotante "Fijar en mapa" — position absolute, encima del sheet */}
-      {isIdle && !isActiveRide && !isSearching && mapSelectionMode === 'none' && (
+      {showPickupBanner && rideStatus === 'IDLE' && mapSelectionMode === 'none' && (
         <Animated.View 
-          entering={ZoomIn.duration(300)} 
-          exiting={ZoomOut.duration(150)}
-          style={{ position: 'absolute', bottom: insets.bottom + 180, alignSelf: 'center', zIndex: 56 }}
+          entering={FadeIn.duration(300)} 
+          exiting={FadeOut.duration(300)}
+          style={{
+            position: 'absolute',
+            bottom: 120, // encima del bottom sheet
+            left: 20, right: 20,
+            backgroundColor: 'rgba(13,5,32,0.92)',
+            borderRadius: 18,
+            borderWidth: 1,
+            borderColor: 'rgba(245,197,24,0.30)',
+            padding: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            shadowColor: '#000',
+            shadowOpacity: 0.3,
+            shadowRadius: 12,
+            zIndex: 100,
+          }}
         >
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700' }}>
+              ¿Te recogemos aquí?
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.50)', fontSize: 12, marginTop: 2 }}>
+              Mueve el mapa para ajustar
+            </Text>
+          </View>
           <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 8,
-              paddingVertical: 10,
-              paddingHorizontal: 20,
-              backgroundColor: 'rgba(13,5,32,0.80)',
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: 'rgba(245,197,24,0.40)',
-              shadowColor: '#F5C518',
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: 0.20,
-              shadowRadius: 12,
-              elevation: 6,
-            }}
             onPress={() => {
-              setMapSelectionMode('pickup');
-              setPendingCoordinate(null);
-              setPendingAddress('');
-              bottomSheetRef.current?.snapToIndex(0);
+              setShowPickupBanner(false);
+              enterMapSelectionMode('pickup');
             }}
-            activeOpacity={0.80}
-          >
-            <Ionicons name="pin" size={16} color="#F5C518" />
-            <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
+            style={{
+              backgroundColor: '#F5C518',
+              paddingHorizontal: 14, paddingVertical: 8,
+              borderRadius: 10,
+            }}>
+            <Text style={{ color: '#0D0520', fontWeight: '800', fontSize: 13 }}>
+              Sí, aquí
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setShowPickupBanner(false);
+              setPickupOverride(null);
+            }}>
+            <Ionicons name="close" size={18} color="rgba(255,255,255,0.40)" />
           </TouchableOpacity>
         </Animated.View>
       )}
+
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
@@ -1303,35 +1395,107 @@ export default function PassengerDashboard() {
         <BottomSheetView
           style={{ flex: 1, paddingBottom: 32, paddingHorizontal: 16 }}
         >
-          {/* BUG-4 FIX: En modo mapa mostrar solo botón de confirmar en el sheet */}
+          {/* FIX 3: En modo mapa mostrar solo tarjeta de confirmación */}
           {mapSelectionMode !== 'none' ? (
-            <TouchableOpacity
-              disabled={isDragging || !pendingCoordinate}
-              onPress={handleConfirmMapPoint}
+            <Animated.View
+              entering={FadeIn.duration(350)}
               style={{
-                height: 52,
-                borderRadius: 16,
-                backgroundColor: (isDragging || !pendingCoordinate)
-                  ? 'rgba(255,255,255,0.06)'
-                  : '#F5C518',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginTop: 8,
+                width: '100%',
+                paddingHorizontal: 16,
+                paddingTop: 8,
+                paddingBottom: 4,
               }}
-              activeOpacity={0.85}
             >
-              <Text style={{
-                color: (isDragging || !pendingCoordinate) ? 'rgba(255,255,255,0.35)' : '#0D0520',
-                fontSize: 16,
-                fontWeight: '800',
-              }}>
-                {isDragging
-                  ? t('passenger.releaseToConfirm')
-                  : mapSelectionMode === 'pickup'
-                    ? t('passenger.confirmPickup')
-                    : t('passenger.confirmDest')}
-              </Text>
-            </TouchableOpacity>
+              {/* Header */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <View style={{
+                  width: 36, height: 36, borderRadius: 18,
+                  backgroundColor: 'rgba(245,197,24,0.15)',
+                  borderWidth: 1, borderColor: 'rgba(245,197,24,0.30)',
+                  justifyContent: 'center', alignItems: 'center'
+                }}>
+                  <Ionicons name="location" size={18} color="#F5C518" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.50)', 
+                    fontSize: 11, fontWeight: '600', 
+                    textTransform: 'uppercase', letterSpacing: 1 }}>
+                    {mapSelectionMode === 'pickup' ? t('passenger.pickupUppercase', { defaultValue: 'Recogida' }) : t('passenger.destUppercase', { defaultValue: 'Destino' })}
+                  </Text>
+                  <Text style={{ color: '#FFFFFF', fontSize: 16, 
+                    fontWeight: '700', marginTop: 2 }} numberOfLines={1}>
+                    {pendingAddress || t('passenger.calculatingAddress', { defaultValue: 'Buscando dirección...' })}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Botón Confirmar */}
+              <Animated.View style={confirmBtnAnimatedStyle}>
+                <TouchableOpacity
+                  disabled={isDragging || !pendingCoordinate}
+                  onPress={handleConfirmMapPoint}
+                  onPressIn={() => confirmBtnScale.value = withSpring(0.97)}
+                  onPressOut={() => confirmBtnScale.value = withSpring(1)}
+                  style={{
+                    flexDirection: 'row',
+                    height: 56,
+                    borderRadius: 18,
+                    backgroundColor: (isDragging || !pendingCoordinate)
+                      ? 'rgba(255,255,255,0.06)'
+                      : '#F5C518',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  activeOpacity={1}
+                >
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: '800',
+                    color: (isDragging || !pendingCoordinate)
+                      ? 'rgba(255,255,255,0.30)' : '#0D0520',
+                  }}>
+                    {isDragging
+                      ? t('passenger.releaseToConfirm', { defaultValue: 'Suelta aquí...' })
+                      : mapSelectionMode === 'pickup'
+                        ? t('passenger.confirmPickup', { defaultValue: 'Confirmar recogida' })
+                        : t('passenger.confirmDest', { defaultValue: 'Confirmar destino' })}
+                  </Text>
+                  <Ionicons 
+                    name={isDragging ? "hand-left-outline" : "checkmark-circle"} 
+                    size={20} 
+                    color={(isDragging || !pendingCoordinate) ? 'rgba(255,255,255,0.30)' : '#0D0520'} 
+                    style={{ marginLeft: 8 }} 
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+
+              {/* Botón Cancelar */}
+              <TouchableOpacity
+                onPress={() => {
+                  setMapSelectionMode('none');
+                  setPendingCoordinate(null);
+                  setPendingAddress('');
+                }}
+                style={{
+                  marginTop: 12,
+                  backgroundColor: 'transparent',
+                  borderWidth: 1, 
+                  borderColor: 'rgba(255,255,255,0.15)',
+                  borderRadius: 999,
+                  paddingHorizontal: 24, 
+                  paddingVertical: 10,
+                  alignSelf: 'center',
+                }}
+              >
+                <Text style={{
+                  color: 'rgba(255,255,255,0.55)',
+                  fontSize: 14,
+                  fontWeight: '600',
+                }}>
+                  Cancelar
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
           ) : (
           <>
           {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) evitamos desmontar componente para no perder el state de búsqueda */}
@@ -1341,38 +1505,31 @@ export default function PassengerDashboard() {
                 <View style={[styles.searchInner, {flexDirection: 'row', alignItems: 'center'}]}>
                   <Ionicons name="search" size={20} color={activeMapField === 'destination' ? "#F5C518" : "rgba(255,255,255,0.5)"} style={{marginLeft: 16}} />
                   <View style={{flex: 1, paddingLeft: 12, paddingVertical: 6}}>
-                    {/* Destination Trigger */}
-                    <TouchableOpacity 
-                       onPress={() => { setActiveMapField('destination'); bottomSheetRef.current?.snapToIndex(2); }}
-                       hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5C518', marginRight: 8 }} />
-                        <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}}>
-                          {selectedPlace?.displayName || t('passenger.searchingDest')}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <View style={{
-                      height: 1,
-                      backgroundColor: 'rgba(255,255,255,0.08)',
-                      marginVertical: 4,
-                      marginHorizontal: -4,
-                    }} />
-
-                    {/* Pickup Trigger */}
-                    <TouchableOpacity 
-                       onPress={() => { setActiveMapField('pickup'); bottomSheetRef.current?.snapToIndex(2); }}
-                       hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4C8', marginRight: 8 }} />
-                        <Text style={{color: activeMapField === 'pickup' ? '#F5C518' : 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 2}} numberOfLines={1}>
-                          {pickupLocation.displayName}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
+                    {activeMapField === 'pickup' ? (
+                      <TouchableOpacity 
+                         onPress={() => { setActiveMapField('pickup'); bottomSheetRef.current?.snapToIndex(2); }}
+                         hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4C8', marginRight: 8 }} />
+                          <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
+                            {pickupLocation.displayName || t('passenger.searchingPickup')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity 
+                         onPress={() => { setActiveMapField('destination'); bottomSheetRef.current?.snapToIndex(2); }}
+                         hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
+                      >
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5C518', marginRight: 8 }} />
+                          <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
+                            {selectedPlace?.displayName || t('passenger.searchingDest')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   {/* Arrow button — same action as tapping the bar */}
                   <TouchableOpacity
@@ -1401,16 +1558,48 @@ export default function PassengerDashboard() {
                 display: currentSnapIndex < 1 ? 'none' : 'flex',
                 overflow: 'hidden',
               }}>
-                <Text style={{color: '#F5C518', fontSize: 12, marginLeft: 8, marginBottom: 8, fontWeight: '600'}}>
-                   {activeMapField === 'pickup' ? t('passenger.pickupLabel') : t('passenger.destinationLabel')}
-                </Text>
                 <AddressAutocomplete
                   placeholder={activeMapField === 'pickup' ? t('passenger.searchingPickup') : t('passenger.searchingDest')}
                   onSelect={handlePlaceSelect}
                   userLat={pickupLocation.latitude || location?.coords.latitude}
                   userLng={pickupLocation.longitude || location?.coords.longitude}
                 />
-                <View style={styles.historyPanel}>
+                <View style={[styles.historyPanel, { marginTop: 12 }]}>
+                  {/* CAMBIO 2: Fijar en mapa iterativo */}
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 16,
+                      paddingVertical: 14,
+                      gap: 14,
+                      borderBottomWidth: 1,
+                      borderBottomColor: 'rgba(255,255,255,0.06)',
+                    }}
+                    onPress={() => enterMapSelectionMode(activeMapField || 'destination')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 36, height: 36, borderRadius: 18,
+                      backgroundColor: 'rgba(245,197,24,0.12)',
+                      borderWidth: 1, borderColor: 'rgba(245,197,24,0.25)',
+                      justifyContent: 'center', alignItems: 'center'
+                    }}>
+                      <Ionicons name="pin-outline" size={18} color="#F5C518" />
+                    </View>
+                    <View>
+                      <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Elige un punto directamente en el mapa</Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={{
+                    marginHorizontal: 16,
+                    marginVertical: 8,
+                    height: 1,
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                  }} />
+
                   {rideHistory.length === 0 ? (
                     <Text style={styles.historyEmpty}>Tus destinos recientes aparecerán aquí</Text>
                   ) : (
@@ -1428,11 +1617,7 @@ export default function PassengerDashboard() {
                   )}
                 </View>
               </View>
-            <Animated.View style={[{ overflow: 'hidden' }, useAnimatedStyle(() => {
-              const opacity = interpolate(animatedIndex.value, [0, 1], [0, 1], Extrapolation.CLAMP);
-              const height = animatedIndex.value < 1 && currentSnapIndex === 0 ? 0 : 'auto';
-              return { opacity, height, display: isSearching || isActiveRide ? 'none' : 'flex' };
-            })]}>
+            <Animated.View style={[{ overflow: 'hidden' }, favoritesAnimatedStyle]}>
               <FavoritesList
                 favorites={favorites}
                 onSelect={(fav: Favorite) => {
@@ -1525,6 +1710,15 @@ export default function PassengerDashboard() {
           estimatedTimeMin={estimatedTimeMin}
           categoryOptions={categoryOptions}
           loadingQuotes={loadingQuotes}
+          originAddress={pickupOverride?.address ?? pickupLocation?.displayName ?? 'Mi ubicación actual'}
+          onEditDest={() => {
+            fareOfferSheetRef.current?.close();
+            setSelectedPlace(null);
+            setTimeout(() => {
+              setActiveMapField('destination');
+              bottomSheetRef.current?.snapToIndex(2);
+            }, 350);
+          }}
       />
       {/* BUG 3: PaymentMethodSelector onSelect now calls setPaymentMethod */}
       {paymentSelectorVisible && (
@@ -1543,6 +1737,36 @@ export default function PassengerDashboard() {
         onSaved={(fav) => setFavorites(prev => [...prev, fav])}
         userLat={location?.coords.latitude}
         userLng={location?.coords.longitude}
+      />
+      <RouteEditorSheet
+        visible={routeEditorVisible}
+        onClose={() => setRouteEditorVisible(false)}
+        initialOriginAddress={pickupOverride?.address ?? pickupLocation?.displayName ?? 'Mi ubicación actual'}
+        initialDestAddress={selectedPlace?.displayName}
+        initialActiveField={routeEditorInitialField}
+        userLat={location?.coords.latitude}
+        userLng={location?.coords.longitude}
+        onConfirm={({ origin, dest }) => {
+          if (dest) {
+            const destPlace = {
+              displayName: dest.displayName,
+              placeId: `route_${Date.now()}`,
+              latitude: dest.latitude,
+              longitude: dest.longitude,
+            };
+            setSelectedPlace(destPlace);
+            saveToHistory(destPlace);
+          }
+          if (origin && origin.displayName !== 'Mi ubicación actual') {
+            setPickupOverride({
+              latitude: origin.latitude,
+              longitude: origin.longitude,
+              address: origin.displayName,
+            });
+          }
+          setRouteEditorVisible(false);
+          setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+        }}
       />
     </View>
   );

@@ -297,7 +297,7 @@
     "mapPickupInstruction": "Move the map to your pickup point",
     "mapDestInstruction": "Move the map to your destination",
     "confirmPickup": "✓  Confirm pickup point",
-    "confirmDest": "✓  Confirm destination",
+    "confirmDest": "Confirm destination",
     "releaseToConfirm": "Release to confirm...",
     "reconnecting": "Reconnecting…",
     "noConnection": "No real-time connection",

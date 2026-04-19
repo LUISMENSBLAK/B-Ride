@@ -79,6 +79,9 @@ interface FareOfferSheetProps {
   // GAP VISUAL 5: real prices from /rides/quote
   categoryOptions?: Record<string, { priceMXN?: number; etaMin?: number }> | null;
   loadingQuotes?: boolean;
+  // Route editing
+  originAddress?: string;
+  onEditDest?: () => void;
 }
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
@@ -136,6 +139,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const {
     onConfirm, onClose, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin,
     categoryOptions, loadingQuotes,
+    originAddress, onEditDest,
   } = props;
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
@@ -264,6 +268,65 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
           </TouchableOpacity>
         </View>
 
+        {/* ── ROUTE SUMMARY BAR ── */}
+        <View style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          backgroundColor: 'rgba(255,255,255,0.05)',
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.08)',
+          padding: 12,
+        }}>
+          {/* Fila origen */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{
+              width: 10, height: 10, borderRadius: 5,
+              backgroundColor: '#3D8EF0',
+              borderWidth: 2, borderColor: 'rgba(61,142,240,0.4)',
+            }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.40)', fontSize: 10,
+                textTransform: 'uppercase', letterSpacing: 1 }}>Recogida</Text>
+              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginTop: 1 }}
+                numberOfLines={1}>{originAddress ?? 'Mi ubicación actual'}</Text>
+            </View>
+          </View>
+
+          {/* Conector */}
+          <View style={{
+            width: 1, height: 16,
+            backgroundColor: 'rgba(255,255,255,0.10)',
+            marginLeft: 4, marginVertical: 4,
+          }} />
+
+          {/* Fila destino */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{
+              width: 10, height: 10, borderRadius: 2,
+              backgroundColor: '#F5C518',
+            }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.40)', fontSize: 10,
+                textTransform: 'uppercase', letterSpacing: 1 }}>Destino</Text>
+              <Text style={{ color: '#F5C518', fontSize: 13, fontWeight: '600', marginTop: 1 }}
+                numberOfLines={1}>{destAddress ?? 'Sin destino'}</Text>
+            </View>
+            {onEditDest && (
+              <TouchableOpacity
+                onPress={onEditDest}
+                style={{
+                  paddingHorizontal: 10, paddingVertical: 6,
+                  backgroundColor: 'rgba(245,197,24,0.10)',
+                  borderRadius: 8, borderWidth: 1,
+                  borderColor: 'rgba(245,197,24,0.25)',
+                }}>
+                <Text style={{ color: '#F5C518', fontSize: 11, fontWeight: '700' }}>Cambiar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
         {/* ── SECCIÓN 2: Hero Price Input ── */}
         <View style={s.heroContainer}>
           <View style={s.priceRow}>
@@ -323,7 +386,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             visible={showPaymentPicker}
             onClose={() => setShowPaymentPicker(false)}
             onSelect={(method) => {
-              setPaymentMethod(method);
+              useRideFlowStore.getState().setPaymentMethod(method);
               setShowPaymentPicker(false);
             }}
           />
@@ -362,7 +425,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             activeOpacity={0.88}
           >
             <Text style={[s.ctaText, isValid ? s.ctaTextEnabled : s.ctaTextDisabled]}>
-              {isValid ? `Pedir ride → MX$${priceStr}` : 'Ingresa un precio'}
+              {isValid ? `Solicitar · MX$${priceStr}` : 'Ingresa un precio'}
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -410,7 +473,7 @@ const s = StyleSheet.create({
   // Hero price
   heroContainer: {
     alignItems: 'center',
-    marginTop: 28,
+    marginTop: 16,
     marginBottom: 4,
     paddingHorizontal: 20,
   },
@@ -476,10 +539,10 @@ const s = StyleSheet.create({
 
   // Vehicle card
   vehicleCard: {
-    width: 130,
-    height: 160,
+    width: 110,
+    height: 155,
     borderRadius: 16,
-    padding: 12,
+    padding: 10,
     overflow: 'hidden',
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
@@ -504,7 +567,7 @@ const s = StyleSheet.create({
     resizeMode: 'contain',
   },
   vehicleName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     marginTop: 6,
   },
@@ -607,7 +670,7 @@ const s = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 12,
     marginBottom: 0,
-    height: 58,
+    height: 56,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',

@@ -26,8 +26,8 @@ const startMaintenanceCrons = () => {
 
                  // Notify here if needed
             }
-        } catch (e) {
-            console.error('[Maintenance Cron 1 Error]', e);
+        } catch (error) {
+            console.error('[CRON] Error en job:', error.message);
         }
     });
 
@@ -54,8 +54,8 @@ const startMaintenanceCrons = () => {
                 matchingService.startMatchingCampaign(ride.toObject(), getIO());
                 getIO().to(ride.passenger._id.toString()).emit('rideRequestCreated', ride);
             }
-        } catch (e) {
-            console.error('[Maintenance Cron 2 Error]', e);
+        } catch (error) {
+            console.error('[CRON] Error en job:', error.message);
         }
     });
 
@@ -78,8 +78,8 @@ const startMaintenanceCrons = () => {
                  await User.updateMany({ _id: { $in: offlineUserIds } }, { driverStatus: 'OFFLINE' });
 
              }
-        } catch (e) {
-            console.error('[Maintenance Cron 3 Error]', e);
+        } catch (error) {
+            console.error('[CRON] Error en job:', error.message);
         }
     });
 
@@ -107,8 +107,8 @@ const startMaintenanceCrons = () => {
                  });
 
             }
-        } catch (e) {
-            console.error('[Maintenance Cron 4 Error]', e);
+        } catch (error) {
+            console.error('[CRON] Error en job:', error.message);
         }
     });
 };

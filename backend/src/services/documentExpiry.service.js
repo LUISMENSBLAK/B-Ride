@@ -55,7 +55,7 @@ const startDocumentExpiryCron = () => {
                 }
             }
         } catch (error) {
-            console.error('[Document Expiry Cron] Error:', error);
+            console.error('[CRON] Error en job:', error.message);
         }
     });
 };

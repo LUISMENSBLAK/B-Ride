@@ -20,7 +20,9 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withSequence,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../hooks/useAppTheme';
 
 type MapSelectionMode = 'none' | 'pickup' | 'destination';
@@ -40,8 +42,9 @@ export default function MapPinOverlay({
 
   // ── Pin elevation ──────────────────────────────────────────
   const pinY      = useSharedValue(0);
-  const haloSize  = useSharedValue(44);
-  const haloOpacity = useSharedValue(0.20);
+  const pinScaleY = useSharedValue(1);
+  const haloSize  = useSharedValue(40);
+  const haloOpacity = useSharedValue(0.4);
 
   // ── Shadow ─────────────────────────────────────────────────
   const shadowW   = useSharedValue(20);
@@ -52,18 +55,16 @@ export default function MapPinOverlay({
 
   useEffect(() => {
     if (isDragging) {
-      pinY.value      = withSpring(-12, { damping: 12, stiffness: 180 });
-      haloSize.value  = withSpring(56,  { damping: 14, stiffness: 160 });
-      haloOpacity.value = withTiming(0.35, { duration: 150 });
-      shadowW.value   = withSpring(14,  { damping: 14, stiffness: 180 });
-      shadowOp.value  = withTiming(0.20, { duration: 150 });
+      pinY.value      = withSpring(-8, { damping: 12, stiffness: 180 });
+      pinScaleY.value = withSpring(1, { damping: 12, stiffness: 180 });
+      shadowW.value   = withSpring(28,  { damping: 14, stiffness: 180 });
+      shadowOp.value  = withTiming(0.15, { duration: 150 });
       bubbleOp.value  = withTiming(0,   { duration: 80 });
     } else {
       pinY.value      = withSpring(0,   { damping: 15, stiffness: 200 });
-      haloSize.value  = withSpring(44,  { damping: 15, stiffness: 200 });
-      haloOpacity.value = withTiming(0.20, { duration: 200 });
+      pinScaleY.value = withSequence(withTiming(0.85, {duration: 50}), withSpring(1, { damping: 8, stiffness: 180 }));
       shadowW.value   = withSpring(20,  { damping: 15, stiffness: 200 });
-      shadowOp.value  = withTiming(0.35, { duration: 200 });
+      shadowOp.value  = withTiming(0.25, { duration: 200 });
       if (pendingAddress) {
         bubbleOp.value = withTiming(1, { duration: 200 });
       }
@@ -71,7 +72,7 @@ export default function MapPinOverlay({
   }, [isDragging, pendingAddress]);
 
   const pinStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: pinY.value }],
+    transform: [{ translateY: pinY.value }, { scaleY: pinScaleY.value }],
     alignItems: 'center',
   }));
 
@@ -105,17 +106,13 @@ export default function MapPinOverlay({
         )}
       </Animated.View>
 
-      {/* 2. Pin principal (halo + circle + dot) */}
+      {/* 2. Pin principal */}
       <Animated.View style={pinStyle}>
-        {/* Relative container so halo can be absolute-centered */}
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          {/* Halo exterior — absolute, centered via negative translate */}
-          <Animated.View style={[styles.haloBase, haloStyle, { backgroundColor: pinColor }]} />
-          {/* Círculo interior 28px */}
-          <View style={[styles.pinCircle, { backgroundColor: pinColor }]}>
-            {/* Punto central 10px */}
-            <View style={[styles.pinDot, { backgroundColor: theme.colors.background }]} />
+          <View style={[styles.pinHead, { backgroundColor: pinColor, shadowColor: pinColor }]}>
+            <Ionicons name="location" size={22} color="#0D0520" />
           </View>
+          <View style={[styles.pinTriangle, { borderTopColor: pinColor }]} />
         </View>
       </Animated.View>
 
@@ -150,35 +147,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // ── Halo — absolute, centered on the circle via negative translate
-  haloBase: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: [{ translateX: -22 }, { translateY: -22 }],
-  },
-
-  // ── Circle
-  pinCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
+  // ── Custom Pin SVG elements
+  pinHead: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
     justifyContent: 'center',
+    alignItems: 'center',
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 12,
   },
-
-  // ── Dot
-  pinDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  pinTriangle: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightWidth: 8,
+    borderRightColor: 'transparent',
+    borderTopWidth: 12,
+    alignSelf: 'center',
   },
 
   // ── Shadow
   shadowBase: {
     height: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignSelf: 'center',
     marginTop: 2,
   },
 });

@@ -101,9 +101,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // CRON JOB: Payment Expiration Cleanup
-cron.schedule('*/5 * * * *', () => {
-    console.log('[System] Corriendo recovery job...');
-    paymentService.cronRecoveryJobs().catch(e => console.error('[Cron Error]', e.message));
+cron.schedule('*/5 * * * *', async () => {
+    try {
+        console.log('[System] Corriendo recovery job...');
+        await paymentService.cronRecoveryJobs();
+    } catch (error) {
+        console.error('[CRON] Error en job:', error.message);
+    }
 });
 
 // A6: Document Expiry

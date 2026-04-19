@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from '../store/useSocketStore';
@@ -12,17 +13,12 @@ import { Platform } from 'react-native';
 // Simulador iOS  → localhost
 // Emulador Android → 10.0.2.2
 // Dispositivo físico → EXPO_PUBLIC_SOCKET_URL en .env
-const defaultSocketURL = __DEV__ 
-  ? (Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000')
-  : 'https://b-ride-production.up.railway.app';
-
-const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || defaultSocketURL;
-
+const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://b-ride-production.up.railway.app';
 
 if (!process.env.EXPO_PUBLIC_SOCKET_URL) {
     console.warn(
         '[Socket] ⚠️ EXPO_PUBLIC_SOCKET_URL no está definida. ' +
-        'Usando fallback a ' + defaultSocketURL + '. ' +
+        'Usando fallback a ' + SOCKET_URL + '. ' +
         'En producción configúrala con: eas secret:create --name EXPO_PUBLIC_SOCKET_URL --value https://tu-backend.railway.app'
     );
 }
@@ -92,6 +88,7 @@ async function refreshTokenIfNeeded(): Promise<string | null> {
 class SocketService {
   private socket: Socket | null = null;
   private currentRideId: string | null = null;
+  private authErrorCount = 0;
   // FIX-1A: flag para evitar llamadas concurrentes a connect()
   private _isConnecting: boolean = false;
 
@@ -105,10 +102,20 @@ class SocketService {
 
       // Refrescar token ANTES de crear el socket — evita `jwt expired` en el primer intento
       const validToken = await refreshTokenIfNeeded();
-      if (!validToken) return; // logout ya fue llamado
 
-      if (SOCKET_URL.includes('localhost') || SOCKET_URL.includes('10.0.2.2')) {
-        console.warn('[Socket] ⚠️ URL contiene localhost/10.0.2.2. En dispositivos físicos define EXPO_PUBLIC_SOCKET_URL en .env');
+      // DEBUG: verificar qué token se usa para conectar
+      if (__DEV__) {
+        console.log('[Socket] Token usado para conectar:',
+          validToken ? validToken.substring(0, 20) + '...' : 'NULL');
+      }
+
+      if (!validToken) {
+        console.warn('[Socket] No hay token válido, abortando conexión');
+        return;
+      }
+
+      if (!SOCKET_URL) {
+        console.warn('[Socket] No SOCKET_URL available');
       }
 
       if (this.socket) {
@@ -116,21 +123,25 @@ class SocketService {
         this.socket.disconnect();
       }
 
-      // FIX-1C: auth como callback asíncrono — cada reconexión obtiene el token más reciente
       this.socket = io(SOCKET_URL, {
-        auth: async (cb: (data: object) => void) => {
-          const token = await refreshTokenIfNeeded();
-          cb({ token: token ?? '' });
-        },
-        transports: ['websocket', 'polling'],
+        auth: { token: validToken },
+        transports: ['websocket'],
         reconnection: true,
-        reconnectionAttempts: 20,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 10000,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 30000,
         timeout: 20000,
+        secure: true,
+        rejectUnauthorized: false,
       });
 
       eventManager.reconnectSocketBindings(this.socket);
+
+      // Contadores scoped a esta invocación de connect() — declarados ANTES de todos los
+      // handlers para evitar el Temporal Dead Zone de `let`
+      let retryCount    = 0;
+      const MAX_RETRIES  = 10;
+      const getDelay = (attempt: number) => Math.min(2000 * Math.pow(2, attempt - 1), 30000);
 
       this.socket.on('reconnect_attempt', () => {
         useSocketStore.getState().setStatus('reconnecting');
@@ -138,6 +149,8 @@ class SocketService {
       });
 
       this.socket.on('connect', () => {
+        retryCount     = 0; // resetear backoff al conectar exitosamente
+        this.authErrorCount = 0; // resetear contador de errores de auth
         useSocketStore.getState().setStatus('connected');
         useSocketStore.getState().resetReconnectAttempts();
         if (__DEV__) console.log('[Socket] Connected / Reconnected:', this.socket?.id);
@@ -168,30 +181,60 @@ class SocketService {
         console.warn('[Socket] Disconnected:', reason);
       });
 
-      // FIX-1D: connect_error ya NO crea socket nuevo — deja que socket.io reintente solo
-      // El callback auth obtiene token fresco en cada intento, así que no hay loop
+      // FIX-1D: connect_error con backoff silencioso en dev a partir del 3er intento
       this.socket.on('connect_error', async (err) => {
         useSocketStore.getState().setStatus('disconnected');
-        console.warn('[Socket] Connection error:', err.message);
+        retryCount++;
 
         const isAuthError =
-          err.message.includes('Authentication') ||
-          err.message.includes('Invalid token') ||
-          err.message.includes('jwt') ||
-          err.message.includes('expired');
+          err.message?.includes('Authentication') ||
+          err.message?.includes('Invalid token') ||
+          err.message?.includes('jwt') ||
+          err.message?.includes('Unauthorized') ||
+          err.message?.includes('expired');
 
+        // Logging inteligente: verboso los 2 primeros intentos, silencioso después
+        if (__DEV__) {
+          if (retryCount <= 2) {
+            console.warn('[Socket] Connection error:', err.message);
+          } else {
+            const delay = getDelay(retryCount);
+            console.log(`[Socket] Sin conexión. Reintentando en ${delay / 1000}s... (intento ${retryCount})`);
+          }
+        }
+
+        // Error de autenticación → refrescar token o hacer logout
         if (isAuthError) {
-          // Refrescar token para el próximo intento AUTOMÁTICO de socket.io
-          const newToken = await refreshTokenIfNeeded();
-          if (!newToken) {
-            // Refresh falló — hacer logout
+          this.authErrorCount++;
+          if (this.authErrorCount >= 2) {
+            console.log('[Socket] Token inválido definitivamente. Cerrando sesión.');
+            this.authErrorCount = 0;
             this.socket?.removeAllListeners();
             this.socket?.disconnect();
             this.socket = null;
+            const { useAuthStore } = require('../store/authStore');
             useAuthStore.getState().logout();
+            return;
           }
-          // Si hay newToken, no hacemos nada: el callback auth en el próximo
-          // intento automático de socket.io ya obtendrá el token fresco
+          refreshTokenIfNeeded().then((newToken) => {
+            if (newToken) {
+              this.socket?.disconnect();
+              setTimeout(() => this.connect(), 500);
+            } else {
+              this.authErrorCount = 0;
+              this.socket?.removeAllListeners();
+              this.socket?.disconnect();
+              this.socket = null;
+              const { useAuthStore } = require('../store/authStore');
+              useAuthStore.getState().logout();
+            }
+          });
+          return;
+        }
+
+        // Límite de reintentos alcanzado
+        if (retryCount >= MAX_RETRIES) {
+          if (__DEV__) console.log('[Socket] Máximo de reintentos alcanzado. Esperando acción del usuario.');
         }
       });
     } finally {
