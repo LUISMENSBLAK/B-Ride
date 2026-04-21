@@ -33,10 +33,13 @@ const safeLazy = (importFunc: () => Promise<any>) => {
   return React.lazy(async () => {
     try {
       const module = await importFunc();
-      return { default: module.default || Object.values(module)[0] };
+      if (!module) throw new Error('Module resolved to undefined');
+      const component = module.default || Object.values(module).find(v => typeof v === 'function');
+      if (!component) throw new Error('No default export found in module');
+      return { default: component };
     } catch (err) {
       console.error('[AppNavigator] Error en carga lazy:', err);
-      // Fallback a vista vacía si falla dramáticamente (nunca retornará undefined)
+      // Fallback seguro: pantalla de loading que nunca crashea
       return { default: () => <View style={{flex: 1, backgroundColor: '#0A0A0A'}}><ActivityIndicator size="large" color="#0BD38A" style={{flex:1}} /></View> };
     }
   });
@@ -145,9 +148,9 @@ function DriverTabNavigator() {
 function DriverNavigator() {
     const { user } = useAuthStore();
 
-    // Ambas condiciones deben cumplirse para considerar al conductor APROBADO
+    // Correcto: OR — aprobado si cualquiera de los dos campos lo indica (la DB puede tener uno u otro)
     const isApproved =
-        user?.approvalStatus === 'APPROVED' &&
+        user?.approvalStatus === 'APPROVED' ||
         user?.driverApprovalStatus === 'APPROVED';
 
     return (
