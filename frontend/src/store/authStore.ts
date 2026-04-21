@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store'; // BUG-018: SecureStore para tokens JWT
 import client from '../api/client';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
@@ -8,7 +7,18 @@ import { removeTokenFromBackend } from '../services/notifications/NotificationSe
 import socketService from '../services/socket';
 import eventManager from '../services/EventManager'; // FIX-4: import para limpiar en logout
 
-// BUG-018: Helpers de SecureStore con fallback graceful a AsyncStorage si falla
+// BUG-018: SecureStore lazy-loaded para evitar crash en Expo Go/simulador sin rebuild nativo
+// Se carga dinámicamente solo si el módulo existe en el entorno
+let SecureStore: typeof import('expo-secure-store') | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  SecureStore = require('expo-secure-store');
+} catch {
+  // expo-secure-store no disponible en este entorno (Expo Go sin rebuild)
+  // Fallback silencioso a AsyncStorage
+  if (__DEV__) console.log('[AuthStore] expo-secure-store no disponible, usando AsyncStorage como fallback');
+}
+
 const SECURE_KEYS = {
   ACCESS_TOKEN:  'b_ride_access_token',
   REFRESH_TOKEN: 'b_ride_refresh_token',
@@ -16,27 +26,31 @@ const SECURE_KEYS = {
 
 async function secureSet(key: string, value: string): Promise<void> {
   try {
-    await SecureStore.setItemAsync(key, value);
-  } catch (e) {
-    // Fallback AsyncStorage si SecureStore no está disponible (ej. entorno de prueba)
-    await AsyncStorage.setItem(key, value);
-  }
+    if (SecureStore) {
+      await SecureStore.setItemAsync(key, value);
+      return;
+    }
+  } catch { /* fallback */ }
+  await AsyncStorage.setItem(key, value);
 }
 
 async function secureGet(key: string): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(key);
-  } catch (e) {
-    return AsyncStorage.getItem(key);
-  }
+    if (SecureStore) {
+      return await SecureStore.getItemAsync(key);
+    }
+  } catch { /* fallback */ }
+  return AsyncStorage.getItem(key);
 }
 
 async function secureDelete(key: string): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(key);
-  } catch (e) {
-    await AsyncStorage.removeItem(key);
-  }
+    if (SecureStore) {
+      await SecureStore.deleteItemAsync(key);
+      return;
+    }
+  } catch { /* fallback */ }
+  await AsyncStorage.removeItem(key);
 }
 
 interface User {
@@ -46,7 +60,6 @@ interface User {
     role: string;
     accessToken: string;
     refreshToken: string;
-    // Campos opcionales del perfil extendido
     avgRating?: number;
     totalRatings?: number;
     phoneNumber?: string;
@@ -74,10 +87,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     isLoading: true,
     justRegistered: false,
     login: async (userData) => {
-        // BUG-018: Tokens JWT en SecureStore, datos de perfil en AsyncStorage
+        // BUG-018: Tokens JWT en SecureStore (con fallback a AsyncStorage si no disponible)
         if (userData.accessToken)  await secureSet(SECURE_KEYS.ACCESS_TOKEN,  userData.accessToken);
         if (userData.refreshToken) await secureSet(SECURE_KEYS.REFRESH_TOKEN, userData.refreshToken);
-        // userInfo sin tokens sensibles en AsyncStorage (OK para metadatos)
+        // Metadata de perfil (sin tokens sensibles) en AsyncStorage
         const safeUserInfo = { ...userData, accessToken: '', refreshToken: '' };
         await AsyncStorage.setItem('userInfo', JSON.stringify(safeUserInfo));
         set({ user: userData, justRegistered: false });
@@ -90,10 +103,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user: userData, justRegistered: true });
     },
     logout: async () => {
-        
         try {
-            // BUG-035: EAS_PROJECT_ID_PLACEHOLDER nombre más descriptivo
             const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+            // BUG-035: EAS_PROJECT_ID_PLACEHOLDER nombre más descriptivo
             const EAS_PROJECT_ID_PLACEHOLDER = 'REEMPLAZAR_CON_TU_EAS_PROJECT_ID';
             const isValidProjectId = projectId && projectId !== EAS_PROJECT_ID_PLACEHOLDER;
             if (isValidProjectId) {
@@ -104,10 +116,12 @@ export const useAuthStore = create<AuthState>((set) => ({
             if (__DEV__) console.log('[AuthStore] Error al remover push token:', e);
         }
 
-        // BUG-018: Borrar tokens del SecureStore
+        // BUG-018: Borrar tokens del SecureStore (o AsyncStorage como fallback)
         await secureDelete(SECURE_KEYS.ACCESS_TOKEN);
         await secureDelete(SECURE_KEYS.REFRESH_TOKEN);
-        await AsyncStorage.multiRemove(['userInfo', 'lastCompletedRideId']);
+        await AsyncStorage.multiRemove(['userInfo', 'lastCompletedRideId',
+          // Limpiar también claves legacy por si el usuario venía de una versión anterior
+          'userToken', 'refreshToken']);
         eventManager.reset(); // FIX-4: limpiar listeners y eventos procesados antes de desconectar
         socketService.disconnect();
         set({ user: null });
@@ -115,8 +129,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     checkAuth: async () => {
         set({ isLoading: true });
         try {
-            // BUG-018: Leer token del SecureStore
-            const token = await secureGet(SECURE_KEYS.ACCESS_TOKEN);
+            // BUG-018: Leer token del SecureStore (o AsyncStorage como fallback)
+            // Migración transparente: si hay token legacy en AsyncStorage, migrarlo
+            let token = await secureGet(SECURE_KEYS.ACCESS_TOKEN);
+            if (!token) {
+              // Migración desde versión anterior que guardaba en AsyncStorage
+              token = await AsyncStorage.getItem('userToken');
+              if (token) {
+                await secureSet(SECURE_KEYS.ACCESS_TOKEN, token);
+                await AsyncStorage.removeItem('userToken');
+              }
+            }
+
             const userInfoStr = await AsyncStorage.getItem('userInfo');
 
             if (!token || !userInfoStr) {
@@ -124,18 +148,15 @@ export const useAuthStore = create<AuthState>((set) => ({
                 return;
             }
 
-            // Restaurar inmediatamente desde AsyncStorage para evitar flash de login
             const cachedUser = JSON.parse(userInfoStr);
-            // Reconstituir con el token real del SecureStore
             const fullUser = { ...cachedUser, accessToken: token };
             set({ user: fullUser });
-            set({ isLoading: false }); // FIX 1: Desbloquea la UI de inmediato antes del API call
+            set({ isLoading: false }); // FIX 1: Desbloquea la UI de inmediato
 
             try {
-                // Verificar token con el backend (silencioso, sin mostrar alert)
                 const res = await client.get('/auth/me', {
                     headers: { Authorization: `Bearer ${token}` },
-                    // @ts-ignore — flag interno para suprimir alert de red en el interceptor
+                    // @ts-ignore — flag interno para suprimir alert en el interceptor
                     _silent: true,
                 });
                 if (res.data?.data) {
@@ -147,13 +168,11 @@ export const useAuthStore = create<AuthState>((set) => ({
             } catch (apiErr: unknown) {
                 const status = (apiErr as { response?: { status?: number } })?.response?.status;
                 if (status === 401 || status === 403) {
-                    // Token inválido o expirado — cerrar sesión
                     await secureDelete(SECURE_KEYS.ACCESS_TOKEN);
                     await secureDelete(SECURE_KEYS.REFRESH_TOKEN);
-                    await AsyncStorage.multiRemove(['userInfo', 'lastCompletedRideId']);
+                    await AsyncStorage.multiRemove(['userInfo', 'lastCompletedRideId', 'userToken', 'refreshToken']);
                     set({ user: null });
                 }
-                // Cualquier otro error (red, timeout, 5xx) → mantener sesión local
             }
         } catch (e) {
             set({ user: null });
