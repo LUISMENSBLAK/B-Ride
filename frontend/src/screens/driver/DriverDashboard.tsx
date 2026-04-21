@@ -236,8 +236,8 @@ export default function DriverDashboard() {
     (async () => {
       try {
     const isApproved =
-      user?.approvalStatus === 'APPROVED' &&
-      user?.driverApprovalStatus === 'APPROVED'; // BUG-002: AND en vez de OR
+      user?.approvalStatus === 'APPROVED' ||
+      user?.driverApprovalStatus === 'APPROVED'; // Correcto: OR — aprobado si cualquiera de los dos campos lo indica
         setOnboardingComplete(isApproved);
         if (!isApproved) {
            setIsOnline(false); // Forzar offline si no está aprobado
