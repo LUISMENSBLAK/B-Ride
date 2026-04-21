@@ -36,7 +36,7 @@ if (process.env.NODE_ENV === 'production' && !corsOrigin) {
 app.use(cors({
     origin: corsOrigin
         ? corsOrigin.split(',').map(o => o.trim())
-        : ['http://localhost:8081'], // Solo development — nunca '*'
+        : ['http://localhost:8081', 'http://localhost:3001', 'http://localhost:5173'], // Dev: Metro + admin panel
     credentials: true,
 }));
 

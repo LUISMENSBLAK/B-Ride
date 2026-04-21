@@ -7,7 +7,9 @@ const rateLimit = require('express-rate-limit');
 const quoteLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  keyGenerator: (req) => req.user?._id?.toString() || req.ip,
+  // express-rate-limit v8: usar standardHeaders para evitar ERR_ERL_KEY_GEN_IPV6
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { success: false, message: 'Demasiadas solicitudes de cotización. Espera un momento.' }
 });
 
