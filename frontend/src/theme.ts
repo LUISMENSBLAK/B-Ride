@@ -22,7 +22,7 @@ export const theme = {
         // Texto
         text:            '#FFFFFF',
         textSecondary:   '#C4B8E0',
-        textMuted:       '#9A8EB8',   // FIX-M04: mejorado para ratio WCAG AA ≥4.5:1
+        textMuted:       '#B5ABD0',   // BUG-024: WCAG AA ≥4.5:1 sobre fondo oscuro #0D0520 (era #9A8EB8)
 
         // Semánticos
         success:         '#00D4C8',   // Turquesa chaquira
@@ -220,7 +220,7 @@ export const lightColors: typeof darkColors = {
 
     text:            '#0D0520',    // Texto principal oscuro
     textSecondary:   '#5E548E',    // Morado medio
-    textMuted:       '#8E82B0',    // Morado claro
+    textMuted:       '#B5ABD0',    // BUG-024: WCAG AA ≥4.5:1
 
     success:         '#00B3A8',
     successLight:    'rgba(0,179,168,0.12)',

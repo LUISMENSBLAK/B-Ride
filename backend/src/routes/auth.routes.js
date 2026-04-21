@@ -1,11 +1,37 @@
 const express = require('express');
 const { registerUser, loginUser, getMe, forgotPassword, resetPassword, refreshToken } = require('../controllers/auth.controller');
 const { protect } = require('../middlewares/auth.middleware');
+const rateLimit = require('express-rate-limit'); // MEJORA-1: Rate limiting en auth
 
 const router = express.Router();
 
-router.post('/register', registerUser);
-router.post('/login', loginUser);
+// MEJORA-1: Limitadores para endpoints críticos de auth
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 10,
+    message: { success: false, message: 'Demasiados intentos. Intenta de nuevo en 15 minutos.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const forgotLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hora
+    max: 5,
+    message: { success: false, message: 'Demasiadas solicitudes de recuperación. Intenta de nuevo en 1 hora.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hora
+    max: 20,
+    message: { success: false, message: 'Demasiados registros desde esta IP. Intenta de nuevo en 1 hora.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+router.post('/register', registerLimiter, registerUser);
+router.post('/login', loginLimiter, loginUser);
 router.post('/google', require('../controllers/auth.controller').googleLogin);
 router.post('/apple', require('../controllers/auth.controller').appleLogin);
 router.post('/verify-email', require('../controllers/auth.controller').verifyEmail);
@@ -19,7 +45,7 @@ router.post('/logout-all', protect, require('../controllers/auth.controller').lo
 router.delete('/account', protect, require('../controllers/auth.controller').deleteAccount);
 router.get('/referral', protect, require('../controllers/auth.controller').getReferral);
 router.get('/me', protect, getMe);
-router.post('/forgotpassword', forgotPassword);
+router.post('/forgotpassword', forgotLimiter, forgotPassword);
 router.put('/resetpassword/:resettoken', resetPassword);
 const path = require('path');
 const multer = require('multer');

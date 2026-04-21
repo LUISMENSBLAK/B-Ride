@@ -129,7 +129,11 @@ const forgotPassword = async (req, res) => {
         const user = await User.findOne({ email: req.body.email });
 
         if (!user) {
-            return res.status(404).json({ success: false, message: 'There is no user with that email' });
+            // BUG-004: Nunca revelar si el email existe — respuesta ambigua para prevenir enumeración
+            return res.status(200).json({
+                success: true,
+                message: 'Si ese correo está registrado, recibirás instrucciones para restablecer tu contraseña en los próximos minutos.'
+            });
         }
 
         // Get reset token

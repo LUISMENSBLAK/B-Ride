@@ -466,10 +466,38 @@ export default function PassengerDashboard() {
         console.log('Reverse geocode error', err);
       }
     }, 400);
-  }, [activeMapField, mapSelectionMode]); // FIX-A04: selectedPlace via ref, evita hoisting TS error
+  }, [activeMapField, mapSelectionMode]);
+
+  // BUG-007: BackHandler mejorado — 3 niveles de prioridad
+  useEffect(() => {
+    const handleBack = () => {
+      // Prioridad 1: cancelar selección en mapa
+      if (mapSelectionMode !== 'none') {
+        setMapSelectionMode('none');
+        setPendingCoordinate(null);
+        setPendingAddress('');
+        return true;
+      }
+      // Prioridad 2: cerrar campo de búsqueda activo
+      if (activeMapField !== null) {
+        setActiveMapField(null);
+        bottomSheetRef.current?.snapToIndex(0);
+        Keyboard.dismiss();
+        return true;
+      }
+      // Prioridad 3: colapsar sheet si está completamente expandido
+      if (currentSnapIndex === 2) {
+        bottomSheetRef.current?.snapToIndex(0);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [mapSelectionMode, activeMapField, currentSnapIndex]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowLocating(false), 3000);
+    const timer = setTimeout(() => setShowLocating(false), 8000); // BUG-016: timeout 8s para GPS frío
     return () => clearTimeout(timer);
   }, []);
 
@@ -509,7 +537,7 @@ export default function PassengerDashboard() {
         setPendingCoordinate(null);
         setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
-        setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+        setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
       } else {
         setPendingCoordinate(null);
         setPendingAddress('');
@@ -547,8 +575,7 @@ export default function PassengerDashboard() {
   const styles = React.useMemo(() => getStyles(theme), [theme]);
 
 
-  // Search modal state
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  // BUG-032: searchModalVisible eliminado (estado huérfano, no se usa en JSX)
 
 
 
@@ -589,7 +616,7 @@ export default function PassengerDashboard() {
   const [promoCode, setPromoCode] = useState('');
   const [promoDiscount, setPromoDiscount] = useState<{type: string, value: number} | null>(null);
   const [promoApplying, setPromoApplying] = useState(false);
-  const [promoInputOpen, setPromoInputOpen] = useState(false);
+  // BUG-012: promoInputOpen eliminado (estado huérfano)
   const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
   const [paymentSelectorVisible, setPaymentSelectorVisible] = useState(false);
 
@@ -746,7 +773,7 @@ export default function PassengerDashboard() {
       if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
       return null;
     }
-  }, []);
+  }, [t]); // BUG-017: t en deps para evitar stale closure
 
   // FIX-C05: GPS init con isMounted en el mismo closure — elimina el leak
   // checkLocationStatus se mantiene como callback público únicamente para el botón de retry en UI
@@ -951,7 +978,7 @@ export default function PassengerDashboard() {
         setMapSelectionMode('none');
         setPendingCoordinate(null);
         setPendingAddress('');
-        bottomSheetRef.current?.snapToIndex(1);
+        bottomSheetRef.current?.snapToIndex(0); // BUG-005: colapsar al 25%, no al 50%
       }
     }
   }, [stopTracking]));
@@ -1004,15 +1031,20 @@ export default function PassengerDashboard() {
     setPendingCoordinate(null);
     setPendingAddress('');
     socketService.setRideRoom(null);
-    bottomSheetRef.current?.snapToIndex(1);
+    bottomSheetRef.current?.snapToIndex(0); // BUG-005: colapsar al 25% tras cancelación
     Alert.alert(t('passenger.rideCancel'), t('passenger.rideCancelMsg'));
   }, [stopTracking]));
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleRequestRide = useCallback(async (finalPrice: number, finalCategory: any) => {
-    // FIX-A10: validación de foto ampliada — incluye 'picture' (OAuth) y avatarUrl y profilePhoto
-    if (!user?.avatarUrl && !user?.profilePhoto && !(user as any)?.picture) {
+    // BUG-020: verificar URL válida (no solo existencia del campo)
+    const hasPhoto = !!(
+      user?.avatarUrl?.startsWith('http') ||
+      user?.profilePhoto?.startsWith('http') ||
+      (user as any)?.picture?.startsWith('http')
+    );
+    if (!hasPhoto) {
       Alert.alert(
         t('passenger.photoRequired'),
         t('passenger.photoRequiredMsg'),
@@ -1148,7 +1180,7 @@ export default function PassengerDashboard() {
     setMapSelectionMode('none');
     setPendingCoordinate(null);
     setPendingAddress('');
-    bottomSheetRef.current?.snapToIndex(1);
+    bottomSheetRef.current?.snapToIndex(0); // BUG-005: colapsar al 25% tras cancelación manual
   }, [user]);
 
   const handleApplyPromo = async () => {
@@ -1160,7 +1192,12 @@ export default function PassengerDashboard() {
         setPromoDiscount({ type: res.data.data.type, value: res.data.data.value });
         showToast(t('passenger.promoAppliedMsg'), 'success');
       } else {
-        setPrice(String(convertToUsd(res.data.price)));
+        // BUG-038: guard NaN — solo actualizar si el precio es válido
+        const newPrice = res.data?.price;
+        if (typeof newPrice === 'number' && !isNaN(newPrice) && newPrice > 0) {
+          setPrice(String(convertToUsd(newPrice)));
+        }
+        // Si no hay precio válido, mantener el precio sugerido previo
       }
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
@@ -1270,7 +1307,7 @@ export default function PassengerDashboard() {
     setActiveMapField(null);
     Keyboard.dismiss();
     bottomSheetRef.current?.snapToIndex(0);
-    setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+    setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
   }, [saveToHistory, activeMapField]);
 
   const destinationCoord = React.useMemo(() => {
@@ -1312,7 +1349,24 @@ export default function PassengerDashboard() {
               </View>
             ) : <Loader label={t('general.locating')} />}
           </View>
-        ) : null}
+        ) : (
+          // BUG-016: mostrar loader incluso después del timeout si no hay location ni error
+          !errorMsg ? (
+            <View style={styles.loaderContainer}>
+              <Loader label={t('general.locating')} />
+            </View>
+          ) : (
+            <View style={styles.loaderContainer}>
+              <View style={styles.errorCard}>
+                <Ionicons name="location" size={48} color={theme.colors.error} style={{ marginBottom: 14 }} />
+                <Text style={styles.errorTitle}>{t('general.locationFailed')}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={checkLocationStatus}>
+                  <Text style={styles.retryBtnText}>{t('history.retry')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )
+        )}
       </Animated.View>
 
       {/* MEJORA 3: Toast Local */}
@@ -1337,7 +1391,11 @@ export default function PassengerDashboard() {
             : 'rgba(255,255,255,0.12)',
           zIndex: 500,
           alignItems: 'center',
-        }}>
+        }}
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+        accessible={true}
+        >
           <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
             {toast.msg}
           </Text>
@@ -1367,7 +1425,13 @@ export default function PassengerDashboard() {
           userName={user?.name}
           profilePhoto={user?.profilePhoto || user?.avatarUrl}
           onAvatarPress={() => navigation.navigate('PassengerProfile')}
-          onNotifPress={() => navigation.navigate('Notifications' as any)} // FIX-A06
+          onNotifPress={() => {
+            // BUG-001: Notifications pantalla no existe — Alert temporal para evitar crash
+            Alert.alert(
+              t('general.comingSoon', { defaultValue: 'Próximamente' }),
+              t('general.notificationsComingSoon', { defaultValue: 'El sistema de notificaciones estará disponible en la próxima versión.' })
+            );
+          }}
           unreadNotifications={0} // FIX-A06: extensible sin badge hasta que haya notif system
           theme={theme}
           t={t}
@@ -1649,7 +1713,7 @@ export default function PassengerDashboard() {
                     onPress={() => {
                         if (selectedPlace) {
                           bottomSheetRef.current?.snapToIndex(0);
-                          setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+                          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
                         } else {
                           setActiveMapField('destination');
                           bottomSheetRef.current?.snapToIndex(2);
@@ -1714,7 +1778,7 @@ export default function PassengerDashboard() {
                   }} />
 
                   {rideHistory.length === 0 ? (
-                    <Text style={styles.historyEmpty}>Tus destinos recientes aparecerán aquí</Text>
+                    <Text style={styles.historyEmpty}>{t('passenger.noRecentDestinations', { defaultValue: 'Tus destinos recientes aparecérán aquí' })}</Text>
                   ) : (
                     rideHistory.map((item, idx) => (
                       <TouchableOpacity
@@ -1766,14 +1830,19 @@ export default function PassengerDashboard() {
               )}
               {rideStatus === 'NEGOTIATING' && bids.length > 0 && (
                 <View style={styles.searchingContainer}>
-                  <Text style={styles.statusTitle}>¡Ofertas Recibidas!</Text>
+                  <Text style={styles.statusTitle}>{t('passenger.bidsReceived', { defaultValue: '¡Ofertas Recibidas!' })}</Text>
                   <View style={{ marginTop: 8, paddingBottom: 20, width: '100%' }}>
                     {bids.map((item: any) => (
                       <BidCard key={item._id} bid={item} isBest={item._id === bestBidId} onAccept={handleAcceptBid} />
                     ))}
                   </View>
-                  <TouchableOpacity style={styles.cancelRequestBtn} onPress={handleCancelRequest}>
-                    <Text style={styles.cancelRequestBtnText}>Cancelar</Text>
+                  <TouchableOpacity
+                    style={styles.cancelRequestBtn}
+                    onPress={handleCancelRequest}
+                    accessibilityLabel={t('accessibility.cancelRide', { defaultValue: 'Cancelar solicitud de viaje' })}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.cancelRequestBtnText}>{t('general.cancel', { defaultValue: 'Cancelar' })}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -1812,6 +1881,8 @@ export default function PassengerDashboard() {
           ref={fareOfferSheetRef}
           onClose={() => fareOfferSheetRef.current?.close()}
           onConfirm={(price, vehicle, payment) => {
+             // BUG-003: sincronizar paymentMethod al store ANTES de la solicitud
+             useRideFlowStore.getState().setPaymentMethod(payment as 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET');
              handleRequestRide(price, vehicle);
           }}
           suggestedPriceRange={{
@@ -1883,7 +1954,7 @@ export default function PassengerDashboard() {
             });
           }
           setRouteEditorVisible(false);
-          setTimeout(() => fareOfferSheetRef.current?.expand(), 350);
+          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
         }}
       />
     </View>

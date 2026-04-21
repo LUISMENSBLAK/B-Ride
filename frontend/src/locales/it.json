@@ -277,12 +277,46 @@
     "yesHere": "Sì, qui",
     "bestBid": "Offerta Migliore",
     "bidExpired": "Offerta scaduta",
-    "bidExpiresIn": "Scade tra {{seconds}}s"
+    "bidExpiresIn": "Scade tra {{seconds}}s",
+    "bidsReceived": "Offerte ricevute!",
+    "noRecentDestinations": "Le destinazioni recenti appariranno qui",
+    "scheduleRide": "Programma per dopo",
+    "scheduleTitle": "Programma corsa",
+    "scheduleSubtitle": "Quando ti veniamo a prendere?",
+    "schedule1h": "Tra 1 ora",
+    "schedule2h": "Tra 2 ore",
+    "schedule4h": "Tra 4 ore",
+    "scheduleTomorrow": "Domani a quest'ora",
+    "phoneNotVerified": "Per favore verifica il tuo numero di telefono con il codice SMS prima di continuare."
+  },
+  "driver": {
+    "phasePickingUp": "📍 Raccogliendo il passeggero",
+    "phasePassengerWaiting": "🧍 Passeggero in attesa",
+    "phaseInProgress": "🏁 In viaggio verso la destinazione",
+    "navigateToDestination": "Naviga alla destinazione",
+    "navigateToPickup": "Naviga al passeggero",
+    "arrivedAtPickup": "Arrivato al punto di raccolta",
+    "startTrip": "Inizia il viaggio",
+    "endTrip": "Termina il viaggio",
+    "tripsToday": "Corse oggi",
+    "earnedToday": "Guadagnato oggi",
+    "rating": "⭐ Valutazione",
+    "waitingForRides": "In attesa di richieste di corsa...",
+    "earnings": "guadagno",
+    "goOnline": "Vai online",
+    "goOffline": "Vai offline"
   },
   "accessibility": {
     "notifications": "Notifiche",
     "profile": "Profilo",
     "acceptBid": "Accetta offerta di {{driver}}",
-    "sos": "Pulsante di emergenza SOS"
+    "sos": "Pulsante di emergenza SOS",
+    "cancelRide": "Annulla richiesta di corsa"
+  },
+  "general": {
+    "add": "Aggiungi",
+    "cancel": "Annulla",
+    "comingSoon": "Prossimamente",
+    "notificationsComingSoon": "Il sistema di notifiche sarà disponibile nella prossima versione."
   }
 }

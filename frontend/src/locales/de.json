@@ -277,12 +277,46 @@
     "yesHere": "Ja, hier",
     "bestBid": "Bestes Angebot",
     "bidExpired": "Angebot abgelaufen",
-    "bidExpiresIn": "Läuft in {{seconds}}s ab"
+    "bidExpiresIn": "Läuft in {{seconds}}s ab",
+    "bidsReceived": "Angebote erhalten!",
+    "noRecentDestinations": "Ihre letzten Ziele erscheinen hier",
+    "scheduleRide": "Für später planen",
+    "scheduleTitle": "Fahrt planen",
+    "scheduleSubtitle": "Wann sollen wir Sie abholen?",
+    "schedule1h": "In 1 Stunde",
+    "schedule2h": "In 2 Stunden",
+    "schedule4h": "In 4 Stunden",
+    "scheduleTomorrow": "Morgen zu dieser Uhrzeit",
+    "phoneNotVerified": "Bitte verifizieren Sie Ihre Telefonnummer mit dem SMS-Code, bevor Sie fortfahren."
+  },
+  "driver": {
+    "phasePickingUp": "📍 Passagier wird abgeholt",
+    "phasePassengerWaiting": "🧍 Passagier wartet",
+    "phaseInProgress": "🏁 Auf dem Weg zum Ziel",
+    "navigateToDestination": "Zum Ziel navigieren",
+    "navigateToPickup": "Zum Passagier navigieren",
+    "arrivedAtPickup": "Am Abholpunkt angekommen",
+    "startTrip": "Fahrt starten",
+    "endTrip": "Fahrt beenden",
+    "tripsToday": "Fahrten heute",
+    "earnedToday": "Heute verdient",
+    "rating": "⭐ Bewertung",
+    "waitingForRides": "Warte auf Fahrtanfragen...",
+    "earnings": "Verdienst",
+    "goOnline": "Online gehen",
+    "goOffline": "Offline gehen"
   },
   "accessibility": {
     "notifications": "Benachrichtigungen",
     "profile": "Profil",
     "acceptBid": "Angebot von {{driver}} akzeptieren",
-    "sos": "SOS-Notfallknopf"
+    "sos": "SOS-Notfallknopf",
+    "cancelRide": "Fahrtanfrage stornieren"
+  },
+  "general": {
+    "add": "Hinzufügen",
+    "cancel": "Abbrechen",
+    "comingSoon": "Demnächst",
+    "notificationsComingSoon": "Das Benachrichtigungssystem ist in der nächsten Version verfügbar."
   }
 }

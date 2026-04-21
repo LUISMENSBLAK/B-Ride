@@ -245,7 +245,6 @@ export default function RegisterScreen({ navigation }: any) {
                         setPhoneOTP('');
                       }}
                       placeholder={t('auth.phonePlaceholder', { defaultValue: '+52 Número de teléfono' })}
-                      editable={phoneStep === 'input' && !phoneVerified}
                     />
                   </View>
                   {!phoneVerified && phoneStep === 'input' && phoneNumber.length > 7 && (

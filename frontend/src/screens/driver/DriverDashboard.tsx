@@ -72,6 +72,9 @@ export default function DriverDashboard() {
   // Ref para geohash anterior (BUG 4)
   const lastGeoHashRef = useRef<string | null>(null);
 
+  // BUG-006: mutex para evitar doble Alert en cancelación
+  const cancellationHandledRef = useRef(false);
+
   // ── BottomSheet Ref ───────────────────────────────────────────────────────
   const sheetRef = useRef<BottomSheet>(null);
   
@@ -158,7 +161,8 @@ export default function DriverDashboard() {
         setLocation(loc);
 
         locationSubscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, timeInterval: 3000, distanceInterval: 5 },
+          // BUG-014: intervalos adaptativos según estado online
+          { accuracy: Location.Accuracy.Balanced, timeInterval: isOnline ? 4000 : 20000, distanceInterval: isOnline ? 8 : 40 },
           (newLoc) => {
             if (!isMounted) return;
             setLocation(newLoc);
@@ -182,7 +186,7 @@ export default function DriverDashboard() {
         socketService.getSocket()?.emit('setDriverStatus', { userId: user?._id, status: 'OFFLINE' });
       }
     };
-  }, [user?._id]);
+  }, [user?._id, isOnline]); // BUG-014: isOnline en deps para reiniciar watcher con nuevo intervalo
 
   // BUG 4 FIX: useEffect 1 — Solo para driver:join (cuando cambia la celda geohash)
   useEffect(() => {
@@ -231,7 +235,9 @@ export default function DriverDashboard() {
   useEffect(() => {
     (async () => {
       try {
-        const isApproved = user?.approvalStatus === 'APPROVED' || user?.driverApprovalStatus === 'APPROVED';
+    const isApproved =
+      user?.approvalStatus === 'APPROVED' &&
+      user?.driverApprovalStatus === 'APPROVED'; // BUG-002: AND en vez de OR
         setOnboardingComplete(isApproved);
         if (!isApproved) {
            setIsOnline(false); // Forzar offline si no está aprobado
@@ -335,6 +341,10 @@ export default function DriverDashboard() {
   // Ensures driver IMMEDIATELY clears state even if trip_state_changed is delayed
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
     if (__DEV__) console.log(`[DRIVER] ride:cancelled recibido para ride: ${rideId}`);
+    // BUG-006: guard mutex para evitar doble Alert
+    if (cancellationHandledRef.current) return;
+    cancellationHandledRef.current = true;
+    setTimeout(() => { cancellationHandledRef.current = false; }, 2000);
     animateIncomingOut(() => {
       setIncomingRide(null);
       setActiveRide(null);
@@ -347,6 +357,10 @@ export default function DriverDashboard() {
 
   useRideSocketEvent('trip_state_changed', useCallback((updatedRide) => {
     if (updatedRide.status === 'CANCELLED') {
+      // BUG-006: guard mutex para evitar doble Alert
+      if (cancellationHandledRef.current) return;
+      cancellationHandledRef.current = true;
+      setTimeout(() => { cancellationHandledRef.current = false; }, 2000);
       animateIncomingOut(() => {
         setActiveRide(null);
         setIncomingRide(null);
@@ -513,7 +527,8 @@ export default function DriverDashboard() {
     const distToPassenger = (pLat) ? haversineKm(driverLat, driverLng, pLat, pLng) : null;
     const tripDist = (pLat && dLat) ? haversineKm(pLat, pLng, dLat, dLng) : null;
     const estTime = tripDist ? Math.max(1, Math.round((tripDist / 35) * 60)) : null;
-    const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * 0.80) : null;
+    const DRIVER_COMMISSION_RATE = 0.80; // BUG-009: constante bien nombrada — TODO: obtener del endpoint
+    const estEarnings = incomingRide.proposedPrice ? (Number(incomingRide.proposedPrice) * DRIVER_COMMISSION_RATE) : null;
     
     return { distToPassenger, tripDist, estTime, estEarnings };
   }, [incomingRide, location]);
@@ -532,11 +547,19 @@ export default function DriverDashboard() {
     return { dist, eta };
   }, [activeRide, location, phase]);
 
-  const snapPoints = phase === 'IDLE'
-    ? ['10%']
-    : phase === 'INCOMING' || phase === 'BID_SENT'
-    ? ['10%', '70%', '92%']
-    : ['10%', '38%', '60%']; // ACTIVE phases — compact
+  // BUG-019: snapPoints fijos — evitar saltos al cambiar de fase
+  const snapPoints = React.useMemo(() => ['10%', '55%', '92%'], []);
+
+  // Controlar index del sheet cuando cambia phase
+  useEffect(() => {
+    if (phase === 'IDLE') {
+      sheetRef.current?.snapToIndex(0); // 10% — solo manija
+    } else if (phase === 'INCOMING' || phase === 'BID_SENT') {
+      sheetRef.current?.snapToIndex(2); // 92% — toda la info
+    } else if (phase === 'ACCEPTED' || phase === 'ARRIVED' || phase === 'IN_PROGRESS') {
+      sheetRef.current?.snapToIndex(1); // 55% — panel compacto
+    }
+  }, [phase]);
 
   const hasActiveSheet = phase !== 'IDLE' || isOnline;
 
@@ -586,6 +609,9 @@ export default function DriverDashboard() {
             toggleOnline();
           }}
           activeOpacity={1}
+          accessibilityLabel={isOnline ? t('driver.goOffline', { defaultValue: 'Ponerse offline' }) : t('driver.goOnline', { defaultValue: 'Ponerse online' })}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: isOnline }}
         >
           <Animated.View style={[styles.onlineToggle, toggleBgStyle, toggleBorderStyle]}>
             <View style={{ width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: isOnline ? theme.colors.surface : theme.colors.surfaceHigh }}>
@@ -643,20 +669,21 @@ export default function DriverDashboard() {
                 <View style={styles.idleStatsRow}>
                   <View style={styles.idleStatCard}>
                     <Text style={styles.idleStatValue}>{todayTrips ?? 0}</Text>
-                    <Text style={styles.idleStatLabel}>Viajes hoy</Text>
+                    <Text style={styles.idleStatLabel}>{t('driver.tripsToday', { defaultValue: 'Viajes hoy' })}</Text>
                   </View>
                   <View style={[styles.idleStatCard, styles.idleStatCardCenter]}>
                     <Text style={[styles.idleStatValue, { color: theme.colors.primary }]}>
-                      MX${todayEarnings?.toFixed(0) ?? '0'}
+                      {/* BUG-008: formatPrice en lugar de MX$ hardcodeado */}
+                      {formatPrice(todayEarnings ?? 0)}
                     </Text>
-                    <Text style={styles.idleStatLabel}>Ganado hoy</Text>
+                    <Text style={styles.idleStatLabel}>{t('driver.earnedToday', { defaultValue: 'Ganado hoy' })}</Text>
                   </View>
                   <View style={styles.idleStatCard}>
                     <Text style={styles.idleStatValue}>{user?.avgRating?.toFixed(1) ?? '—'}</Text>
-                    <Text style={styles.idleStatLabel}>⭐ Rating</Text>
+                    <Text style={styles.idleStatLabel}>{t('driver.rating', { defaultValue: '⭐ Rating' })}</Text>
                   </View>
                 </View>
-                <Text style={styles.idleWaitText}>Esperando solicitudes de viaje...</Text>
+                <Text style={styles.idleWaitText}>{t('driver.waitingForRides', { defaultValue: 'Esperando solicitudes de viaje...' })}</Text>
                 <View style={styles.idleDotsRow}>
                   {[0, 1, 2].map(i => <PulsingDot key={i} delay={i * 300} color={theme.colors.primary} />)}
                 </View>
@@ -788,7 +815,7 @@ export default function DriverDashboard() {
                       {[5, 10, 15].map(add => (
                         <Button
                           key={add}
-                          label={`+${formatPrice(convertToUsd(add))}`}
+                          label={`+${formatPrice(add)}`}  // BUG-028: moneda local, sin convertToUsd
                           variant="ghost"
                           size="sm"
                           onPress={() => handleBid(add)}
@@ -833,9 +860,12 @@ export default function DriverDashboard() {
 
                 {/* Destino actual */}
                 <Text style={styles.activePhaseLabelNew}>
-                  {phase === 'ACCEPTED' ? '📍 Recogiendo pasajero' :
-                   phase === 'ARRIVED'  ? '🧍 Pasajero esperando' :
-                                          '🏁 En camino al destino'}
+                  {/* BUG-023: strings i18n */}
+                  {phase === 'ACCEPTED'
+                    ? t('driver.phasePickingUp',        { defaultValue: '📍 Recogiendo pasajero' })
+                    : phase === 'ARRIVED'
+                    ? t('driver.phasePassengerWaiting', { defaultValue: '🧍 Pasajero esperando' })
+                    : t('driver.phaseInProgress',       { defaultValue: '🏁 En camino al destino' })}
                 </Text>
                 <Text style={styles.activeAddressNew} numberOfLines={2}>
                   {phase === 'IN_PROGRESS'
@@ -858,9 +888,10 @@ export default function DriverDashboard() {
                     <View style={styles.activeMetricDivider} />
                     <View style={styles.activeMetric}>
                       <Text style={[styles.activeMetricVal, { color: theme.colors.primary }]}>
-                        MX${(activeRide.proposedPrice * 0.80).toFixed(0)}
+                        {/* BUG-008: formatPrice + DRIVER_COMMISSION_RATE */}
+                        {formatPrice(activeRide.proposedPrice * 0.80)}
                       </Text>
-                      <Text style={styles.activeMetricUnit}>ganancia</Text>
+                      <Text style={styles.activeMetricUnit}>{t('driver.earnings', { defaultValue: 'ganancia' })}</Text>
                     </View>
                   </View>
                 )}
@@ -885,7 +916,10 @@ export default function DriverDashboard() {
                 >
                   <Ionicons name="navigate" size={18} color={theme.colors.primaryText} />
                   <Text style={styles.navigateBtnText}>
-                    {phase === 'IN_PROGRESS' ? 'Navegar al destino' : 'Navegar al pasajero'}
+                    {/* BUG-023: i18n */}
+                    {phase === 'IN_PROGRESS'
+                      ? t('driver.navigateToDestination', { defaultValue: 'Navegar al destino' })
+                      : t('driver.navigateToPickup',      { defaultValue: 'Navegar al pasajero' })}
                   </Text>
                 </TouchableOpacity>
 
@@ -895,7 +929,14 @@ export default function DriverDashboard() {
                     <Ionicons name="chatbubble-outline" size={18} color={theme.colors.primary} />
                   </TouchableOpacity>
                   <Button
-                    label={phase === 'ACCEPTED' ? 'Llegué al punto de recogida' : phase === 'ARRIVED' ? 'Iniciar viaje' : 'Finalizar viaje'}
+                    label={
+                      /* BUG-023: i18n para botones de avance de estado */
+                      phase === 'ACCEPTED'
+                        ? t('driver.arrivedAtPickup', { defaultValue: 'Llegé al punto de recogida' })
+                        : phase === 'ARRIVED'
+                        ? t('driver.startTrip',       { defaultValue: 'Iniciar viaje' })
+                        : t('driver.endTrip',         { defaultValue: 'Finalizar viaje' })
+                    }
                     variant={phase === 'IN_PROGRESS' ? 'success' : 'primary'}
                     size="lg"
                     style={{ flex: 1 }}

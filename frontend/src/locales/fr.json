@@ -277,12 +277,51 @@
     "yesHere": "Oui, ici",
     "bestBid": "Meilleure Offre",
     "bidExpired": "Offre expirée",
-    "bidExpiresIn": "Expire dans {{seconds}}s"
+    "bidExpiresIn": "Expire dans {{seconds}}s",
+    "driversNearby": "{{count}} chauffeur{{plural}} à proximité",
+    "pickupBannerTitle": "On vous prend ici?",
+    "adjustOnMap": "Déplacez la carte pour ajuster",
+    "confirmHere": "Oui, ici",
+    "deleteFavoriteConfirm": "Supprimer ce favori?",
+    "bidsReceived": "Offres reçues!",
+    "noRecentDestinations": "Vos destinations récentes apparaîtront ici",
+    "scheduleRide": "Planifier pour plus tard",
+    "scheduleTitle": "Planifier un trajet",
+    "scheduleSubtitle": "Quand vous récupérer?",
+    "schedule1h": "Dans 1 heure",
+    "schedule2h": "Dans 2 heures",
+    "schedule4h": "Dans 4 heures",
+    "scheduleTomorrow": "Demain à cette heure",
+    "phoneNotVerified": "Veuillez vérifier votre numéro de téléphone avec le code SMS avant de continuer."
+  },
+  "driver": {
+    "phasePickingUp": "📍 Prise en charge du passager",
+    "phasePassengerWaiting": "🧍 Passager en attente",
+    "phaseInProgress": "🏁 En route vers la destination",
+    "navigateToDestination": "Naviguer vers la destination",
+    "navigateToPickup": "Naviguer vers le passager",
+    "arrivedAtPickup": "Arrivé au point de prise en charge",
+    "startTrip": "Démarrer le trajet",
+    "endTrip": "Terminer le trajet",
+    "tripsToday": "Trajets aujourd'hui",
+    "earnedToday": "Gagné aujourd'hui",
+    "rating": "⭐ Note",
+    "waitingForRides": "En attente de demandes de trajet...",
+    "earnings": "gains",
+    "goOnline": "Se connecter",
+    "goOffline": "Se déconnecter"
   },
   "accessibility": {
     "notifications": "Notifications",
     "profile": "Profil",
     "acceptBid": "Accepter l'offre de {{driver}}",
-    "sos": "Bouton d'urgence SOS"
+    "sos": "Bouton d'urgence SOS",
+    "cancelRide": "Annuler la demande de trajet"
+  },
+  "general": {
+    "add": "Ajouter",
+    "cancel": "Annuler",
+    "comingSoon": "Bientôt disponible",
+    "notificationsComingSoon": "Le système de notifications sera disponible dans la prochaine version."
   }
 }

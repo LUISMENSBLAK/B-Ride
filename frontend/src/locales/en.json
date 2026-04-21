@@ -309,13 +309,52 @@
     "yesHere": "Yes, here",
     "bestBid": "Best Offer",
     "bidExpired": "Offer expired",
-    "bidExpiresIn": "Expires in {{seconds}}s"
+    "bidExpiresIn": "Expires in {{seconds}}s",
+    "driversNearby": "{{count}} driver{{plural}} nearby",
+    "pickupBannerTitle": "Pick you up here?",
+    "adjustOnMap": "Move the map to adjust",
+    "confirmHere": "Yes, here",
+    "deleteFavoriteConfirm": "Delete this favorite?",
+    "bidsReceived": "Offers Received!",
+    "noRecentDestinations": "Your recent destinations will appear here",
+    "scheduleRide": "Schedule for later",
+    "scheduleTitle": "Schedule Ride",
+    "scheduleSubtitle": "When should we pick you up?",
+    "schedule1h": "In 1 hour",
+    "schedule2h": "In 2 hours",
+    "schedule4h": "In 4 hours",
+    "scheduleTomorrow": "Tomorrow at this time",
+    "phoneNotVerified": "Please verify your phone number with the SMS code before continuing."
+  },
+  "driver": {
+    "phasePickingUp": "📍 Picking up passenger",
+    "phasePassengerWaiting": "🧍 Passenger waiting",
+    "phaseInProgress": "🏁 On the way to destination",
+    "navigateToDestination": "Navigate to destination",
+    "navigateToPickup": "Navigate to passenger",
+    "arrivedAtPickup": "Arrived at pickup point",
+    "startTrip": "Start trip",
+    "endTrip": "End trip",
+    "tripsToday": "Trips today",
+    "earnedToday": "Earned today",
+    "rating": "⭐ Rating",
+    "waitingForRides": "Waiting for ride requests...",
+    "earnings": "earnings",
+    "goOnline": "Go online",
+    "goOffline": "Go offline"
   },
   "accessibility": {
     "notifications": "Notifications",
     "profile": "Profile",
     "acceptBid": "Accept offer from {{driver}}",
-    "sos": "SOS emergency button"
+    "sos": "SOS emergency button",
+    "cancelRide": "Cancel ride request"
+  },
+  "general": {
+    "add": "Add",
+    "cancel": "Cancel",
+    "comingSoon": "Coming soon",
+    "notificationsComingSoon": "The notification system will be available in the next version."
   }
 }
 

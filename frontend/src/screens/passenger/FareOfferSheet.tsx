@@ -13,6 +13,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
+import { useCurrency } from '../../hooks/useCurrency'; // BUG-039: moneda dinámica
+
 
 // ── Vehicle catalogue ───────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -87,13 +89,14 @@ interface FareOfferSheetProps {
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
 const VehicleCard = React.memo(({
-  item, isSelected, estimatedPrice, loadingPrice, onPress,
+  item, isSelected, estimatedPrice, loadingPrice, onPress, formatPrice,
 }: {
   item: typeof VEHICLE_TYPES[0];
   isSelected: boolean;
   estimatedPrice?: number;
   loadingPrice?: boolean;
   onPress: () => void;
+  formatPrice: (n: number) => string; // BUG-039: moneda dinámica
 }) => {
   const scale = useSharedValue(1);
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -123,7 +126,8 @@ const VehicleCard = React.memo(({
         {loadingPrice ? (
           <Text style={styles.vehiclePrice}>···</Text>
         ) : estimatedPrice !== undefined ? (
-          <Text style={styles.vehiclePrice}>MX${estimatedPrice}</Text>
+          // BUG-039: formatPrice en lugar de MX$ hardcodeado
+          <Text style={styles.vehiclePrice}>{formatPrice(estimatedPrice)}</Text>
         ) : null}
       </Animated.View>
     </TouchableOpacity>
@@ -144,6 +148,9 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   } = props;
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
+  // BUG-039: moneda dinámica
+  const { formatPrice, currency } = useCurrency();
+  const currencySymbol = currency === 'MXN' ? 'MX$' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
 
   // ── State ──
   const [priceStr, setPriceStr] = useState('');
@@ -182,7 +189,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const ctaScale = useSharedValue(1);
   const currentPrice = parseFloat(priceStr || '0');
   const selectedVehicleCat = VEHICLE_TYPES.find(v => v.id === vehicleType)?.category ?? 'ECONOMY';
-  const minPrice = categoryOptions?.[selectedVehicleCat]?.minFareMXN ?? 45;
+  const minPrice = (categoryOptions?.[selectedVehicleCat] as any)?.minFareMXN ?? (categoryOptions?.[selectedVehicleCat] as any)?.minFare ?? 45;
   const isUnderMin = currentPrice > 0 && currentPrice < minPrice;
   const isValid = currentPrice >= minPrice;
   useEffect(() => {
@@ -197,13 +204,14 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
   useImperativeHandle(ref, () => ({
     expand: () => {
+      // BUG-039 FIX: Primero abrir el sheet, luego resetear estado en el siguiente frame
       Keyboard.dismiss();
-      setPriceStr('');
-      setVehicleType('ECONOMY');
-      setShowPaymentPicker(false);
-      setTimeout(() => {
-        sheetRef.current?.snapToIndex(0);
-      }, 200);
+      sheetRef.current?.expand(); // expand() nativo — el caller externo ya maneja timing
+      requestAnimationFrame(() => {
+        setPriceStr('');
+        setVehicleType('ECONOMY');
+        setShowPaymentPicker(false);
+      });
     },
     close: () => {
       sheetRef.current?.close();
@@ -249,6 +257,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       index={-1}
       snapPoints={['92%']}
       enablePanDownToClose
+      onClose={onClose}  // BUG-039: onClose para deslizar hacia abajo
       backgroundStyle={s.sheetBg}
       // GAP VISUAL 4: custom handle bar instead of null
       handleComponent={() => (
@@ -358,14 +367,14 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
         {/* ── SECCIÓN 2: Hero Price Input ── */}
         <View style={s.heroContainer}>
           <View style={s.priceRow}>
-            <Text style={s.currencyPrefix}>MX$</Text>
+            <Text style={s.currencyPrefix}>{currencySymbol}</Text>
             <Text style={s.priceNumber}>{priceStr || ''}</Text>
             {priceStr.length === 0 || priceStr.length < 4 ? (
               <Animated.View style={[s.cursor, cursorStyle]} />
             ) : null}
           </View>
           <View style={s.priceDivider} />
-          <Text style={s.priceSuggLabel}>Precio sugerido: MX${suggestedPriceRange?.min ?? 0} – MX${suggestedPriceRange?.max ?? 0}</Text>
+          <Text style={s.priceSuggLabel}>Precio sugerido: {formatPrice(suggestedPriceRange?.min ?? 0)} – {formatPrice(suggestedPriceRange?.max ?? 0)}</Text>
           {isUnderMin && (
             <Text style={{ color: '#FF5722', fontSize: 12, textAlign: 'center', marginTop: 4 }}>
               Mínimo MX${minPrice} — sube la oferta para atraer conductores
@@ -389,6 +398,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
                 estimatedPrice={loadingQuotes ? undefined : getEstimatedPrice(item)}
                 loadingPrice={loadingQuotes}
                 onPress={() => setVehicleType(item.id)}
+                formatPrice={formatPrice}  // BUG-039: pasar formatPrice como prop
               />
             )}
           />
@@ -474,7 +484,8 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             activeOpacity={0.88}
           >
             <Text style={[s.ctaText, isValid ? s.ctaTextEnabled : s.ctaTextDisabled]}>
-              {isValid ? `Solicitar · MX$${priceStr}` : `Mínimo MX$${minPrice}`}
+              {/* BUG-039: formatPrice en lugar de MX$ hardcodeado */}
+              {isValid ? `Solicitar · ${formatPrice(currentPrice)}` : `Mínimo ${formatPrice(minPrice)}`}
             </Text>
           </TouchableOpacity>
         </Animated.View>

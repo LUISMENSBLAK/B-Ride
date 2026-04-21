@@ -309,13 +309,52 @@
     "yesHere": "Sí, aquí",
     "bestBid": "Mejor Oferta",
     "bidExpired": "Oferta expirada",
-    "bidExpiresIn": "Expira en {{seconds}}s"
+    "bidExpiresIn": "Expira en {{seconds}}s",
+    "driversNearby": "{{count}} conductor{{plural}} cerca",
+    "pickupBannerTitle": "¿Te recogemos aquí?",
+    "adjustOnMap": "Mueve el mapa para ajustar",
+    "confirmHere": "Sí, aquí",
+    "deleteFavoriteConfirm": "¿Eliminar este favorito?",
+    "bidsReceived": "¡Ofertas Recibidas!",
+    "noRecentDestinations": "Tus destinos recientes aparecerán aquí",
+    "scheduleRide": "Agendar para más tarde",
+    "scheduleTitle": "Agendar Viaje",
+    "scheduleSubtitle": "¿Cuándo te recogemos?",
+    "schedule1h": "En 1 hora",
+    "schedule2h": "En 2 horas",
+    "schedule4h": "En 4 horas",
+    "scheduleTomorrow": "Mañana a esta hora",
+    "phoneNotVerified": "Por favor verifica tu número de teléfono con el código SMS antes de continuar."
+  },
+  "driver": {
+    "phasePickingUp": "📍 Recogiendo pasajero",
+    "phasePassengerWaiting": "🧍 Pasajero esperando",
+    "phaseInProgress": "🏁 En camino al destino",
+    "navigateToDestination": "Navegar al destino",
+    "navigateToPickup": "Navegar al pasajero",
+    "arrivedAtPickup": "Llegé al punto de recogida",
+    "startTrip": "Iniciar viaje",
+    "endTrip": "Finalizar viaje",
+    "tripsToday": "Viajes hoy",
+    "earnedToday": "Ganado hoy",
+    "rating": "⭐ Rating",
+    "waitingForRides": "Esperando solicitudes de viaje...",
+    "earnings": "ganancia",
+    "goOnline": "Ponerse online",
+    "goOffline": "Ponerse offline"
   },
   "accessibility": {
     "notifications": "Notificaciones",
     "profile": "Perfil",
     "acceptBid": "Aceptar oferta de {{driver}}",
-    "sos": "Botón de emergencia SOS"
+    "sos": "Botón de emergencia SOS",
+    "cancelRide": "Cancelar solicitud de viaje"
+  },
+  "general": {
+    "add": "Agregar",
+    "cancel": "Cancelar",
+    "comingSoon": "Próximamente",
+    "notificationsComingSoon": "El sistema de notificaciones estará disponible en la próxima versión."
   }
 }
 
