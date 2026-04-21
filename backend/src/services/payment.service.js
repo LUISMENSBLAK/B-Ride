@@ -2,7 +2,11 @@ const Stripe = require('stripe');
 const User = require('../models/User');
 const Ride = require('../models/Ride');
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock_b_ride_123');
+// FIX-C03: Guard — falla en arranque si la key no está definida
+if (!process.env.STRIPE_SECRET_KEY) {
+    throw new Error('[FATAL] STRIPE_SECRET_KEY no definida. El servidor no puede iniciar sin esta variable.');
+}
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 class PaymentService {
 

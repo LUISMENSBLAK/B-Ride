@@ -71,7 +71,12 @@ export default function Loader({
     const dotSize  = size === 'sm' ? 7 : size === 'md' ? 10 : 14;
 
     return (
-        <View style={styles.container}>
+        <View
+          style={styles.container}
+          accessibilityLabel="Cargando"
+          accessibilityLiveRegion="polite"
+          accessible={true}
+        >
             <View style={styles.dotsRow}>
                 <Dot delay={0}   color={dotColor} />
                 <Dot delay={150} color={dotColor} />

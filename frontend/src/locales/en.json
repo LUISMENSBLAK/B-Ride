@@ -301,7 +301,21 @@
     "releaseToConfirm": "Release to confirm...",
     "reconnecting": "Reconnecting…",
     "noConnection": "No real-time connection",
-    "findingRide": "Finding your ride…"
+    "findingRide": "Finding your ride…",
+    "greetingPrefix": "Hello, {{name}}",
+    "locationDetected": "Current location detected",
+    "moveMapToAdjust": "Move the map to adjust",
+    "pickupHereQuestion": "Pick you up here?",
+    "yesHere": "Yes, here",
+    "bestBid": "Best Offer",
+    "bidExpired": "Offer expired",
+    "bidExpiresIn": "Expires in {{seconds}}s"
+  },
+  "accessibility": {
+    "notifications": "Notifications",
+    "profile": "Profile",
+    "acceptBid": "Accept offer from {{driver}}",
+    "sos": "SOS emergency button"
   }
 }
 

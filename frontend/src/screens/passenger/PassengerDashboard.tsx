@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withRepeat, withTiming, interpolate, Extrapolation, withSequence, runOnJS, FadeIn, FadeOut, ZoomIn, ZoomOut } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { v4 as uuidv4 } from 'uuid'; // FIX-C02
 import { useAuthStore } from '../../store/authStore';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import { useSocketStore } from '../../store/useSocketStore';
@@ -37,7 +38,7 @@ import SearchingDriversView from '../../components/SearchingDriversView';
 import { RatingModal } from '../../components/RatingModal';
 import PaymentMethodSelector from '../../components/PaymentMethodSelector';
 import ActiveRidePanel from '../../components/ActiveRidePanel';
-import FareOfferSheet from './FareOfferSheet';
+import FareOfferSheet, { type FareOfferSheetRef } from './FareOfferSheet'; // FIX-C01: tipado
 import RouteEditorSheet from './RouteEditorSheet';
 import AddFavoriteSheet, {
   loadFavorites, saveFavorite, deleteFavorite,
@@ -54,13 +55,28 @@ function firstName(name?: string) {
 }
 
 // ── TopBar Flotante ────────────────────────────────────────────────────────
-const TopBar = memo(({ userName, profilePhoto, onAvatarPress, theme }: any) => {
+// FIX-A06: tipado explícito + navegación notifications + FIX-M01: i18n strings
+const TopBar = memo(({ userName, profilePhoto, onAvatarPress, onNotifPress, unreadNotifications = 0, theme, t }: {
+  userName?: string;
+  profilePhoto?: string;
+  onAvatarPress?: () => void;
+  onNotifPress?: () => void;
+  unreadNotifications?: number;
+  theme: any;
+  t: (key: string, opts?: any) => string;
+}) => {
   const insets = useSafeAreaInsets();
   const topPosition = Math.max(insets.top, 20) + 12;
 
   return (
     <View style={[topBarStyles.container, { top: topPosition }]}>
-      <TouchableOpacity style={topBarStyles.leftSection} onPress={onAvatarPress} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={topBarStyles.leftSection}
+        onPress={onAvatarPress}
+        activeOpacity={0.8}
+        accessibilityLabel={t('accessibility.profile', { defaultValue: 'Perfil' })}
+        accessibilityRole="button"
+      >
         {profilePhoto ? (
            <Image source={{ uri: profilePhoto }} style={topBarStyles.avatar} />
         ) : (
@@ -69,14 +85,27 @@ const TopBar = memo(({ userName, profilePhoto, onAvatarPress, theme }: any) => {
            </View>
         )}
         <View style={topBarStyles.textBlock}>
-          <Text style={topBarStyles.greeting}>Hola, {firstName(userName)} 👋</Text>
-          <Text style={topBarStyles.subText}>Ubicación actual detectada</Text>
+          {/* FIX-M01: i18n greeting */}
+          <Text style={topBarStyles.greeting}>
+            {t('passenger.greetingPrefix', { name: firstName(userName), defaultValue: `Hola, ${firstName(userName)}` })} 👋
+          </Text>
+          <Text style={topBarStyles.subText}>
+            {t('passenger.locationDetected', { defaultValue: 'Ubicación actual detectada' })}
+          </Text>
         </View>
       </TouchableOpacity>
       
-      <TouchableOpacity style={topBarStyles.notifBtn}>
+      {/* FIX-A06: navegación a Notifications + FIX-M06: 44×44pt touch target */}
+      <TouchableOpacity
+        style={topBarStyles.notifBtn}
+        onPress={onNotifPress}
+        accessibilityLabel={t('accessibility.notifications', { defaultValue: 'Notificaciones' })}
+        accessibilityRole="button"
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
         <Ionicons name="notifications-outline" size={20} color="#FFFFFF" />
-        <View style={topBarStyles.notifBadge} />
+        {/* FIX-A06: solo mostrar badge si hay notificaciones */}
+        {unreadNotifications > 0 && <View style={topBarStyles.notifBadge} />}
       </TouchableOpacity>
     </View>
   );
@@ -109,7 +138,8 @@ const topBarStyles = StyleSheet.create({
   greeting: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   subText: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 2 },
   notifBtn: { 
-    width: 36, height: 36, borderRadius: 18, 
+    // FIX-M06: 44×44pt mínimo para touch target
+    width: 44, height: 44, borderRadius: 22, 
     backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center', alignItems: 'center' 
   },
@@ -315,7 +345,7 @@ export default function PassengerDashboard() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const fareOfferSheetRef = useRef<any>(null); // Ref for FareOfferSheet
+  const fareOfferSheetRef = useRef<FareOfferSheetRef>(null); // FIX-C01: tipado correcto
   const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
   const animatedIndex = useSharedValue(0);
   const [showLocating, setShowLocating] = useState(true);
@@ -362,6 +392,9 @@ export default function PassengerDashboard() {
       }));
     }
   }, [location]);
+
+  // FIX-A04: ref para leer selectedPlace desde handleRegionChangeComplete sin hoisting issue
+  const selectedPlaceRef = useRef<PlaceResult | null>(null);
 
   const enterMapSelectionMode = useCallback((mode: 'pickup' | 'destination') => {
     setActiveMapField(null);
@@ -411,7 +444,7 @@ export default function PassengerDashboard() {
       return;
     }
 
-    if (!activeMapField || selectedPlace) return;
+    if (!activeMapField || selectedPlaceRef.current) return;
     mapCenterReverseGeocodeTimer.current = setTimeout(async () => {
       try {
         const res = await Location.reverseGeocodeAsync({ latitude: region.latitude, longitude: region.longitude });
@@ -433,7 +466,7 @@ export default function PassengerDashboard() {
         console.log('Reverse geocode error', err);
       }
     }, 400);
-  }, [activeMapField, mapSelectionMode]);
+  }, [activeMapField, mapSelectionMode]); // FIX-A04: selectedPlace via ref, evita hoisting TS error
 
   useEffect(() => {
     const timer = setTimeout(() => setShowLocating(false), 3000);
@@ -533,6 +566,8 @@ export default function PassengerDashboard() {
 
 
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+  // Mantener ref sincronizado con el estado
+  useEffect(() => { selectedPlaceRef.current = selectedPlace; }, [selectedPlace]);
   const [price, setPrice] = useState('');
   const [completedRide, setCompletedRide] = useState<RideData | null>(null);
   const [acceptingBidId, setAcceptingBidId] = useState<string | null>(null);
@@ -681,6 +716,9 @@ export default function PassengerDashboard() {
   const currentRideIdRef = useRef<string | null>(null);
   useEffect(() => { currentRideIdRef.current = currentRideId; }, [currentRideId]);
 
+  // FIX-C04: Mutex ref para detectar cancel duplicado (ride:cancelled vs trip_state_changed)
+  const cancellationHandledRef = useRef(false);
+
   const checkLocationStatus = useCallback(async () => {
     let isMounted = true;
     try {
@@ -710,7 +748,8 @@ export default function PassengerDashboard() {
     }
   }, []);
 
-  // ─── Socket setup y Location INIT ───────────────────────────────────────────
+  // FIX-C05: GPS init con isMounted en el mismo closure — elimina el leak
+  // checkLocationStatus se mantiene como callback público únicamente para el botón de retry en UI
   useEffect(() => {
     let isMounted = true;
     let locationSubscription: Location.LocationSubscription | null = null;
@@ -725,16 +764,75 @@ export default function PassengerDashboard() {
       }
     });
 
-    checkLocationStatus().then(sub => {
-      if (sub) locationSubscription = sub;
-    });
+    (async () => {
+      try {
+        setErrorMsg(null);
+        const providerStatus = await Location.getProviderStatusAsync();
+        if (!providerStatus.locationServicesEnabled) {
+          if (isMounted) setErrorMsg(t('passenger.gpsDisabled', { defaultValue: 'Por favor, activa el GPS de tu dispositivo para continuar.' }));
+          return;
+        }
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (!isMounted) return;
+        if (status !== 'granted') {
+          if (isMounted) setErrorMsg(t('passenger.permissionDenied', { defaultValue: 'Permiso de ubicación denegado. Se requiere para pedir un ride.' }));
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!isMounted) return;
+        setLocation(loc);
+        // FIX-C05: timeInterval relajado en IDLE para ahorrar batería
+        locationSubscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 30000, distanceInterval: 30 },
+          (newLoc) => { if (isMounted) setLocation(newLoc); }
+        );
+      } catch (error: unknown) {
+        if (isMounted) setErrorMsg(t('passenger.locationServiceError', { defaultValue: 'No pudimos obtener tu ubicación. Verifica tu conexión a internet.' }));
+      }
+    })();
 
     return () => {
       isMounted = false;
       locationSubscription?.remove();
       sub.remove();
     };
-  }, [checkLocationStatus]);
+  }, []); // Solo en mount — no depende de checkLocationStatus
+
+  // FIX-M08: GPS Adaptativo — watcher se recrea con intervals dinámicos según rideStatus
+  const activeAdaptiveWatcherRef = useRef<Location.LocationSubscription | null>(null);
+  useEffect(() => {
+    const isActiveRide = rideStatus === 'ACCEPTED' || rideStatus === 'ARRIVED' || rideStatus === 'IN_PROGRESS';
+    const isSearching = rideStatus === 'SEARCHING' || rideStatus === 'NEGOTIATING' || rideStatus === 'REQUESTING';
+
+    if (!isActiveRide && !isSearching) {
+      activeAdaptiveWatcherRef.current?.remove();
+      activeAdaptiveWatcherRef.current = null;
+      return;
+    }
+
+    const timeInterval = isActiveRide ? 5000 : 10000;
+    const distanceInterval = isActiveRide ? 5 : 15;
+
+    let cancelled = false;
+    (async () => {
+      activeAdaptiveWatcherRef.current?.remove();
+      activeAdaptiveWatcherRef.current = null;
+      const sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval, distanceInterval },
+        (newLoc) => { if (!cancelled) setLocation(newLoc); }
+      );
+      if (cancelled) { sub.remove(); return; }
+      activeAdaptiveWatcherRef.current = sub;
+    })();
+
+    return () => {
+      cancelled = true;
+      activeAdaptiveWatcherRef.current?.remove();
+      activeAdaptiveWatcherRef.current = null;
+    };
+  }, [rideStatus]);
+
+
 
   // Timeout para cancelar la busqueda de conductores automaticamente con 5 min (300,000s)
   useEffect(() => {
@@ -838,6 +936,12 @@ export default function PassengerDashboard() {
           status: 'COMPLETED'
         });
       } else {
+        // FIX-C04: Usar mutex para no duplicar Alert si ride:cancelled ya lo manejó
+        if (!cancellationHandledRef.current) {
+          cancellationHandledRef.current = true;
+          setTimeout(() => { cancellationHandledRef.current = false; }, 2000);
+          Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
+        }
         stopTracking();
         resetFlow();
         setPrice('');
@@ -848,7 +952,6 @@ export default function PassengerDashboard() {
         setPendingCoordinate(null);
         setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(1);
-        Alert.alert(t('errors.rideCancelled'), t('errors.driverCancelled'));
       }
     }
   }, [stopTracking]));
@@ -883,6 +986,12 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('ride:cancelled', useCallback(({ rideId }) => {
+    // FIX-C04: Guard mutex — evitar doble ejecución con trip_state_changed
+    if (cancellationHandledRef.current) return;
+    cancellationHandledRef.current = true;
+    // Resetear después de procesarlo para que el próximo viaje pueda cancelarse normalmente
+    setTimeout(() => { cancellationHandledRef.current = false; }, 2000);
+
     stopTracking();
     resetFlow();
     setPrice('');
@@ -902,7 +1011,8 @@ export default function PassengerDashboard() {
   // ─── Handlers ───────────────────────────────────────────────────────────────
 
   const handleRequestRide = useCallback(async (finalPrice: number, finalCategory: any) => {
-    if (!user?.avatarUrl && !user?.profilePhoto) {
+    // FIX-A10: validación de foto ampliada — incluye 'picture' (OAuth) y avatarUrl y profilePhoto
+    if (!user?.avatarUrl && !user?.profilePhoto && !(user as any)?.picture) {
       Alert.alert(
         t('passenger.photoRequired'),
         t('passenger.photoRequiredMsg'),
@@ -927,13 +1037,15 @@ export default function PassengerDashboard() {
     }
     setPrice(String(finalPrice));
     setVehicleCategory(finalCategory);
-    setPriceSheetVisible(false);
+    // FIX-C01: Eliminado setPriceSheetVisible(false) — no existe, se controla con fareOfferSheetRef
     setRideStatus('REQUESTING');
     try {
+      // FIX-C02: eventId único por request + 1 reintento con timeout 8s
+      const eventId = uuidv4();
       await socketService.emitWithAck('requestRide', {
         passengerId: user?._id,
+        eventId,
         pickupLocation: {
-          // Usar pickupOverride si el usuario lo selecionó en el mapa, si no, el GPS crudo
           latitude: pickupOverride?.latitude ?? pickupLocation.latitude ?? location.coords.latitude,
           longitude: pickupOverride?.longitude ?? pickupLocation.longitude ?? location.coords.longitude,
           address: pickupOverride?.address ?? pickupLocation.displayName ?? 'Mi Ubicación Actual',
@@ -948,7 +1060,7 @@ export default function PassengerDashboard() {
         paymentMethod,
         promoCode: promoDiscount ? promoCode : undefined,
         vehicleCategory: finalCategory,
-      }, 3, 5000);
+      }, 1, 8000); // FIX-C02: máximo 1 reintento, timeout 8s
     } catch (error: unknown) {
       const err = error as { message?: string; code?: string; response?: any };
       Alert.alert(t('passenger.connectionError'), err.message || t('passenger.connectionErrorMsg'));
@@ -1255,7 +1367,10 @@ export default function PassengerDashboard() {
           userName={user?.name}
           profilePhoto={user?.profilePhoto || user?.avatarUrl}
           onAvatarPress={() => navigation.navigate('PassengerProfile')}
+          onNotifPress={() => navigation.navigate('Notifications' as any)} // FIX-A06
+          unreadNotifications={0} // FIX-A06: extensible sin badge hasta que haya notif system
           theme={theme}
+          t={t}
         />
       )}
 

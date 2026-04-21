@@ -74,8 +74,19 @@ function generateCurvedPolyline(start: Coordinate, end: Coordinate, numPoints = 
   return points;
 }
 
-/** Fetch real street directions from OSRM */
+// PERF-01: Caché en memoria para rutas OSRM (TTL 10 minutos)
+const ROUTE_CACHE_TTL = 10 * 60 * 1000; // 10 min en ms
+const routeCache = new Map<string, { coords: Coordinate[]; cachedAt: number }>();
+
+/** Fetch real street directions from OSRM (con caché) */
 async function fetchOsrmRoute(start: Coordinate, end: Coordinate): Promise<Coordinate[] | null> {
+  // PERF-01: Verificar caché primero
+  const cacheKey = `${start.latitude.toFixed(3)},${start.longitude.toFixed(3)}-${end.latitude.toFixed(3)},${end.longitude.toFixed(3)}`;
+  const cached = routeCache.get(cacheKey);
+  if (cached && (Date.now() - cached.cachedAt) < ROUTE_CACHE_TTL) {
+    return cached.coords;
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
@@ -90,10 +101,13 @@ async function fetchOsrmRoute(start: Coordinate, end: Coordinate): Promise<Coord
     
     if (data.routes && data.routes.length > 0) {
       const coords = data.routes[0].geometry.coordinates;
-      return coords.map((c: number[]) => ({
+      const route = coords.map((c: number[]) => ({
         latitude: c[1],
         longitude: c[0]
       }));
+      // PERF-01: Guardar en caché
+      routeCache.set(cacheKey, { coords: route, cachedAt: Date.now() });
+      return route;
     }
   } catch (e) {
     return null;

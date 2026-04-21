@@ -22,7 +22,7 @@ export const theme = {
         // Texto
         text:            '#FFFFFF',
         textSecondary:   '#C4B8E0',
-        textMuted:       '#7B6B9A',
+        textMuted:       '#9A8EB8',   // FIX-M04: mejorado para ratio WCAG AA ≥4.5:1
 
         // Semánticos
         success:         '#00D4C8',   // Turquesa chaquira
@@ -38,11 +38,11 @@ export const theme = {
         borderLight:     'rgba(255,255,255,0.06)',
         borderFocus:     'rgba(245,197,24,0.70)',
         inputBackground: '#1A0A35',
-        inputPlaceholder:'#7B6B9A',
+        inputPlaceholder:'#9A8EB8',
         link:            '#00D4C8',   // Turquesa
 
         // Herencia para compatibilidad hacia atrás
-        inputPlaceholderColor: '#7B6B9A',
+        inputPlaceholderColor: '#9A8EB8',
         primaryLight2:   'rgba(245,197,24,0.10)',
 
         // Colores extendidos Wixárika

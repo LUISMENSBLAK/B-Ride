@@ -277,6 +277,19 @@ export default function DriverDashboard() {
     if (typeof ack === 'function') ack({ received: true, driverId: user?._id });
   }, [animateIncomingIn, user?._id]));
 
+  // FIX-A09: Timer de 30s — auto-dismiss de INCOMING si el conductor no reacciona
+  useEffect(() => {
+    if (phase !== 'INCOMING') return;
+    const timer = setTimeout(() => {
+      if (__DEV__) console.log('[DRIVER] INCOMING timeout: auto-ignorando ride sin respuesta');
+      animateIncomingOut(() => {
+        setIncomingRide(null);
+        setPhase('IDLE');
+      });
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [phase, animateIncomingOut]);
+
   // Mantener compatibilidad si se emite por el MatchingService en la anterior version
   useRideSocketEvent('new_trip', useCallback((ride) => {
     if (isOnlineRef.current && !activeRideRef.current) {

@@ -301,7 +301,21 @@
     "releaseToConfirm": "Suelta para confirmar...",
     "reconnecting": "Reconectando…",
     "noConnection": "Sin conexión en tiempo real",
-    "findingRide": "Encontrando tu ride…"
+    "findingRide": "Encontrando tu ride…",
+    "greetingPrefix": "Hola, {{name}}",
+    "locationDetected": "Ubicación actual detectada",
+    "moveMapToAdjust": "Mueve el mapa para ajustar",
+    "pickupHereQuestion": "¿Te recogemos aquí?",
+    "yesHere": "Sí, aquí",
+    "bestBid": "Mejor Oferta",
+    "bidExpired": "Oferta expirada",
+    "bidExpiresIn": "Expira en {{seconds}}s"
+  },
+  "accessibility": {
+    "notifications": "Notificaciones",
+    "profile": "Perfil",
+    "acceptBid": "Aceptar oferta de {{driver}}",
+    "sos": "Botón de emergencia SOS"
   }
 }
 

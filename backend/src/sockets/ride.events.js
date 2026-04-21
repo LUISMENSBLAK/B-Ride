@@ -12,6 +12,16 @@ const notificationService = require('../services/notification.service');
 // Memoria para Rate Limiting de Ofertas Cíclicas
 const bidRateLimits = new Map();
 
+// FIX-A05: Cleanup periódico — evitar memory leak en sesiones largas
+setInterval(() => {
+    const cutoff = Date.now() - 5 * 60 * 1000; // 5 minutos
+    for (const [key, limit] of bidRateLimits.entries()) {
+        if (limit.lastBidAt < cutoff) {
+            bidRateLimits.delete(key);
+        }
+    }
+}, 60 * 1000);
+
 const rideEvents = (socket) => {
     if (process.env.NODE_ENV !== 'production') console.log(`[Sockets] Usuario Conectado: ${socket.id}`);
 

@@ -268,5 +268,21 @@
     "topupWallet": "Recharger le Portefeuille",
     "cancel": "Annuler",
     "pay": "Payer"
+  },
+  "passenger": {
+    "greetingPrefix": "Bonjour, {{name}}",
+    "locationDetected": "Position actuelle détectée",
+    "moveMapToAdjust": "Déplacez la carte pour ajuster",
+    "pickupHereQuestion": "On vous prend ici?",
+    "yesHere": "Oui, ici",
+    "bestBid": "Meilleure Offre",
+    "bidExpired": "Offre expirée",
+    "bidExpiresIn": "Expire dans {{seconds}}s"
+  },
+  "accessibility": {
+    "notifications": "Notifications",
+    "profile": "Profil",
+    "acceptBid": "Accepter l'offre de {{driver}}",
+    "sos": "Bouton d'urgence SOS"
   }
 }

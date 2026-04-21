@@ -268,5 +268,21 @@
     "topupWallet": "Geldbörse Aufladen",
     "cancel": "Abbrechen",
     "pay": "Bezahlen"
+  },
+  "passenger": {
+    "greetingPrefix": "Hallo, {{name}}",
+    "locationDetected": "Aktueller Standort erkannt",
+    "moveMapToAdjust": "Karte verschieben zum Anpassen",
+    "pickupHereQuestion": "Abholen hier?",
+    "yesHere": "Ja, hier",
+    "bestBid": "Bestes Angebot",
+    "bidExpired": "Angebot abgelaufen",
+    "bidExpiresIn": "Läuft in {{seconds}}s ab"
+  },
+  "accessibility": {
+    "notifications": "Benachrichtigungen",
+    "profile": "Profil",
+    "acceptBid": "Angebot von {{driver}} akzeptieren",
+    "sos": "SOS-Notfallknopf"
   }
 }

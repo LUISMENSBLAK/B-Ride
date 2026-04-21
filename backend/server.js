@@ -27,8 +27,16 @@ app.use(helmet());
 
 // LAUNCH 4 FIX: CORS restringido por variable de entorno
 const corsOrigin = process.env.CORS_ORIGIN;
+
+// FIX-C06: Guard — en producción, CORS_ORIGIN debe estar configurado explícitamente
+if (process.env.NODE_ENV === 'production' && !corsOrigin) {
+    throw new Error('[FATAL] CORS_ORIGIN no definida en producción. El servidor no puede iniciar sin esta variable.');
+}
+
 app.use(cors({
-    origin: corsOrigin ? corsOrigin.split(',').map(o => o.trim()) : '*',
+    origin: corsOrigin
+        ? corsOrigin.split(',').map(o => o.trim())
+        : ['http://localhost:8081'], // Solo development — nunca '*'
     credentials: true,
 }));
 

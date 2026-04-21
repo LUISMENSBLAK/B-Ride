@@ -11,6 +11,7 @@ import {
 import Animated, {
   FadeInDown, Layout,
   useSharedValue, useAnimatedStyle, withTiming, interpolateColor,
+  withRepeat, withSequence,
 } from 'react-native-reanimated';
 import { useAppTheme } from '../hooks/useAppTheme';
 import { type Theme } from '../theme';
@@ -55,11 +56,11 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
     ? `${vehicle.color || ''} ${vehicle.make} ${vehicle.model || ''} • ${vehicle.licensePlate || ''}`.trim()
     : null;
 
-  // ── WEEK 1 FIX: Timer basado en createdAt del servidor ───────────────────
+  // FIX-A02: Timer basado en createdAt del servidor + buffer de +5s para compensar desfase de reloj
   const [secondsLeft, setSecondsLeft] = useState(() => {
     if (bid.createdAt) {
       const elapsed = Math.floor((Date.now() - new Date(bid.createdAt).getTime()) / 1000);
-      return Math.max(0, BID_TTL_SECONDS - elapsed);
+      return Math.max(0, BID_TTL_SECONDS - elapsed + 5);
     }
     return BID_TTL_SECONDS;
   });
@@ -77,8 +78,31 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
   // Barra de progreso animada
   const progress = useSharedValue(secondsLeft / BID_TTL_SECONDS);
   useEffect(() => {
+    // Reiniciar al valor actual de secondsLeft (respeta el buffer)
+    progress.value = secondsLeft / BID_TTL_SECONDS;
     progress.value = withTiming(0, { duration: secondsLeft * 1000 });
   }, []);
+
+  // FIX-A02 Bonus: Pulso rojo en últimos 5 segundos
+  const urgentPulse = useSharedValue(1);
+  useEffect(() => {
+    if (secondsLeft <= 5 && secondsLeft > 0) {
+      urgentPulse.value = withRepeat(
+        withSequence(
+          withTiming(1.15, { duration: 300 }),
+          withTiming(1.0, { duration: 300 }),
+        ),
+        -1,
+        true,
+      );
+    } else {
+      urgentPulse.value = 1;
+    }
+  }, [secondsLeft <= 5]);
+  const urgentPulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: urgentPulse.value }] }));
+  const urgentColorStyle = useAnimatedStyle(() => ({
+    color: secondsLeft <= 5 ? '#FF3B30' : undefined,
+  }));
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${progress.value * 100}%` as any,
@@ -117,9 +141,9 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
       <View style={bidStyles.timerTrack}>
         <Animated.View style={[bidStyles.timerBar, barStyle]} />
       </View>
-      <Text style={[bidStyles.timerLabel, urgentText && bidStyles.timerLabelUrgent]}>
-        {expired ? 'Oferta expirada' : `Expira en ${secondsLeft}s`}
-      </Text>
+      <Animated.Text style={[bidStyles.timerLabel, urgentText && bidStyles.timerLabelUrgent, urgentColorStyle, urgentPulseStyle]}>
+        {expired ? t('passenger.bidExpired', { defaultValue: 'Oferta expirada' }) : t('passenger.bidExpiresIn', { seconds: secondsLeft, defaultValue: `Expira en ${secondsLeft}s` })}
+      </Animated.Text>
 
       <View style={bidStyles.row}>
         {/* Avatar */}
@@ -166,6 +190,8 @@ const BidCard = memo(({ bid, isBest, onAccept }: BidCardProps) => {
               ]}
               onPress={() => onAccept(bid._id, bid.driver._id)}
               disabled={bid.isProcessing || expired}
+              accessibilityLabel={t('accessibility.acceptBid', { driver: driverName, defaultValue: `Aceptar oferta de ${driverName}` })}
+              accessibilityRole="button"
             >
               {bid.isProcessing ? (
                 <ActivityIndicator size="small" color={theme.colors.primaryText} />

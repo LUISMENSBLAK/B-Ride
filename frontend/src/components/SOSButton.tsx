@@ -54,7 +54,12 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
 
   return (
     <LongPressGestureHandler onHandlerStateChange={onHandlerStateChange} minDurationMs={0}>
-      <Animated.View style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }, style]}>
+      <Animated.View
+        style={[styles.wrapper, { transform: [{ scale: scaleAnim }] }, style]}
+        accessibilityLabel="Botón de emergencia SOS"
+        accessibilityRole="button"
+        accessible={true}
+      >
         {/* Anillo de progreso */}
         <View style={styles.progressRing}>
           <Animated.View style={[styles.progressFill, { width: arcWidth }]} />

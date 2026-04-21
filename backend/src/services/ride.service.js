@@ -33,14 +33,14 @@ class RideService {
         // Integración con Pricing Machine
         const { surgeMultiplier, zoneId } = pricingService.getSurgeForLocation(pickupLocation.latitude, pickupLocation.longitude);
 
-        // Evaluar promo
+        // Evaluar promo — calcular descuento SIN incrementar el contador todavía (FIX-A03)
         let finalDiscount = 0;
         let appliedPromoCode = null;
+        let promoToCommit = null; // referencia para commit post-ride
         if (promoCode) {
             const Promo = require('../models/Promo');
             const promo = await Promo.findOne({ code: promoCode.toUpperCase(), isActive: true });
             if (promo) {
-                // Validación de fecha no necesaria aquí si ya se validó en check/validate pero la haremos segura
                 if (promo.type === 'FIXED_AMOUNT') {
                     finalDiscount = promo.value;
                 } else if (promo.type === 'PERCENTAGE') {
@@ -48,8 +48,7 @@ class RideService {
                     if (promo.maxDiscount && finalDiscount > promo.maxDiscount) finalDiscount = promo.maxDiscount;
                 }
                 appliedPromoCode = promo.code;
-                promo.usedCount += 1;
-                await promo.save();
+                promoToCommit = promo; // guardamos referencia para DESPUÉS del ride.create
             }
         }
 
@@ -71,6 +70,12 @@ class RideService {
                 timestamp: new Date()
             }
         });
+
+        // FIX-A03: Solo incrementar usedCount si el ride se creó exitosamente
+        if (promoToCommit) {
+            promoToCommit.usedCount += 1;
+            await promoToCommit.save();
+        }
 
         return await Ride.findById(ride._id).populate('passenger', 'name email phoneNumber');
     }

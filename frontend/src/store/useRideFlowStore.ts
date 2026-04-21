@@ -95,11 +95,11 @@ export const useRideFlowStore = create<RideFlowState>((set, get) => ({
 
     setPaymentMethod: (method) => set({ paymentMethod: method }),
 
-    resetFlow: () => set({ 
+    resetFlow: () => set((state) => ({ 
         status: 'IDLE', 
         rideId: null, 
         bids: [], 
         activeRidePayload: null,
-        paymentMethod: 'CASH'
-    }),
+        paymentMethod: state.paymentMethod // FIX-A01: conservar método de pago seleccionado
+    })),
 }));
