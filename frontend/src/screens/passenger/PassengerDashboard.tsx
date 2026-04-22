@@ -346,6 +346,7 @@ export default function PassengerDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const fareOfferSheetRef = useRef<FareOfferSheetRef>(null); // FIX-C01: tipado correcto
+  const [isFareSheetOpen, setIsFareSheetOpen] = useState(false); // Control via prop
   const [currentSnapIndex, setCurrentSnapIndex] = useState(0);
   const animatedIndex = useSharedValue(0);
   const [showLocating, setShowLocating] = useState(true);
@@ -496,6 +497,13 @@ export default function PassengerDashboard() {
     return () => sub.remove();
   }, [mapSelectionMode, activeMapField, currentSnapIndex]);
 
+  // Auto-cerrar FareOfferSheet cuando se acepta un ride o se cancela el flujo
+  useEffect(() => {
+    if (rideStatus !== 'IDLE' && rideStatus !== 'SEARCHING') {
+      setIsFareSheetOpen(false);
+    }
+  }, [rideStatus]);
+
   useEffect(() => {
     const timer = setTimeout(() => setShowLocating(false), 8000); // BUG-016: timeout 8s para GPS frío
     return () => clearTimeout(timer);
@@ -528,7 +536,7 @@ export default function PassengerDashboard() {
         setPendingCoordinate(null);
         setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
-        setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039: delay unificado 300ms
+        setIsFareSheetOpen(true); // BUG-039: delay unificado 300ms
       } else {
         setPendingCoordinate(null);
         setPendingAddress('');
@@ -541,7 +549,7 @@ export default function PassengerDashboard() {
       setPendingCoordinate(null);
       setPendingAddress('');
       bottomSheetRef.current?.snapToIndex(0);
-      setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
+      setIsFareSheetOpen(true);
     }
   }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory, isEditingOriginFromSheet]);
 
@@ -1311,7 +1319,7 @@ export default function PassengerDashboard() {
     // Auto-open FareOfferSheet immediately if origin & dest are set
     if (pickupLocation.latitude && pickupLocation.longitude && place.latitude && place.longitude) {
        bottomSheetRef.current?.snapToIndex(0);
-       setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
+       setIsFareSheetOpen(true);
        return;
     }
     
@@ -1745,7 +1753,7 @@ export default function PassengerDashboard() {
                           // Hay destino → cerrar sheet de búsqueda y abrir FareOfferSheet
                           Keyboard.dismiss();
                           bottomSheetRef.current?.snapToIndex(0);
-                          setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039
+                          setIsFareSheetOpen(true); // BUG-039
                         } else {
                           // Sin destino → abrir búsqueda
                           setActiveMapField('destination');
@@ -1845,7 +1853,7 @@ export default function PassengerDashboard() {
                     setSelectedPlace(place);
                     Haptics.selectionAsync();
                     bottomSheetRef.current?.snapToIndex(0);
-                    setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
+                    setIsFareSheetOpen(true);
                   }}
                   onAdd={() => setAddFavVisible(true)}
                   onDelete={handleDeleteFav}
@@ -1916,10 +1924,12 @@ export default function PassengerDashboard() {
       {/* GAP VISUAL 5: pass API prices + loadingQuotes */}
       <FareOfferSheet
           ref={fareOfferSheetRef}
-          onClose={() => fareOfferSheetRef.current?.close()}
+          isOpen={isFareSheetOpen}
+          onClose={() => setIsFareSheetOpen(false)}
           onConfirm={(price, vehicle, payment) => {
              // BUG-003: sincronizar paymentMethod al store ANTES de la solicitud
              useRideFlowStore.getState().setPaymentMethod(payment as 'CASH' | 'CARD' | 'APPLE_PAY' | 'WALLET');
+             setIsFareSheetOpen(false);
              handleRequestRide(price, vehicle);
           }}
           suggestedPriceRange={{
@@ -1933,12 +1943,12 @@ export default function PassengerDashboard() {
           loadingQuotes={loadingQuotes}
           originAddress={pickupOverride?.address ?? pickupLocation?.displayName ?? 'Mi ubicación actual'}
           onEditOrigin={() => {
-            fareOfferSheetRef.current?.close();
+            setIsFareSheetOpen(false);
             setRouteEditorInitialField('origin');
             setTimeout(() => setRouteEditorVisible(true), 350);
           }}
           onEditDest={() => {
-            fareOfferSheetRef.current?.close();
+            setIsFareSheetOpen(false);
             setSelectedPlace(null);
             setTimeout(() => {
               setActiveMapField('destination');
@@ -1991,7 +2001,7 @@ export default function PassengerDashboard() {
             });
           }
           setRouteEditorVisible(false);
-          setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039: delay unificado 300ms
+          setIsFareSheetOpen(true); // BUG-039: delay unificado 300ms
         }}
       />
     </View>

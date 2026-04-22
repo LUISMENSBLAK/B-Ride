@@ -3,6 +3,7 @@ import { LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StripeProvider } from '@stripe/stripe-react-native';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import AppNavigator from './src/navigation/AppNavigator';
 import { registerForPushNotificationsAsync, setupNotificationListeners } from './src/services/notifications/NotificationService';
 import { useAuthStore } from './src/store/authStore';
@@ -45,7 +46,9 @@ export default function App() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           <AnimatedSplash>
             <SafeAreaProvider>
-              <AppNavigator />
+              <BottomSheetModalProvider>
+                <AppNavigator />
+              </BottomSheetModalProvider>
             </SafeAreaProvider>
           </AnimatedSplash>
         </GestureHandlerRootView>

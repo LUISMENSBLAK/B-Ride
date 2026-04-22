@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, FlatList, ScrollView, Pressable, Keyboard,
 } from 'react-native';
-import BottomSheet from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetModal } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -85,6 +85,8 @@ interface FareOfferSheetProps {
   originAddress?: string;
   onEditDest?: () => void;
   onEditOrigin?: () => void;
+  // Control imperativo via prop (más fiable que ref.snapToIndex)
+  isOpen?: boolean;
 }
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
@@ -145,9 +147,10 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
     onConfirm, onClose, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin,
     categoryOptions, loadingQuotes,
     originAddress, onEditDest, onEditOrigin,
+    isOpen,
   } = props;
   const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   // BUG-039: moneda dinámica
   const { formatPrice, currency } = useCurrency();
   const currencySymbol = currency === 'MXN' ? 'MX$' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
@@ -167,6 +170,24 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       setPriceStr(Math.round(opt.priceMXN).toString());
     }
   }, [vehicleType, categoryOptions]);
+
+  // BUG FINAL FIX: controlar apertura/cierre via prop isOpen usando BottomSheetModal.present()
+  useEffect(() => {
+    if (isOpen) {
+      const opts = categoryOptionsRef.current;
+      if (opts?.['ECONOMY']?.priceMXN && opts['ECONOMY'].priceMXN > 0) {
+        setPriceStr(Math.round(opts['ECONOMY'].priceMXN).toString());
+      } else {
+        setPriceStr('');
+      }
+      setVehicleType('ECONOMY');
+      setShowPaymentPicker(false);
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // BUG 2: payment picker state
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
@@ -208,7 +229,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
   useImperativeHandle(ref, () => ({
     expand: () => {
-      // A4: expand() estable con precio pre-cargado via ref
+      // Fallback: usar present() en lugar de snapToIndex
       Keyboard.dismiss();
       const opts = categoryOptionsRef.current;
       if (opts?.['ECONOMY']?.priceMXN && opts['ECONOMY'].priceMXN > 0) {
@@ -216,15 +237,12 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       } else {
         setPriceStr('');
       }
+      setVehicleType('ECONOMY');
       setShowPaymentPicker(false);
-      setVehicleType('__RESET__' as any);
-      requestAnimationFrame(() => {
-        setVehicleType('ECONOMY');
-        sheetRef.current?.snapToIndex(0);
-      });
+      sheetRef.current?.present();
     },
     close: () => {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     }
   }));
 
@@ -264,15 +282,12 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const snapPoints = useMemo(() => ['92%'], []);
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
-      index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
-      onClose={onClose}  // BUG-039: onClose para deslizar hacia abajo
+      onDismiss={onClose}
       backgroundStyle={s.sheetBg}
-      style={{ zIndex: 9999, elevation: 10 }}
-      // GAP VISUAL 4: custom handle bar instead of null
       handleComponent={() => (
         <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.20)' }} />
@@ -503,7 +518,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 });
 
