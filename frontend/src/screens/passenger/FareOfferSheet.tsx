@@ -85,8 +85,6 @@ interface FareOfferSheetProps {
   originAddress?: string;
   onEditDest?: () => void;
   onEditOrigin?: () => void;
-  // Control imperativo via prop (más fiable que ref.snapToIndex)
-  isOpen?: boolean;
 }
 
 // ── VehicleCard (inner component) ───────────────────────────────────────────
@@ -147,7 +145,6 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
     onConfirm, onClose, suggestedPriceRange, destAddress, distanceKm, estimatedTimeMin,
     categoryOptions, loadingQuotes,
     originAddress, onEditDest, onEditOrigin,
-    isOpen,
   } = props;
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheetModal>(null);
@@ -170,24 +167,6 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       setPriceStr(Math.round(opt.priceMXN).toString());
     }
   }, [vehicleType, categoryOptions]);
-
-  // BUG FINAL FIX: controlar apertura/cierre via prop isOpen usando BottomSheetModal.present()
-  useEffect(() => {
-    if (isOpen) {
-      const opts = categoryOptionsRef.current;
-      if (opts?.['ECONOMY']?.priceMXN && opts['ECONOMY'].priceMXN > 0) {
-        setPriceStr(Math.round(opts['ECONOMY'].priceMXN).toString());
-      } else {
-        setPriceStr('');
-      }
-      setVehicleType('ECONOMY');
-      setShowPaymentPicker(false);
-      sheetRef.current?.present();
-    } else {
-      sheetRef.current?.dismiss();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
 
   // BUG 2: payment picker state
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
@@ -239,7 +218,9 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       }
       setVehicleType('ECONOMY');
       setShowPaymentPicker(false);
-      sheetRef.current?.present();
+      setTimeout(() => {
+        sheetRef.current?.present();
+      }, 250);
     },
     close: () => {
       sheetRef.current?.dismiss();
@@ -759,7 +740,7 @@ const s = StyleSheet.create({
     marginTop: 12,
     marginBottom: 0,
     height: 56,
-    borderRadius: 18,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
