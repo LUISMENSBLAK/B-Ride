@@ -3,7 +3,7 @@ import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
-  ActivityIndicator, Image, Keyboard, FlatList, BackHandler
+  ActivityIndicator, Image, Keyboard, FlatList, BackHandler, InteractionManager
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -501,16 +501,7 @@ export default function PassengerDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ─── BackHandler: cancel map-selection on hardware back ────────────────────
-  useEffect(() => {
-    if (mapSelectionMode === 'none') return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setMapSelectionMode('none');
-      setPendingCoordinate(null);
-      return true;
-    });
-    return () => sub.remove();
-  }, [mapSelectionMode]);
+  // ─── BackHandler removed here per request ───
 
   // ─── Confirm map-selected point ────────────────────────────────────────────
   const handleConfirmMapPoint = useCallback(() => {
@@ -537,7 +528,7 @@ export default function PassengerDashboard() {
         setPendingCoordinate(null);
         setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
-        setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
+        InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039: delay unificado 300ms
       } else {
         setPendingCoordinate(null);
         setPendingAddress('');
@@ -550,7 +541,7 @@ export default function PassengerDashboard() {
       setPendingCoordinate(null);
       setPendingAddress('');
       bottomSheetRef.current?.snapToIndex(0);
-      setTimeout(() => fareOfferSheetRef.current?.expand(), 300);
+      InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); });
     }
   }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory, isEditingOriginFromSheet]);
 
@@ -1157,6 +1148,17 @@ export default function PassengerDashboard() {
     }
   }, [currentRideId, user, acceptingBidId, paymentAuthorizing, initPaymentSheet, presentPaymentSheet]);
 
+  const validateAndSetPickup = useCallback((place: PlaceResult) => {
+    setPickupLocation(place);
+    if (place.latitude && place.longitude) {
+      setPickupOverride({
+        latitude: place.latitude,
+        longitude: place.longitude,
+        address: place.displayName,
+      });
+    }
+  }, []);
+
   const handleCancelRequest = useCallback(async () => {
     const rideId = currentRideIdRef.current;
     if (rideId) {
@@ -1283,10 +1285,9 @@ export default function PassengerDashboard() {
   });
 
   const favoritesAnimatedStyle = useAnimatedStyle(() => {
-    const display = isSearching || isActiveRide || currentSnapIndex === 2 ? 'none' : 'flex';
     const opacity = interpolate(animatedIndex.value, [0, 1, 2], [0, 1, 0], Extrapolation.CLAMP);
-    const height = animatedIndex.value < 1 ? 0 : 'auto';
-    return { opacity, height, display };
+    const maxHeight = interpolate(animatedIndex.value, [0, 1, 2], [0, 200, 0], Extrapolation.CLAMP);
+    return { opacity, maxHeight };
   });
 
   const confirmBtnScale = useSharedValue(1);
@@ -1308,14 +1309,15 @@ export default function PassengerDashboard() {
     
     // Auto-open FareOfferSheet immediately if origin & dest are set
     if (pickupLocation.latitude && pickupLocation.longitude && place.latitude && place.longitude) {
-       fetchQuotes(pickupLocation, place);
        bottomSheetRef.current?.snapToIndex(0);
-       setTimeout(() => fareOfferSheetRef.current?.expand(), 300);
+       InteractionManager.runAfterInteractions(() => {
+         fareOfferSheetRef.current?.expand();
+       });
        return;
     }
     
     bottomSheetRef.current?.snapToIndex(1);
-  }, [saveToHistory, activeMapField, pickupLocation, fetchQuotes]);
+  }, [saveToHistory, activeMapField, pickupLocation, validateAndSetPickup]);
 
   const destinationCoord = React.useMemo(() => {
     if (selectedPlace && selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined) {
@@ -1683,10 +1685,24 @@ export default function PassengerDashboard() {
           <>
           {/* SIEMPRE visible — no condicional (SearchBar/Autocomplete) evitamos desmontar componente para no perder el state de búsqueda */}
           <View style={{ flex: currentSnapIndex < 2 ? undefined : 1 }}>
+              {/* Micro-label context */}
+              {!isSearching && !isActiveRide && (
+                <Text style={{
+                  fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase',
+                  color: theme.colors.textMuted, marginBottom: 6, marginLeft: 4
+                }}>
+                  {selectedPlace ? `→ ${selectedPlace.displayName.split(',')[0]}` : '¿A dónde vamos?'}
+                </Text>
+              )}
               <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: (isSearching || isActiveRide || currentSnapIndex === 2) ? 'none' : 'flex' }]}>
                 {/* 2-part Search Bar maintaining exact visual layout but enabling separate taps */}
                 <View style={[styles.searchInner, {flexDirection: 'row', alignItems: 'center'}]}>
-                  <Ionicons name="search" size={20} color={activeMapField === 'destination' ? '#F5C518' : theme.colors.textMuted} style={{marginLeft: 16}} />
+                  <Ionicons 
+                    name={selectedPlace ? "checkmark-circle" : "search"} 
+                    size={20} 
+                    color={selectedPlace ? theme.colors.success : (activeMapField ? theme.colors.primary : theme.colors.textMuted)} 
+                    style={{marginLeft: 16}} 
+                  />
                   <View style={{flex: 1, paddingLeft: 12, paddingVertical: 6}}>
                     {activeMapField === 'pickup' ? (
                       <TouchableOpacity 
@@ -1694,7 +1710,7 @@ export default function PassengerDashboard() {
                          hitSlop={{ top: 5, bottom: 10, left: 10, right: 10 }}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4C8', marginRight: 8 }} />
+                          <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#3D8EF0', borderWidth: 2, borderColor: theme.colors.surface, marginRight: 10 }} />
                           <Text style={{color: theme.colors.text, fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
                             {pickupLocation.displayName || t('passenger.searchingPickup')}
                           </Text>
@@ -1706,7 +1722,7 @@ export default function PassengerDashboard() {
                          hitSlop={{ top: 10, bottom: 5, left: 10, right: 10 }}
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5C518', marginRight: 8 }} />
+                          <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#F5C518', marginRight: 10 }} />
                           <Text style={{color: theme.colors.text, fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
                             {selectedPlace?.displayName || t('passenger.searchingDest')}
                           </Text>
@@ -1717,7 +1733,9 @@ export default function PassengerDashboard() {
                   {/* Flecha amarilla: activa si hay destino seleccionado, abre FareOfferSheet */}
                   <TouchableOpacity
                     style={[styles.searchRightArrow, {
-                      backgroundColor: selectedPlace ? '#F5C518' : theme.colors.primary + '4D',
+                      backgroundColor: selectedPlace ? '#F5C518' : 'rgba(245,197,24,0.20)',
+                      borderWidth: selectedPlace ? 0 : 1,
+                      borderColor: 'rgba(245,197,24,0.50)',
                       opacity: 1,
                     }]}
                     onPress={() => {
@@ -1725,7 +1743,7 @@ export default function PassengerDashboard() {
                           // Hay destino → cerrar sheet de búsqueda y abrir FareOfferSheet
                           Keyboard.dismiss();
                           bottomSheetRef.current?.snapToIndex(0);
-                          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039
+                          InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039
                         } else {
                           // Sin destino → abrir búsqueda
                           setActiveMapField('destination');
@@ -1812,25 +1830,27 @@ export default function PassengerDashboard() {
                 </View>
               </View>
             <Animated.View style={[{ overflow: 'hidden' }, favoritesAnimatedStyle]}>
-              <FavoritesList
-                favorites={favorites}
-                onSelect={(fav: Favorite) => {
-                  const place: PlaceResult = {
-                    displayName: fav.address,
-                    placeId: fav.placeId || fav.id,
-                    latitude: fav.latitude,
-                    longitude: fav.longitude,
-                  };
-                  setSelectedPlace(place);
-                  Haptics.selectionAsync();
-                  bottomSheetRef.current?.snapToIndex(0);
-                  setTimeout(() => {
-                    fareOfferSheetRef.current?.expand();
-                  }, 300);
-                }}
-                onAdd={() => setAddFavVisible(true)}
-                onDelete={handleDeleteFav}
-              />
+              {!isSearching && !isActiveRide && (
+                <FavoritesList
+                  favorites={favorites}
+                  onSelect={(fav: Favorite) => {
+                    const place: PlaceResult = {
+                      displayName: fav.address,
+                      placeId: fav.placeId || fav.id,
+                      latitude: fav.latitude,
+                      longitude: fav.longitude,
+                    };
+                    setSelectedPlace(place);
+                    Haptics.selectionAsync();
+                    bottomSheetRef.current?.snapToIndex(0);
+                    InteractionManager.runAfterInteractions(() => {
+                      fareOfferSheetRef.current?.expand();
+                    });
+                  }}
+                  onAdd={() => setAddFavVisible(true)}
+                  onDelete={handleDeleteFav}
+                />
+              )}
             </Animated.View>
 
             {/* Removed Selected Destination Details Card */}
@@ -1971,7 +1991,7 @@ export default function PassengerDashboard() {
             });
           }
           setRouteEditorVisible(false);
-          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
+          InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039: delay unificado 300ms
         }}
       />
     </View>
@@ -1983,11 +2003,12 @@ export default function PassengerDashboard() {
 
 const getStyles = (theme: Theme) => StyleSheet.create({
   searchProtagonist: {
-    height: 56,
+    height: 60,
     borderRadius: 16,
     backgroundColor: theme.isDark ? theme.colors.surface : '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: theme.isDark ? theme.colors.primary + '66' : '#EAE6F0',
+    borderColor: theme.isDark ? theme.colors.primary + '99' : '#EAE6F0',
+    shadowColor: theme.isDark ? theme.colors.primary : '#000',
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 16,
     marginBottom: 8,

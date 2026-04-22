@@ -220,7 +220,7 @@ export const lightColors: typeof darkColors = {
 
     text:            '#0D0520',    // Texto principal oscuro
     textSecondary:   '#5E548E',    // Morado medio
-    textMuted:       '#B5ABD0',    // BUG-024: WCAG AA ≥4.5:1
+    textMuted:       '#6B5F8A',    // BUG-024: WCAG AA ≥4.5:1
 
     success:         '#00B3A8',
     successLight:    'rgba(0,179,168,0.12)',

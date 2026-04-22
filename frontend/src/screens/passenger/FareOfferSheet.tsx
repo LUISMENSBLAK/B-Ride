@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, FlatList, ScrollView, Pressable, Keyboard,
@@ -191,7 +191,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const selectedVehicleCat = VEHICLE_TYPES.find(v => v.id === vehicleType)?.category ?? 'ECONOMY';
   const minPrice = (categoryOptions?.[selectedVehicleCat] as any)?.minFareMXN ?? (categoryOptions?.[selectedVehicleCat] as any)?.minFare ?? 45;
   const isUnderMin = currentPrice > 0 && currentPrice < minPrice;
-  const isValid = currentPrice >= minPrice;
+  const isValid = currentPrice >= minPrice && !loadingQuotes;
   useEffect(() => {
     if (isValid) {
       ctaScale.value = withSequence(
@@ -646,9 +646,9 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
   vehiclePrice: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.50)',
-    marginTop: 4,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.80)',
+    fontWeight: '600',
   },
 
   // Payment row
