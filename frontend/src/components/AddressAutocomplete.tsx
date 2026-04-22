@@ -190,27 +190,25 @@ function AddressAutocomplete({ placeholder = 'Ingresa tu destino', onSelect, val
 
       {/* Dropdown de resultados */}
       {showDropdown && (
-        <View style={styles.dropdown}>
-          <BottomSheetFlatList
-            data={results}
-            keyExtractor={(_, i) => String(i)}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 20 }}
-            scrollEnabled={results.length > 3}
-            renderItem={({ item, index }) => (
-              <TouchableOpacity
-                style={[styles.resultItem, index < results.length - 1 && styles.resultBorder]}
-                onPress={() => handleSelect(item)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.resultPin}>📍</Text>
-                <Text style={styles.resultText} numberOfLines={2}>
-                  {item.displayName}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
+        <BottomSheetFlatList
+          data={results}
+          keyExtractor={(_, i) => String(i)}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.dropdown, { paddingBottom: 20 }]}
+          scrollEnabled={results.length > 3}
+          renderItem={({ item, index }) => (
+            <TouchableOpacity
+              style={[styles.resultItem, index < results.length - 1 && styles.resultBorder]}
+              onPress={() => handleSelect(item)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.resultPin}>📍</Text>
+              <Text style={styles.resultText} numberOfLines={2}>
+                {item.displayName}
+              </Text>
+            </TouchableOpacity>
+          )}
+        />
       )}
     </View>
   );
@@ -243,10 +241,10 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   dropdown: {
     flex: 1,
     marginTop: 12,
-    backgroundColor: theme.isDark ? theme.colors.background : '#FFFFFF',
+    backgroundColor: theme.isDark ? '#2A1150' : '#FFFFFF',
     borderRadius: theme.borderRadius.m,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.isDark ? 'rgba(245,197,24,0.25)' : '#EAE6F0',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.1,

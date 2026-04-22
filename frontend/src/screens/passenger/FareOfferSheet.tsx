@@ -171,6 +171,10 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   // BUG 2: payment picker state
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
 
+  // A3: Ref para leer categoryOptions estables dentro del expand()
+  const categoryOptionsRef = useRef<typeof categoryOptions | null>(null);
+  useEffect(() => { categoryOptionsRef.current = categoryOptions; }, [categoryOptions]);
+
   // ── Cursor parpadeante ──
   const cursorOpacity = useSharedValue(1);
   useEffect(() => {
@@ -204,13 +208,19 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
   useImperativeHandle(ref, () => ({
     expand: () => {
-      // BUG-039 FIX: Primero abrir el sheet, luego resetear estado en el siguiente frame
+      // A4: expand() estable con precio pre-cargado via ref
       Keyboard.dismiss();
-      sheetRef.current?.snapToIndex(0); // Usar snapToIndex(0) para asegurar la apertura
-      requestAnimationFrame(() => {
+      const opts = categoryOptionsRef.current;
+      if (opts?.['ECONOMY']?.priceMXN && opts['ECONOMY'].priceMXN > 0) {
+        setPriceStr(Math.round(opts['ECONOMY'].priceMXN).toString());
+      } else {
         setPriceStr('');
+      }
+      setShowPaymentPicker(false);
+      setVehicleType('__RESET__' as any);
+      requestAnimationFrame(() => {
         setVehicleType('ECONOMY');
-        setShowPaymentPicker(false);
+        sheetRef.current?.snapToIndex(0);
       });
     },
     close: () => {
@@ -371,7 +381,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
         <View style={s.heroContainer}>
           <View style={s.priceRow}>
             <Text style={s.currencyPrefix}>{currencySymbol}</Text>
-            <Text style={s.priceNumber}>{priceStr || ''}</Text>
+            <Text style={[s.priceNumber, { fontSize: priceStr.length >= 4 ? 52 : 72 }]}>{priceStr || ''}</Text>
             {priceStr.length === 0 || priceStr.length < 4 ? (
               <Animated.View style={[s.cursor, cursorStyle]} />
             ) : null}
@@ -724,7 +734,7 @@ const s = StyleSheet.create({
   },
   numpadKeyText: {
     fontSize: 26,
-    fontWeight: '300',
+    fontWeight: '400',
     color: '#FFFFFF',
   },
 

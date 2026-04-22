@@ -3,7 +3,7 @@ import { useStripe } from '@stripe/stripe-react-native';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, KeyboardAvoidingView, Platform, Alert, Modal, AppState,
-  ActivityIndicator, Image, Keyboard, FlatList, BackHandler, InteractionManager
+  ActivityIndicator, Image, Keyboard, FlatList, BackHandler
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -413,7 +413,7 @@ export default function PassengerDashboard() {
     if (mapSelectionMode !== 'none') setIsDragging(true);
 
     // Mostrar banner solo en IDLE sin modo de selección activo y en el snap 0
-    if (isIdle && mapSelectionMode === 'none' && currentSnapIndex === 0) {
+    if (isIdle && mapSelectionMode === 'none' && currentSnapIndex === 0 && !!selectedPlace) {
       setShowPickupBanner(true);
       if (pickupBannerTimer.current) clearTimeout(pickupBannerTimer.current);
       pickupBannerTimer.current = setTimeout(() => setShowPickupBanner(false), 4000);
@@ -528,7 +528,7 @@ export default function PassengerDashboard() {
         setPendingCoordinate(null);
         setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
-        InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039: delay unificado 300ms
+        setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039: delay unificado 300ms
       } else {
         setPendingCoordinate(null);
         setPendingAddress('');
@@ -541,7 +541,7 @@ export default function PassengerDashboard() {
       setPendingCoordinate(null);
       setPendingAddress('');
       bottomSheetRef.current?.snapToIndex(0);
-      InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); });
+      setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
     }
   }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory, isEditingOriginFromSheet]);
 
@@ -904,10 +904,11 @@ export default function PassengerDashboard() {
   }, []));
 
   useRideSocketEvent('no_drivers_available', useCallback((data: any) => {
-    Alert.alert(t('passenger.noDriversTitle'), data.message);
+    showToast(data?.message || t('passenger.noDriversTitle'), 'info');
     resetFlow();
     setPrice('');
-  }, []));
+    bottomSheetRef.current?.snapToIndex(0);
+  }, [showToast, t]));
 
   useRideSocketEvent('trip_bid_received', useCallback((updatedRide: any) => {
     if (updatedRide.bids) {
@@ -1310,9 +1311,7 @@ export default function PassengerDashboard() {
     // Auto-open FareOfferSheet immediately if origin & dest are set
     if (pickupLocation.latitude && pickupLocation.longitude && place.latitude && place.longitude) {
        bottomSheetRef.current?.snapToIndex(0);
-       InteractionManager.runAfterInteractions(() => {
-         fareOfferSheetRef.current?.expand();
-       });
+       setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
        return;
     }
     
@@ -1415,6 +1414,7 @@ export default function PassengerDashboard() {
       {showBanner && bannerState !== 'hidden' && (
         <View style={[
           styles.connectionBanner,
+          { top: insets.top + 60 },
           { backgroundColor: bannerState === 'amber' ? 'rgba(245,197,24,0.92)' : 'rgba(229,57,53,0.92)' }
         ]}>
           <Ionicons
@@ -1572,7 +1572,7 @@ export default function PassengerDashboard() {
         snapPoints={snapPoints}
         animatedIndex={animatedIndex}
         onChange={(idx) => { setCurrentSnapIndex(idx); if (idx < 2) setActiveMapField(null); }}
-        backgroundStyle={{ backgroundColor: theme.isDark ? 'rgba(13,5,32,0.92)' : theme.colors.surface }}
+        backgroundStyle={{ backgroundColor: theme.isDark ? '#1E0B3E' : theme.colors.surface }}
         handleIndicatorStyle={{ backgroundColor: theme.colors.textMuted, width: 36, height: 4 }}
         keyboardBehavior="interactive"
         enablePanDownToClose={false}
@@ -1623,13 +1623,15 @@ export default function PassengerDashboard() {
                   onPressOut={() => confirmBtnScale.value = withSpring(1)}
                   style={{
                     flexDirection: 'row',
-                    height: 56,
-                    borderRadius: 18,
-                    backgroundColor: (isDragging || !pendingCoordinate)
-                      ? 'rgba(255,255,255,0.06)'
-                      : '#F5C518',
+                    alignSelf: 'center',
+                    paddingHorizontal: 28,
+                    paddingVertical: 13,
+                    borderRadius: 999,
+                    backgroundColor: (isDragging || !pendingCoordinate) ? 'rgba(255,255,255,0.08)' : '#F5C518',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: 8,
+                    minWidth: 200,
                   }}
                   activeOpacity={1}
                 >
@@ -1743,7 +1745,7 @@ export default function PassengerDashboard() {
                           // Hay destino → cerrar sheet de búsqueda y abrir FareOfferSheet
                           Keyboard.dismiss();
                           bottomSheetRef.current?.snapToIndex(0);
-                          InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039
+                          setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039
                         } else {
                           // Sin destino → abrir búsqueda
                           setActiveMapField('destination');
@@ -1843,9 +1845,7 @@ export default function PassengerDashboard() {
                     setSelectedPlace(place);
                     Haptics.selectionAsync();
                     bottomSheetRef.current?.snapToIndex(0);
-                    InteractionManager.runAfterInteractions(() => {
-                      fareOfferSheetRef.current?.expand();
-                    });
+                    setTimeout(() => fareOfferSheetRef.current?.expand(), 380);
                   }}
                   onAdd={() => setAddFavVisible(true)}
                   onDelete={handleDeleteFav}
@@ -1991,7 +1991,7 @@ export default function PassengerDashboard() {
             });
           }
           setRouteEditorVisible(false);
-          InteractionManager.runAfterInteractions(() => { fareOfferSheetRef.current?.expand(); }); // BUG-039: delay unificado 300ms
+          setTimeout(() => fareOfferSheetRef.current?.expand(), 380); // BUG-039: delay unificado 300ms
         }}
       />
     </View>
@@ -2005,9 +2005,9 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   searchProtagonist: {
     height: 60,
     borderRadius: 16,
-    backgroundColor: theme.isDark ? theme.colors.surface : '#FFFFFF',
+    backgroundColor: theme.isDark ? '#2A1150' : '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: theme.isDark ? theme.colors.primary + '99' : '#EAE6F0',
+    borderColor: theme.isDark ? 'rgba(245,197,24,0.55)' : '#EAE6F0',
     shadowColor: theme.isDark ? theme.colors.primary : '#000',
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 16,
@@ -2032,10 +2032,10 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   // ── History panel ──
   historyPanel: {
     marginTop: 12,
-    backgroundColor: theme.isDark ? theme.colors.surfaceHigh : '#FFFFFF',
+    backgroundColor: theme.isDark ? '#2A1150' : '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: theme.isDark ? theme.colors.border : '#EAE6F0',
+    borderColor: theme.isDark ? 'rgba(245,197,24,0.25)' : '#EAE6F0',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.05,
@@ -2139,7 +2139,6 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   connectionBanner: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 110 : 72,
     left: '10%',
     right: '10%',
     paddingVertical: 6,

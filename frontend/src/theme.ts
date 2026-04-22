@@ -38,7 +38,7 @@ export const theme = {
         borderLight:     'rgba(255,255,255,0.06)',
         borderFocus:     'rgba(245,197,24,0.70)',
         inputBackground: '#1A0A35',
-        inputPlaceholder:'#9A8EB8',
+        inputPlaceholder:'#C0B4DC',
         link:            '#00D4C8',   // Turquesa
 
         // Herencia para compatibilidad hacia atrás
