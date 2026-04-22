@@ -1295,20 +1295,27 @@ export default function PassengerDashboard() {
   }));
 
   const handlePlaceSelect = useCallback((place: PlaceResult) => {
+    setActiveMapField(null);
     if (activeMapField === 'pickup') {
-      setPickupLocation(place);
-      setActiveMapField(null);
+      validateAndSetPickup(place);
       Keyboard.dismiss();
-      bottomSheetRef.current?.snapToIndex(0);
+      bottomSheetRef.current?.snapToIndex(1);
       return;
     }
     setSelectedPlace(place);
     saveToHistory(place);
-    setActiveMapField(null);
     Keyboard.dismiss();
-    bottomSheetRef.current?.snapToIndex(0);
-    setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
-  }, [saveToHistory, activeMapField]);
+    
+    // Auto-open FareOfferSheet immediately if origin & dest are set
+    if (pickupLocation.latitude && pickupLocation.longitude && place.latitude && place.longitude) {
+       fetchQuotes(pickupLocation, place);
+       bottomSheetRef.current?.snapToIndex(0);
+       setTimeout(() => fareOfferSheetRef.current?.expand(), 300);
+       return;
+    }
+    
+    bottomSheetRef.current?.snapToIndex(1);
+  }, [saveToHistory, activeMapField, pickupLocation, fetchQuotes]);
 
   const destinationCoord = React.useMemo(() => {
     if (selectedPlace && selectedPlace.latitude !== undefined && selectedPlace.longitude !== undefined) {
@@ -1563,8 +1570,8 @@ export default function PassengerDashboard() {
         snapPoints={snapPoints}
         animatedIndex={animatedIndex}
         onChange={(idx) => { setCurrentSnapIndex(idx); if (idx < 2) setActiveMapField(null); }}
-        backgroundStyle={{ backgroundColor: 'rgba(13,5,32,0.92)' }}
-        handleIndicatorStyle={{ backgroundColor: 'rgba(255,255,255,0.20)', width: 36, height: 4 }}
+        backgroundStyle={{ backgroundColor: theme.isDark ? 'rgba(13,5,32,0.92)' : theme.colors.surface }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.textMuted, width: 36, height: 4 }}
         keyboardBehavior="interactive"
         enablePanDownToClose={false}
       >
@@ -1593,7 +1600,7 @@ export default function PassengerDashboard() {
                   <Ionicons name="location" size={18} color="#F5C518" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: 'rgba(255,255,255,0.50)', 
+                  <Text style={{ color: theme.colors.textMuted, 
                     fontSize: 11, fontWeight: '600', 
                     textTransform: 'uppercase', letterSpacing: 1 }}>
                     {mapSelectionMode === 'pickup' ? t('passenger.pickupUppercase', { defaultValue: 'Recogida' }) : t('passenger.destUppercase', { defaultValue: 'Destino' })}
@@ -1679,7 +1686,7 @@ export default function PassengerDashboard() {
               <Animated.View style={[styles.searchProtagonist, searchGlowStyle, { display: (isSearching || isActiveRide || currentSnapIndex === 2) ? 'none' : 'flex' }]}>
                 {/* 2-part Search Bar maintaining exact visual layout but enabling separate taps */}
                 <View style={[styles.searchInner, {flexDirection: 'row', alignItems: 'center'}]}>
-                  <Ionicons name="search" size={20} color={activeMapField === 'destination' ? "#F5C518" : "rgba(255,255,255,0.5)"} style={{marginLeft: 16}} />
+                  <Ionicons name="search" size={20} color={activeMapField === 'destination' ? '#F5C518' : theme.colors.textMuted} style={{marginLeft: 16}} />
                   <View style={{flex: 1, paddingLeft: 12, paddingVertical: 6}}>
                     {activeMapField === 'pickup' ? (
                       <TouchableOpacity 
@@ -1688,7 +1695,7 @@ export default function PassengerDashboard() {
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#00D4C8', marginRight: 8 }} />
-                          <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
+                          <Text style={{color: theme.colors.text, fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
                             {pickupLocation.displayName || t('passenger.searchingPickup')}
                           </Text>
                         </View>
@@ -1700,28 +1707,38 @@ export default function PassengerDashboard() {
                       >
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5C518', marginRight: 8 }} />
-                          <Text style={{color: '#FFF', fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
+                          <Text style={{color: theme.colors.text, fontSize: 16, fontWeight: '500'}} numberOfLines={1}>
                             {selectedPlace?.displayName || t('passenger.searchingDest')}
                           </Text>
                         </View>
                       </TouchableOpacity>
                     )}
                   </View>
-                  {/* Arrow button — same action as tapping the bar */}
+                  {/* Flecha amarilla: activa si hay destino seleccionado, abre FareOfferSheet */}
                   <TouchableOpacity
-                    style={[styles.searchRightArrow, {backgroundColor: activeMapField === 'destination' && selectedPlace ? '#F5C518' : 'rgba(245,197,24,0.3)'}]}
+                    style={[styles.searchRightArrow, {
+                      backgroundColor: selectedPlace ? '#F5C518' : theme.colors.primary + '4D',
+                      opacity: 1,
+                    }]}
                     onPress={() => {
                         if (selectedPlace) {
+                          // Hay destino → cerrar sheet de búsqueda y abrir FareOfferSheet
+                          Keyboard.dismiss();
                           bottomSheetRef.current?.snapToIndex(0);
-                          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039: delay unificado 300ms
+                          setTimeout(() => fareOfferSheetRef.current?.expand(), 300); // BUG-039
                         } else {
+                          // Sin destino → abrir búsqueda
                           setActiveMapField('destination');
                           bottomSheetRef.current?.snapToIndex(2);
                         }
                     }}
                     hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                    accessibilityLabel={selectedPlace
+                      ? t('passenger.openFareOffer', { defaultValue: 'Ver opciones de viaje' })
+                      : t('passenger.searchDest', { defaultValue: 'Buscar destino' })}
+                    accessibilityRole="button"
                   >
-                    <Ionicons name="arrow-forward" size={16} color="#0D0520" />
+                    <Ionicons name={selectedPlace ? 'arrow-forward' : 'search'} size={16} color="#0D0520" />
                   </TouchableOpacity>
                 </View>
               </Animated.View>
@@ -1751,7 +1768,7 @@ export default function PassengerDashboard() {
                       paddingVertical: 14,
                       gap: 14,
                       borderBottomWidth: 1,
-                      borderBottomColor: 'rgba(255,255,255,0.06)',
+                      borderBottomColor: theme.colors.border,
                     }}
                     onPress={() => enterMapSelectionMode(activeMapField || 'destination')}
                     activeOpacity={0.7}
@@ -1765,8 +1782,8 @@ export default function PassengerDashboard() {
                       <Ionicons name="pin-outline" size={18} color="#F5C518" />
                     </View>
                     <View>
-                      <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>Elige un punto directamente en el mapa</Text>
+                      <Text style={{ color: theme.isDark ? theme.colors.text : '#0D0520', fontSize: 15, fontWeight: '600' }}>{t('passenger.fixOnMap')}</Text>
+                      <Text style={{ color: theme.isDark ? theme.colors.textMuted : '#5E548E', fontSize: 13, marginTop: 2 }}>Elige un punto directamente en el mapa</Text>
                     </View>
                   </TouchableOpacity>
 
@@ -1774,7 +1791,7 @@ export default function PassengerDashboard() {
                     marginHorizontal: 16,
                     marginVertical: 8,
                     height: 1,
-                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    backgroundColor: theme.colors.border,
                   }} />
 
                   {rideHistory.length === 0 ? (
@@ -1787,7 +1804,7 @@ export default function PassengerDashboard() {
                         onPress={() => handlePlaceSelect(item)}
                         activeOpacity={0.7}
                       >
-                        <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.40)" style={{ marginRight: 12 }} />
+                        <Ionicons name="time-outline" size={18} color={theme.isDark ? theme.colors.textMuted : '#5E548E'} style={{ marginRight: 12 }} />
                         <Text style={styles.historyText} numberOfLines={1}>{item.displayName}</Text>
                       </TouchableOpacity>
                     ))
@@ -1968,9 +1985,9 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   searchProtagonist: {
     height: 56,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: theme.isDark ? theme.colors.surface : '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: 'rgba(245,197,24,0.40)',
+    borderColor: theme.isDark ? theme.colors.primary + '66' : '#EAE6F0',
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 16,
     marginBottom: 8,
@@ -1994,11 +2011,15 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   // ── History panel ──
   historyPanel: {
     marginTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: theme.isDark ? theme.colors.surfaceHigh : '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: theme.isDark ? theme.colors.border : '#EAE6F0',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
   },
   historyItem: {
     flexDirection: 'row',
@@ -2008,17 +2029,18 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   },
   historyItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: theme.colors.border,
   },
   historyText: {
     flex: 1,
-    fontSize: 14,
-    color: '#FFFFFF',
+    fontSize: 15,
+    color: theme.isDark ? theme.colors.text : '#0D0520',
+    fontWeight: '500',
   },
   historyEmpty: {
     textAlign: 'center',
     fontSize: 13,
-    color: 'rgba(255,255,255,0.30)',
+    color: theme.colors.textMuted,
     paddingVertical: 20,
   },
   container: { flex: 1, backgroundColor: theme.colors.background },

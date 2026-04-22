@@ -223,7 +223,7 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.inputBackground,
+    backgroundColor: theme.isDark ? theme.colors.inputBackground : '#FFFFFF',
     borderRadius: theme.borderRadius.m,
     paddingRight: 8,
   },
@@ -238,16 +238,20 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   },
   clearIcon: {
     fontSize: 14,
-    color: theme.colors.textMuted,
+    color: theme.isDark ? theme.colors.textMuted : '#5E548E',
   },
   dropdown: {
     flex: 1,
     marginTop: 12,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.isDark ? theme.colors.background : '#FFFFFF',
     borderRadius: theme.borderRadius.m,
     borderWidth: 1,
     borderColor: theme.colors.border,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   resultItem: {
     flexDirection: 'row',
@@ -266,9 +270,10 @@ const getStyles = (theme: ReturnType<typeof useAppTheme>) => StyleSheet.create({
   },
   resultText: {
     flex: 1,
-    fontSize: 13,
-    color: theme.colors.text,
+    fontSize: 14,
+    color: theme.isDark ? theme.colors.text : '#0D0520',
     lineHeight: 18,
+    fontWeight: '500',
   },
 });
 

@@ -206,7 +206,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
     expand: () => {
       // BUG-039 FIX: Primero abrir el sheet, luego resetear estado en el siguiente frame
       Keyboard.dismiss();
-      sheetRef.current?.expand(); // expand() nativo — el caller externo ya maneja timing
+      sheetRef.current?.snapToIndex(0); // Usar snapToIndex(0) para asegurar la apertura
       requestAnimationFrame(() => {
         setPriceStr('');
         setVehicleType('ECONOMY');
@@ -251,14 +251,17 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
     return undefined;
   };
 
+  const snapPoints = useMemo(() => ['92%'], []);
+
   return (
     <BottomSheet
       ref={sheetRef}
       index={-1}
-      snapPoints={['92%']}
+      snapPoints={snapPoints}
       enablePanDownToClose
       onClose={onClose}  // BUG-039: onClose para deslizar hacia abajo
       backgroundStyle={s.sheetBg}
+      style={{ zIndex: 9999, elevation: 10 }}
       // GAP VISUAL 4: custom handle bar instead of null
       handleComponent={() => (
         <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
