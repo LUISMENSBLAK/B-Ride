@@ -287,7 +287,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
           <View style={styles.heroContainer}>
             <View style={styles.priceRow}>
               <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
-              <Text style={[styles.priceNumber, { fontSize: priceStr.length >= 4 ? 52 : 72 }]}>{priceStr || ''}</Text>
+              <Text style={[styles.priceNumber, { fontSize: priceStr.length >= 4 ? 52 : 76, color: priceStr.length > 0 ? '#F5C518' : '#FFFFFF' }]}>{priceStr || ''}</Text>
               {priceStr.length < 4 && (
                 <Animated.View style={[styles.cursor, cursorStyle]} />
               )}
@@ -394,91 +394,136 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
 export default FareOfferSheet;
 
-// ── Styles ───────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(0,0,0,0.65)',
   },
   sheet: {
     position: 'absolute',
     bottom: 0, left: 0, right: 0,
-    height: '92%',
-    backgroundColor: 'rgba(13,5,32,0.98)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    height: '93%',
+    backgroundColor: '#0E0525',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    borderTopWidth: 1,
+    borderLeftWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderColor: 'rgba(245,197,24,0.20)',
+    shadowColor: '#F5C518',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
   },
-  handle: { alignItems: 'center', paddingTop: 12, paddingBottom: 4 },
-  handleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.20)' },
+  handle: { alignItems: 'center', paddingTop: 10, paddingBottom: 2 },
+  handleBar: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(245,197,24,0.35)' },
 
   // Header
-  header: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 8, paddingHorizontal: 20, marginBottom: 0 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
-  headerSub: { fontSize: 13, color: '#F5C518', marginTop: 4 },
-  headerMeta: { fontSize: 12, color: 'rgba(255,255,255,0.40)', marginTop: 4 },
+  header: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, paddingHorizontal: 20, marginBottom: 0 },
+  headerTitle: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', letterSpacing: -0.5 },
+  headerSub: { fontSize: 13, color: '#F5C518', marginTop: 3, fontWeight: '500' },
+  headerMeta: { fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 3, fontWeight: '400' },
   closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.10)',
+    width: 34, height: 34, borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
     justifyContent: 'center', alignItems: 'center',
-    marginLeft: 12, marginTop: 2,
+    marginLeft: 12, marginTop: 4,
   },
 
   // Route card
   routeCard: {
-    marginHorizontal: 16, marginTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 12,
+    marginHorizontal: 16, marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 18, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    padding: 14,
   },
-  routeLabel: { color: 'rgba(255,255,255,0.40)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 },
-  routeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginTop: 1 },
-  routeConnector: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.10)', marginLeft: 4, marginVertical: 4 },
-  routeEditBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: 'rgba(61,142,240,0.10)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(61,142,240,0.25)' },
-  routeEditTextBlue: { color: '#3D8EF0', fontSize: 11, fontWeight: '700' },
+  routeLabel: { color: 'rgba(255,255,255,0.35)', fontSize: 9, textTransform: 'uppercase', letterSpacing: 1.2, fontWeight: '700' },
+  routeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginTop: 2 },
+  routeConnector: { width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.08)', marginLeft: 4, marginVertical: 6 },
+  routeEditBtn: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: 'rgba(61,142,240,0.12)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(61,142,240,0.20)' },
+  routeEditTextBlue: { color: '#5BA3F5', fontSize: 11, fontWeight: '700' },
 
   // Hero price
-  heroContainer: { alignItems: 'center', marginTop: 16, marginBottom: 4, paddingHorizontal: 20 },
+  heroContainer: { alignItems: 'center', marginTop: 12, marginBottom: 2, paddingHorizontal: 20 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
-  currencyPrefix: { fontSize: 28, fontWeight: '300', color: 'rgba(255,255,255,0.35)', marginRight: 6, marginBottom: 12 },
-  priceNumber: { fontSize: 72, fontWeight: '800', color: '#FFFFFF' },
-  cursor: { width: 3, height: 60, backgroundColor: '#F5C518', borderRadius: 2, marginLeft: 4, alignSelf: 'center' },
-  priceDivider: { height: 2, backgroundColor: 'rgba(245,197,24,0.35)', marginHorizontal: 40, marginTop: 8, alignSelf: 'stretch' },
-  priceSuggLabel: { fontSize: 12, color: 'rgba(255,255,255,0.30)', textAlign: 'center', marginTop: 8 },
+  currencyPrefix: { fontSize: 26, fontWeight: '300', color: 'rgba(245,197,24,0.50)', marginRight: 4, marginBottom: 10 },
+  priceNumber: { fontSize: 76, fontWeight: '800', color: '#FFFFFF', letterSpacing: -2 },
+  cursor: { width: 3, height: 56, backgroundColor: '#F5C518', borderRadius: 2, marginLeft: 4, alignSelf: 'center', shadowColor: '#F5C518', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  priceDivider: { height: 1.5, backgroundColor: 'rgba(245,197,24,0.25)', marginHorizontal: 24, marginTop: 10, alignSelf: 'stretch' },
+  priceSuggLabel: { fontSize: 11.5, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 6, fontWeight: '500' },
 
   // Vehicle
-  vehicleSectionLabel: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.50)', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 20, marginTop: 20, marginBottom: 10 },
-  vehicleListContent: { paddingHorizontal: 16, gap: 10 },
-  vehicleCard: { width: 110, height: 155, borderRadius: 16, padding: 10, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  vehicleCardSelected: { backgroundColor: 'rgba(245,197,24,0.10)', borderWidth: 1.5, borderColor: 'rgba(245,197,24,0.60)' },
-  vehicleCheck: { position: 'absolute', top: 8, right: 8, width: 18, height: 18, borderRadius: 9, backgroundColor: '#F5C518', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
-  vehicleImage: { width: '100%', height: 65, resizeMode: 'contain' },
-  vehicleName: { fontSize: 12, fontWeight: '700', marginTop: 6 },
+  vehicleSectionLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 1.5, textTransform: 'uppercase', marginLeft: 20, marginTop: 18, marginBottom: 10 },
+  vehicleListContent: { paddingHorizontal: 16, gap: 8, paddingBottom: 4 },
+  vehicleCard: {
+    width: 115, height: 160, borderRadius: 18, padding: 12,
+    overflow: 'hidden', backgroundColor: '#160B38',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.07)',
+  },
+  vehicleCardSelected: {
+    backgroundColor: '#1D0D44',
+    borderColor: '#F5C518',
+    shadowColor: '#F5C518',
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  vehicleCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5C518', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  vehicleImage: { width: '100%', height: 68, resizeMode: 'contain' },
+  vehicleName: { fontSize: 12, fontWeight: '800', marginTop: 8, letterSpacing: -0.3 },
   vehicleNameSel: { color: '#F5C518' },
   vehicleNameUnsel: { color: '#FFFFFF' },
-  vehicleDescriptor: { fontSize: 10, color: 'rgba(255,255,255,0.45)', marginTop: 2 },
-  vehiclePrice: { fontSize: 13, color: 'rgba(255,255,255,0.80)', fontWeight: '600' },
+  vehicleDescriptor: { fontSize: 9.5, color: 'rgba(255,255,255,0.40)', marginTop: 2, fontWeight: '500' },
+  vehiclePrice: { fontSize: 13, color: 'rgba(255,255,255,0.85)', fontWeight: '700', marginTop: 4 },
 
   // Payment
-  paymentRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, marginHorizontal: 16, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
-  paymentLabel: { flex: 1, fontSize: 15, fontWeight: '600', color: '#FFFFFF', marginLeft: 12 },
-  paymentOptions: { marginHorizontal: 16, marginTop: 4, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  paymentOption: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.03)' },
-  paymentOptionActive: { backgroundColor: 'rgba(245,197,24,0.10)' },
-  paymentOptionText: { color: 'rgba(255,255,255,0.70)', fontSize: 14, flex: 1 },
-  paymentOptionTextActive: { color: '#F5C518' },
+  paymentRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 12, marginHorizontal: 16,
+    paddingVertical: 14, paddingHorizontal: 16,
+    backgroundColor: '#160B38',
+    borderRadius: 16, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    borderLeftWidth: 3, borderLeftColor: 'rgba(245,197,24,0.40)',
+  },
+  paymentLabel: { flex: 1, fontSize: 15, fontWeight: '700', color: '#FFFFFF', marginLeft: 12 },
+  paymentOptions: { marginHorizontal: 16, marginTop: 4, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', backgroundColor: '#160B38' },
+  paymentOption: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+  paymentOptionActive: { backgroundColor: 'rgba(245,197,24,0.08)' },
+  paymentOptionText: { color: 'rgba(255,255,255,0.65)', fontSize: 14, flex: 1, fontWeight: '500' },
+  paymentOptionTextActive: { color: '#F5C518', fontWeight: '700' },
 
   // Numpad
-  numpadContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 12, paddingHorizontal: 8, rowGap: 4 },
-  numpadKey: { width: '32%', height: 52, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 10 },
-  numpadKeyPressed: { backgroundColor: 'rgba(245,197,24,0.12)' },
-  numpadKeyText: { fontSize: 26, fontWeight: '400', color: '#FFFFFF' },
+  numpadContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 8, paddingHorizontal: 4 },
+  numpadKey: {
+    width: '33.33%', height: 58,
+    justifyContent: 'center', alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)',
+  },
+  numpadKeyPressed: { backgroundColor: 'rgba(245,197,24,0.10)' },
+  numpadKeyText: { fontSize: 28, fontWeight: '300', color: '#FFFFFF', letterSpacing: -0.5 },
 
   // CTA
-  ctaBtn: { marginHorizontal: 16, marginTop: 12, marginBottom: 0, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  ctaEnabled: { backgroundColor: '#F5C518', shadowColor: '#F5C518', shadowOpacity: 0.40, shadowRadius: 20, shadowOffset: { width: 0, height: 0 }, elevation: 8 },
-  ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.06)' },
-  ctaText: { fontSize: 17 },
-  ctaTextEnabled: { color: '#0D0520', fontWeight: '800' },
-  ctaTextDisabled: { color: 'rgba(255,255,255,0.25)', fontWeight: '600' },
+  ctaBtn: {
+    marginHorizontal: 16, marginTop: 16, marginBottom: 4,
+    height: 58, borderRadius: 29,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  ctaEnabled: {
+    backgroundColor: '#F5C518',
+    shadowColor: '#F5C518',
+    shadowOpacity: 0.50,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+  },
+  ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  ctaText: { fontSize: 17, letterSpacing: -0.3 },
+  ctaTextEnabled: { color: '#0D0520', fontWeight: '900' },
+  ctaTextDisabled: { color: 'rgba(255,255,255,0.20)', fontWeight: '600' },
 });
 
 // Keep legacy alias
