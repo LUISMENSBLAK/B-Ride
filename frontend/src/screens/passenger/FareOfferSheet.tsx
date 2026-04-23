@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, FlatList, ScrollView, Pressable, Keyboard,
 } from 'react-native';
-import BottomSheet, { BottomSheetModal } from '@gorhom/bottom-sheet';
+import BottomSheet from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -147,7 +147,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
     originAddress, onEditDest, onEditOrigin,
   } = props;
   const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheetModal>(null);
+  const sheetRef = useRef<BottomSheet>(null);
   // BUG-039: moneda dinámica
   const { formatPrice, currency } = useCurrency();
   const currencySymbol = currency === 'MXN' ? 'MX$' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency;
@@ -218,12 +218,13 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       }
       setVehicleType('ECONOMY');
       setShowPaymentPicker(false);
+      // FIX: Wait for Keyboard.dismiss and other layout shifts to finish before expanding
       setTimeout(() => {
-        sheetRef.current?.present();
-      }, 250);
+        sheetRef.current?.snapToIndex(0);
+      }, 50);
     },
     close: () => {
-      sheetRef.current?.dismiss();
+      sheetRef.current?.close();
     }
   }));
 
@@ -263,12 +264,14 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const snapPoints = useMemo(() => ['92%'], []);
 
   return (
-    <BottomSheetModal
+    <BottomSheet
       ref={sheetRef}
+      index={-1}
       snapPoints={snapPoints}
       enablePanDownToClose
-      onDismiss={onClose}
+      onClose={onClose}
       backgroundStyle={s.sheetBg}
+      style={{ zIndex: 9999, elevation: 10 }}
       handleComponent={() => (
         <View style={{ alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.20)' }} />
@@ -499,7 +502,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
-    </BottomSheetModal>
+    </BottomSheet>
   );
 });
 

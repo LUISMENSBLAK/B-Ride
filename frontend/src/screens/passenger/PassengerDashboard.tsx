@@ -533,10 +533,8 @@ export default function PassengerDashboard() {
         setIsEditingOriginFromSheet(false);
         setMapSelectionMode('none');
         setPendingCoordinate(null);
-        setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
-        setTimeout(() => fareOfferSheetRef.current?.expand(), 150); // BUG-039: delay unificado
-      } else {
+        setTimeout(() => fareOfferSheetRef.current?.expand(), 400); // FIX: Ensure animation finishes
         setPendingCoordinate(null);
         setPendingAddress('');
         setMapSelectionMode('none');
@@ -548,7 +546,7 @@ export default function PassengerDashboard() {
       setPendingCoordinate(null);
       setPendingAddress('');
       bottomSheetRef.current?.snapToIndex(0);
-      setTimeout(() => fareOfferSheetRef.current?.expand(), 150);
+      setTimeout(() => fareOfferSheetRef.current?.expand(), 400);
     }
   }, [pendingCoordinate, pendingAddress, mapSelectionMode, saveToHistory, isEditingOriginFromSheet]);
 
@@ -1318,7 +1316,7 @@ export default function PassengerDashboard() {
     // Auto-open FareOfferSheet immediately if origin & dest are set
     if (pickupLocation.latitude && pickupLocation.longitude && place.latitude && place.longitude) {
        bottomSheetRef.current?.snapToIndex(0);
-       setTimeout(() => fareOfferSheetRef.current?.expand(), 150);
+       setTimeout(() => fareOfferSheetRef.current?.expand(), 400);
        return;
     }
     
@@ -1752,7 +1750,7 @@ export default function PassengerDashboard() {
                           // Hay destino → cerrar sheet de búsqueda y abrir FareOfferSheet
                           Keyboard.dismiss();
                           bottomSheetRef.current?.snapToIndex(0);
-                          fareOfferSheetRef.current?.expand(); // BUG-039
+                          setTimeout(() => fareOfferSheetRef.current?.expand(), 400); // BUG-039
                         } else {
                           // Sin destino → mostrar toast
                           showToast('Primero selecciona un destino', 'error');
@@ -1851,7 +1849,7 @@ export default function PassengerDashboard() {
                     setSelectedPlace(place);
                     Haptics.selectionAsync();
                     bottomSheetRef.current?.snapToIndex(0);
-                    setTimeout(() => fareOfferSheetRef.current?.expand(), 150);
+                    setTimeout(() => fareOfferSheetRef.current?.expand(), 400);
                   }}
                   onAdd={() => setAddFavVisible(true)}
                   onDelete={handleDeleteFav}
@@ -1998,7 +1996,7 @@ export default function PassengerDashboard() {
             });
           }
           setRouteEditorVisible(false);
-          setTimeout(() => fareOfferSheetRef.current?.expand(), 150); // BUG-039: delay unificado
+          setTimeout(() => fareOfferSheetRef.current?.expand(), 400);
         }}
       />
     </View>
