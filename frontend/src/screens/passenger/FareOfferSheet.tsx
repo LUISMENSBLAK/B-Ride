@@ -1,5 +1,5 @@
 import React, {
-  useState, useEffect, useRef, forwardRef, useImperativeHandle,
+  useState, useEffect, useRef, forwardRef, useImperativeHandle, useCallback,
 } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
@@ -126,6 +126,8 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   const [priceStr, setPriceStr] = useState('');
   const [vehicleType, setVehicleType] = useState('ECONOMY');
   const [showPaymentPicker, setShowPaymentPicker] = useState(false);
+  const [numpadVisible, setNumpadVisible] = useState(false); // BUG-009: numpad oculto por defecto
+  const scrollViewRef = useRef<ScrollView>(null);
   const paymentMethod = useRideFlowStore(s => s.paymentMethod);
 
   const categoryOptionsRef = useRef<typeof categoryOptions | null>(null);
@@ -155,6 +157,7 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       }
       setVehicleType('ECONOMY');
       setShowPaymentPicker(false);
+      setNumpadVisible(false); // BUG-009: nunca abrir con numpad visible
       openSheet();
     },
     close: () => closeSheet(),
@@ -232,8 +235,9 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
         </View>
 
         <ScrollView
+          ref={scrollViewRef}
           style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 12 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           bounces={false}
@@ -283,25 +287,81 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             </View>
           </View>
 
-          {/* ── Hero Price ── */}
-          <View style={styles.heroContainer}>
-            <View style={styles.priceRow}>
-              <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
-              <Text style={[styles.priceNumber, { fontSize: priceStr.length >= 4 ? 52 : 76, color: priceStr.length > 0 ? '#F5C518' : '#FFFFFF' }]}>{priceStr || ''}</Text>
-              {priceStr.length < 4 && (
-                <Animated.View style={[styles.cursor, cursorStyle]} />
-              )}
-            </View>
-            <View style={styles.priceDivider} />
-            <Text style={styles.priceSuggLabel}>
-              Precio sugerido: {formatPrice(suggestedPriceRange?.min ?? 0)} – {formatPrice(suggestedPriceRange?.max ?? 0)}
-            </Text>
-            {isUnderMin && (
-              <Text style={{ color: '#FF5722', fontSize: 12, textAlign: 'center', marginTop: 4 }}>
-                Mínimo {formatPrice(minPrice)} — sube la oferta para atraer conductores
-              </Text>
-            )}
-          </View>
+          {/* ── HERO PRICE: pill táctil + quick-adjust buttons ── */}
+          {(() => {
+            const suggestedMid = categoryOptions?.[selectedVehicleCat]?.priceMXN
+              ?? ((suggestedPriceRange?.min ?? 0) + (suggestedPriceRange?.max ?? 0)) / 2;
+            const quickOptions = [
+              { label: '-20%', value: Math.max(minPrice, Math.round(suggestedMid * 0.80)) },
+              { label: 'Sugerido', value: Math.round(suggestedMid) },
+              { label: '+10%', value: Math.round(suggestedMid * 1.10) },
+            ];
+            return (
+              <View style={styles.heroContainer}>
+                {/* Pill */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    setNumpadVisible(true);
+                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+                  }}
+                  style={[
+                    styles.pricePill,
+                    numpadVisible && styles.pricePillActive,
+                  ]}
+                >
+                  <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
+                  <Text style={[styles.priceNumber, {
+                    fontSize: priceStr.length >= 4 ? 46 : 56,
+                    color: priceStr.length > 0 ? '#F5C518' : 'rgba(255,255,255,0.30)',
+                  }]}>
+                    {priceStr || '0'}
+                  </Text>
+                  {numpadVisible && (
+                    <Animated.View style={[styles.cursor, cursorStyle]} />
+                  )}
+                  <Ionicons
+                    name="create-outline"
+                    size={16}
+                    color={numpadVisible ? 'rgba(245,197,24,0.80)' : 'rgba(245,197,24,0.45)'}
+                    style={{ marginLeft: 8 }}
+                  />
+                </TouchableOpacity>
+
+                {/* Quick-adjust buttons */}
+                <View style={styles.quickRow}>
+                  {quickOptions.map(opt => {
+                    const active = currentPrice === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.label}
+                        style={[styles.quickBtn, active && styles.quickBtnActive]}
+                        onPress={() => { setPriceStr(String(opt.value)); setNumpadVisible(false); }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={[styles.quickBtnText, active && styles.quickBtnTextActive]}>
+                          {opt.label === 'Sugerido' ? `${opt.label} ✓` : opt.label}
+                        </Text>
+                        <Text style={[styles.quickBtnSub, active && { color: '#F5C518' }]}>
+                          {formatPrice(opt.value)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Sugg range label */}
+                <Text style={styles.priceSuggLabel}>
+                  Precio sugerido: {formatPrice(suggestedPriceRange?.min ?? 0)} – {formatPrice(suggestedPriceRange?.max ?? 0)}
+                </Text>
+                {isUnderMin && (
+                  <Text style={{ color: '#FF5722', fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+                    Mínimo {formatPrice(minPrice)} — sube la oferta
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
 
           {/* ── Vehicle selector ── */}
           <Text style={styles.vehicleSectionLabel}>Elige tu ride</Text>
@@ -355,21 +415,35 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             </View>
           )}
 
-          {/* ── Numpad ── */}
-          <View style={styles.numpadContainer}>
-            {numpadKeys.map(key => (
-              <Pressable
-                key={key}
-                style={({ pressed }) => [styles.numpadKey, pressed && styles.numpadKeyPressed]}
-                onPress={() => handleKeyPress(key)}
-              >
-                {key === 'back'
-                  ? <Ionicons name="backspace-outline" size={26} color="#FFF" />
-                  : <Text style={styles.numpadKeyText}>{key}</Text>
-                }
-              </Pressable>
-            ))}
-          </View>
+          {/* ── Numpad (solo cuando numpadVisible) ── */}
+          {numpadVisible && (
+            <View>
+              {/* Separador + header del numpad */}
+              <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.07)', marginHorizontal: 16, marginTop: 12 }} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 10, marginBottom: 4 }}>
+                <Text style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' }}>
+                  Ingresa tu oferta
+                </Text>
+                <TouchableOpacity onPress={() => setNumpadVisible(false)} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+                  <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '700' }}>Listo</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.numpadContainer}>
+                {numpadKeys.map(key => (
+                  <Pressable
+                    key={key}
+                    style={({ pressed }) => [styles.numpadKey, pressed && styles.numpadKeyPressed]}
+                    onPress={() => handleKeyPress(key)}
+                  >
+                    {key === 'back'
+                      ? <Ionicons name="backspace-outline" size={26} color="#FFF" />
+                      : <Text style={styles.numpadKeyText}>{key}</Text>
+                    }
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
 
           {/* ── CTA ── */}
           <TouchableOpacity
@@ -446,14 +520,37 @@ const styles = StyleSheet.create({
   routeEditBtn: { paddingHorizontal: 10, paddingVertical: 5, backgroundColor: 'rgba(61,142,240,0.12)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(61,142,240,0.20)' },
   routeEditTextBlue: { color: '#5BA3F5', fontSize: 11, fontWeight: '700' },
 
-  // Hero price
-  heroContainer: { alignItems: 'center', marginTop: 12, marginBottom: 2, paddingHorizontal: 20 },
+  // Hero price — pill + quick-adjust
+  heroContainer: { alignItems: 'center', marginTop: 16, marginBottom: 4, paddingHorizontal: 16 },
+  pricePill: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(245,197,24,0.08)',
+    borderWidth: 1, borderColor: 'rgba(245,197,24,0.25)',
+    borderRadius: 24, paddingHorizontal: 28, paddingVertical: 16,
+    marginBottom: 14,
+  },
+  pricePillActive: {
+    borderColor: 'rgba(245,197,24,0.70)',
+    shadowColor: '#F5C518', shadowOpacity: 0.30, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+  },
+  currencyPrefix: { fontSize: 20, fontWeight: '300', color: 'rgba(255,255,255,0.45)', marginRight: 4 },
+  priceNumber: { fontSize: 56, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5 },
+  cursor: { width: 3, height: 44, backgroundColor: '#F5C518', borderRadius: 2, marginLeft: 6, alignSelf: 'center', shadowColor: '#F5C518', shadowOpacity: 0.80, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  quickRow: { flexDirection: 'row', gap: 8, marginBottom: 10, justifyContent: 'center' },
+  quickBtn: {
+    alignItems: 'center', paddingHorizontal: 16, paddingVertical: 9,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: 999,
+  },
+  quickBtnActive: { backgroundColor: 'rgba(245,197,24,0.18)', borderColor: 'rgba(245,197,24,0.60)' },
+  quickBtnText: { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.55)' },
+  quickBtnTextActive: { color: '#F5C518' },
+  quickBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, fontWeight: '600' },
+  priceSuggLabel: { fontSize: 11, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 2, fontWeight: '500' },
+  // legacy aliases (unused but kept to avoid missing-key TS errors)
   priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
-  currencyPrefix: { fontSize: 26, fontWeight: '300', color: 'rgba(245,197,24,0.50)', marginRight: 4, marginBottom: 10 },
-  priceNumber: { fontSize: 76, fontWeight: '800', color: '#FFFFFF', letterSpacing: -2 },
-  cursor: { width: 3, height: 56, backgroundColor: '#F5C518', borderRadius: 2, marginLeft: 4, alignSelf: 'center', shadowColor: '#F5C518', shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
-  priceDivider: { height: 1.5, backgroundColor: 'rgba(245,197,24,0.25)', marginHorizontal: 24, marginTop: 10, alignSelf: 'stretch' },
-  priceSuggLabel: { fontSize: 11.5, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 6, fontWeight: '500' },
+  priceDivider: { height: 0, backgroundColor: 'transparent' },
 
   // Vehicle
   vehicleSectionLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 1.5, textTransform: 'uppercase', marginLeft: 20, marginTop: 18, marginBottom: 10 },
