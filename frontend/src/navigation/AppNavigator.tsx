@@ -55,6 +55,7 @@ const PaymentStatusScreen = safeLazy(() => import('../screens/passenger/PaymentS
 const PassengerProfileScreen = safeLazy(() => import('../screens/passenger/PassengerProfileScreen'));
 const RideHistory = safeLazy(() => import('../screens/RideHistory'));
 const SettingsScreen = safeLazy(() => import('../screens/passenger/SettingsScreen'));
+const NotificationsScreen = safeLazy(() => import('../screens/passenger/NotificationsScreen')); // V2-001
 
 // ─── Legal ──────────────────────────────────────────────────────────────────
 import LegalScreen, { hasAcceptedLegal } from '../screens/LegalScreen';
@@ -177,6 +178,12 @@ function PassengerHomeStackScreen() {
             </PassengerHomeStack.Screen>
             <PassengerHomeStack.Screen name="PassengerPayment">
                 {() => <PaymentStatusScreen />}
+            </PassengerHomeStack.Screen>
+            <PassengerHomeStack.Screen
+                name="Notifications"
+                options={{ title: 'Notificaciones', headerShown: false }}
+            >
+                {() => <NotificationsScreen />}
             </PassengerHomeStack.Screen>
         </PassengerHomeStack.Navigator>
     );

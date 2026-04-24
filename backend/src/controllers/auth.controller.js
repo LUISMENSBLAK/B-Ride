@@ -1,3 +1,4 @@
+const { handleError } = require('../utils/errorHandler'); // V2-002
 const authService = require('../services/auth.service');
 const { registerValidation, loginValidation } = require('../validations/auth.validation');
 const User = require('../models/User');
@@ -110,7 +111,7 @@ const verifyEmail = async (req, res) => {
         });
 
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AuthController');
     }
 };
 
@@ -171,7 +172,7 @@ const forgotPassword = async (req, res) => {
             return res.status(500).json({ success: false, message: 'Email could not be sent' });
         }
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'AuthController');
     }
 };
 
@@ -208,7 +209,7 @@ const resetPassword = async (req, res) => {
             refreshToken
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'AuthController');
     }
 };
 
@@ -278,7 +279,7 @@ const logoutAll = async (req, res) => {
 
         res.status(200).json({ success: true, message: 'Cerrado en todos los dispositivos.' });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'AuthController');
     }
 }
 
@@ -297,7 +298,7 @@ const updatePushToken = async (req, res) => {
         });
     } catch (error) {
         console.error('[Auth Controller] Error updating push token:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        handleError(res, new Error('Server error'), 500, 'AuthController');
     }
 };
 
@@ -316,7 +317,7 @@ const removePushToken = async (req, res) => {
         });
     } catch (error) {
         console.error('[Auth Controller] Error removing push token:', error);
-        res.status(500).json({ success: false, message: 'Server error' });
+        handleError(res, new Error('Server error'), 500, 'AuthController');
     }
 };
 
@@ -351,7 +352,7 @@ const uploadAvatar = async (req, res) => {
         });
     } catch (error) {
         console.error('[Auth Controller] Error uploading avatar:', error);
-        res.status(500).json({ success: false, message: 'Server error uploading avatar' });
+        handleError(res, new Error('Error uploading avatar'), 500, 'AuthController');
     }
 };
 
@@ -399,7 +400,7 @@ const updateProfile = async (req, res) => {
         res.status(200).json({ success: true, data: updatedUser });
     } catch (error) {
         console.error('[Auth Controller] Error updating profile:', error);
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'AuthController');
     }
 };
 
@@ -437,7 +438,7 @@ const resendVerification = async (req, res) => {
         res.status(200).json({ success: true, message: 'Código reenviado correctamente' });
     } catch (error) {
         console.error('[Auth Controller] resendVerification error:', error);
-        res.status(500).json({ success: false, message: 'Error interno al reenviar el código' });
+        handleError(res, new Error('Error reenviando código'), 500, 'AuthController');
     }
 };
 
@@ -459,13 +460,13 @@ const sendPhoneOtp = async (req, res) => {
         
         const smsSent = await sendSMS(user.phoneNumber, `[B-Ride] Tu codigo de verificacion SMS es: ${verifyCode}`);
         if (!smsSent) {
-            return res.status(500).json({ success: false, message: 'Error enviando el SMS. Verifica el número de teléfono.' });
+            return handleError(res, new Error('Error enviando SMS'), 500, 'AuthController');
         }
         
         res.status(200).json({ success: true, message: 'SMS enviado correctamente' });
     } catch (error) {
         console.error('[SMS Gen]', error);
-        res.status(500).json({ success: false, message: 'Error interno de servidor al generar SMS' });
+        handleError(res, new Error('Error generando SMS'), 500, 'AuthController');
     }
 };
 
@@ -499,7 +500,7 @@ const verifyPhoneOtp = async (req, res) => {
         res.status(200).json({ success: true, message: 'Teléfono verificado exitosamente.' });
     } catch (e) {
         console.error('[Verify SMS Error]', e);
-        res.status(500).json({ success: false, message: 'Error interno verificando SMS' });
+        handleError(res, new Error('Error verificando SMS'), 500, 'AuthController');
     }
 };
 
@@ -522,7 +523,7 @@ const deleteAccount = async (req, res) => {
         
         res.status(200).json({ success: true, message: 'Cuenta en proceso de eliminación.' });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AuthController');
     }
 };
 
@@ -540,7 +541,7 @@ const getReferral = async (req, res) => {
              }
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AuthController');
     }
 };
 
@@ -613,7 +614,7 @@ const googleLogin = async (req, res) => {
         });
     } catch (e) {
         console.error('[Auth] Google login error:', e);
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AuthController');
     }
 };
 
@@ -690,7 +691,7 @@ const appleLogin = async (req, res) => {
         });
     } catch (e) {
         console.error('[Auth] Apple login error:', e);
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AuthController');
     }
 };
 
@@ -730,7 +731,7 @@ const firebaseSync = async (req, res) => {
       }
     });
   } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
+    handleError(res, e, 500, 'AuthController');
   }
 };
 

@@ -1,3 +1,4 @@
+const { handleError } = require('../utils/errorHandler'); // V2-002
 
 const Ride = require('../models/Ride');
 const User = require('../models/User');
@@ -47,7 +48,7 @@ const getEarnings = async (req, res) => {
              avgRating: driver?.avgRating || 0
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'DriverController');
     }
 };
 

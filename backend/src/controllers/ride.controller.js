@@ -6,20 +6,18 @@ const { getIO } = require('../sockets');
 const sendEmail = require('../utils/sendEmail');
 const User = require('../models/User');
 const locationCacheModule = require('../services/locationCache.service');
+const { handleError } = require('../utils/errorHandler'); // V2-002
 
 const getMyRides = async (req, res) => {
     try {
         const userId = req.user._id;
         const role = req.user.role; 
 
-
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 20;
-
         const skip = (page - 1) * limit;
 
         const query = role === 'DRIVER' ? { driver: userId } : { passenger: userId };
-        
 
         const rides = await Ride.find(query)
             .sort({ createdAt: -1 })
@@ -39,7 +37,7 @@ const getMyRides = async (req, res) => {
             data: rides,
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'getMyRides'); // V2-002
     }
 };
 
@@ -62,7 +60,6 @@ const getRideState = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Acceso denegado al viaje' });
         }
 
-        // Enviar solo la oferta seleccionada y el estado actual para sync
         const selectedBid = ride.bids.find(b => b.status === 'ACCEPTED') || null;
 
         res.status(200).json({
@@ -75,7 +72,7 @@ const getRideState = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        handleError(res, error, 500, 'getRideState'); // V2-002
     }
 };
 
@@ -86,18 +83,27 @@ const sosTrigger = async (req, res) => {
         
         if (!rideId) return res.status(400).json({ success: false, message: 'rideId requerido' });
 
+        // V2-003: Validar coordenadas antes de guardar
+        const lat = location?.latitude;
+        const lng = location?.longitude;
+
+        if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
+            return res.status(400).json({ success: false, message: 'Coordenadas de ubicación inválidas o ausentes' });
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return res.status(400).json({ success: false, message: 'Coordenadas fuera de rango geográfico válido' });
+        }
 
         const sosAlert = await SOS.create({
             ride: rideId,
             user: req.user._id,
             location: {
                 type: 'Point',
-                coordinates: location && location.longitude ? [location.longitude, location.latitude] : [0, 0]
+                coordinates: [lng, lat] // GeoJSON: [longitude, latitude]
             }
         });
 
         // Emitir evento por socket room
-
         try {
             getIO().to(`ride_${rideId}`).emit('sos_triggered', { 
                 rideId, 
@@ -112,12 +118,12 @@ const sosTrigger = async (req, res) => {
         await sendEmail({
             email: supportEmail,
             subject: '🚨 EMERGENCIA SOS — B-Ride',
-            message: `SOS activado por usuario ID: ${req.user._id} en viaje ${rideId}. Coordenadas: ${JSON.stringify(location)}`
+            message: `SOS activado por usuario ID: ${req.user._id} en viaje ${rideId}. Coordenadas: lat=${lat}, lng=${lng}`
         });
 
         res.status(200).json({ success: true, message: 'SOS registrado. Autoridades notificadas.' });
     } catch(e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'sosTrigger'); // V2-002
     }
 }
 
@@ -129,8 +135,6 @@ const rateRide = async (req, res) => {
         if (rating === undefined || rating < 1 || rating > 5) {
             return res.status(400).json({ success: false, message: 'Rating válido entre 1 y 5 es requerido' });
         }
-
-
 
         const ride = await Ride.findById(rideId);
         
@@ -161,20 +165,18 @@ const rateRide = async (req, res) => {
         await targetUser.save();
         
         try {
-
             getIO().to(targetUser._id.toString()).emit('rating_received', { rideId: ride._id, score: rating, feedback });
         } catch (e) {}
 
         res.status(200).json({ success: true, message: 'Rating guardado correctamente' });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'rateRide'); // V2-002
     }
 };
 
 const trackRide = async (req, res) => {
     try {
         const rideId = req.params.id;
-
 
         const ride = await Ride.findById(rideId).populate('driver', 'name vehicle driverStatus');
         
@@ -193,7 +195,7 @@ const trackRide = async (req, res) => {
              }
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'trackRide'); // V2-002
     }
 };
 

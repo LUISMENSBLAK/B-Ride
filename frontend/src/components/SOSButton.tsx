@@ -21,14 +21,37 @@ export default function SOSButton({ rideId, style }: SOSButtonProps) {
 
   const triggerSOS = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    let sosSuccess = false;
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       await client.post(`/rides/${rideId}/sos`, {
         location: { latitude: loc.coords.latitude, longitude: loc.coords.longitude }
       });
-    } catch (e) {}
-    const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
-    Linking.openURL(emergencyNumber);
+      sosSuccess = true;
+    } catch (e: any) {
+      // V2-003: mostrar Alert en lugar de silenciar el error
+      Alert.alert(
+        'Error al enviar SOS',
+        'No se pudo registrar la alerta. Por favor llama al 911 directamente.',
+        [
+          {
+            text: 'Llamar al 911',
+            style: 'destructive',
+            onPress: () => {
+              const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
+              Linking.openURL(emergencyNumber);
+            },
+          },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return; // No continuar si falló el registro
+    }
+    // Solo llamar al 911 si el SOS se registró correctamente
+    if (sosSuccess) {
+      const emergencyNumber = Platform.OS === 'ios' ? 'telprompt:911' : 'tel:911';
+      Linking.openURL(emergencyNumber);
+    }
   };
 
   const onHandlerStateChange = ({ nativeEvent }: any) => {

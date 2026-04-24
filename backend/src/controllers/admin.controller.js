@@ -1,3 +1,4 @@
+const { handleError } = require('../utils/errorHandler'); // V2-002
 const User = require('../models/User');
 const Ride = require('../models/Ride');
 const paymentService = require('../services/payment.service');
@@ -14,7 +15,7 @@ const getPendingDrivers = async (req, res) => {
         }).select('-password -__v');
         res.status(200).json({ success: true, data: drivers });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -32,7 +33,7 @@ const approveDriver = async (req, res) => {
         
         res.status(200).json({ success: true, message: 'Conductor aprobado exitosamente.' });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -53,7 +54,7 @@ const rejectDriver = async (req, res) => {
         
         res.status(200).json({ success: true, message: 'Conductor rechazado.' });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -93,7 +94,7 @@ const getAllRides = async (req, res) => {
             data: rides 
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -127,7 +128,7 @@ const getAllUsers = async (req, res) => {
             data: users 
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -143,7 +144,7 @@ const banUser = async (req, res) => {
 
         res.status(200).json({ success: true, message: 'Usuario baneado.' });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -182,7 +183,7 @@ const getStats = async (req, res) => {
             }
         });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 
@@ -192,7 +193,7 @@ const getActiveDriverLocations = async (req, res) => {
             .select('name lastKnownLocation vehicle avgRating');
         res.json({ success: true, data: drivers });
     } catch (e) {
-        res.status(500).json({ success: false, message: e.message });
+        handleError(res, e, 500, 'AdminController');
     }
 };
 

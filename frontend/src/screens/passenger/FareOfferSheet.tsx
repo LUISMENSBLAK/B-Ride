@@ -10,13 +10,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withRepeat, withSequence, withTiming,
+  withRepeat, withSequence, withTiming, withSpring,
 } from 'react-native-reanimated';
 import { useRideFlowStore } from '../../store/useRideFlowStore';
 import { useCurrency } from '../../hooks/useCurrency'; // BUG-039: moneda dinámica
 
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// V2-006: SCREEN_HEIGHT se mueve dentro del componente como state dinámico
+const { height: INITIAL_SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ── Vehicle catalogue ────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -63,27 +64,42 @@ const VehicleCard = React.memo(({
   loadingPrice?: boolean;
   onPress: () => void;
   formatPrice: (n: number) => string;
-}) => (
-  <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-    <View style={[styles.vehicleCard, isSelected && styles.vehicleCardSelected]}>
-      {isSelected && (
-        <View style={styles.vehicleCheck}>
-          <Ionicons name="checkmark" size={12} color="#0D0520" />
-        </View>
-      )}
-      <Image source={item.image} style={styles.vehicleImage} resizeMode="contain" />
-      <Text style={[styles.vehicleName, isSelected ? styles.vehicleNameSel : styles.vehicleNameUnsel]}>
-        {item.name}
-      </Text>
-      <Text style={styles.vehicleDescriptor}>{item.descriptor}</Text>
-      {loadingPrice ? (
-        <Text style={styles.vehiclePrice}>···</Text>
-      ) : estimatedPrice !== undefined ? (
-        <Text style={styles.vehiclePrice}>{formatPrice(estimatedPrice)}</Text>
-      ) : null}
-    </View>
-  </TouchableOpacity>
-));
+}) => {
+  // V2-018: animación táctil con spring
+  const scale = useSharedValue(1);
+  const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPressIn={() => { scale.value = withSpring(0.96, { damping: 20, stiffness: 400 }); }}
+      onPressOut={() => { scale.value = withSpring(1, { damping: 20, stiffness: 400 }); }}
+      onPress={onPress}
+    >
+      <Animated.View style={[
+        styles.vehicleCard,
+        isSelected && styles.vehicleCardSelected,
+        cardStyle,
+      ]}>
+        {isSelected && (
+          <View style={styles.vehicleCheck}>
+            <Ionicons name="checkmark" size={12} color="#0D0520" />
+          </View>
+        )}
+        <Image source={item.image} style={styles.vehicleImage} resizeMode="contain" />
+        <Text style={[styles.vehicleName, isSelected ? styles.vehicleNameSel : styles.vehicleNameUnsel]}>
+          {item.name}
+        </Text>
+        <Text style={styles.vehicleDescriptor}>{item.descriptor}</Text>
+        {loadingPrice ? (
+          <Text style={styles.vehiclePrice}>···</Text>
+        ) : estimatedPrice !== undefined ? (
+          <Text style={styles.vehiclePrice}>{formatPrice(estimatedPrice)}</Text>
+        ) : null}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+});
 
 // ── Main component ───────────────────────────────────────────────────────────
 const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props, ref) => {
@@ -98,9 +114,21 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
 
   // ── Visibility state ──
   const [visible, setVisible] = useState(false);
-  const slideAnim = useRef(new RNAnimated.Value(SCREEN_HEIGHT)).current;
+  // V2-006: screenHeight dinámico para rotación/resize
+  const [screenHeight, setScreenHeight] = useState(INITIAL_SCREEN_HEIGHT);
+  const slideAnim = useRef(new RNAnimated.Value(INITIAL_SCREEN_HEIGHT)).current;
+  // V2-010: guard contra doble cierre
+  const isClosingRef = useRef(false);
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => {
+      setScreenHeight(window.height);
+    });
+    return () => sub?.remove();
+  }, []);
 
   const openSheet = () => {
+    isClosingRef.current = false; // V2-010: reset al abrir
     setVisible(true);
     RNAnimated.timing(slideAnim, {
       toValue: 0,
@@ -111,12 +139,15 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   };
 
   const closeSheet = () => {
+    if (isClosingRef.current) return; // V2-010: evitar doble cierre
+    isClosingRef.current = true;
     RNAnimated.timing(slideAnim, {
-      toValue: SCREEN_HEIGHT,
+      toValue: screenHeight, // V2-006: usar altura dinámica
       duration: 280,
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
+      isClosingRef.current = false; // V2-010: reset al terminar
       setVisible(false);
       onClose();
     });
@@ -183,6 +214,10 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
   }, []);
   const cursorStyle = useAnimatedStyle(() => ({ opacity: cursorOpacity.value }));
 
+  // V2-025: shake animation para pill cuando precio inválido
+  const pillShakeX = useSharedValue(0);
+  const pillShakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: pillShakeX.value }] }));
+
   // ── Numpad ──
   const handleKeyPress = (val: string) => {
     if (val === 'back') { setPriceStr(p => p.slice(0, -1)); return; }
@@ -229,8 +264,8 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
       />
       {/* Sheet */}
       <RNAnimated.View style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}>
-        {/* Handle */}
-        <View style={styles.handle}>
+        {/* Handle — decorativo, sin interáccion */}
+        <View style={styles.handle} accessible={false} importantForAccessibility="no-hide-descendants">
           <View style={styles.handleBar} />
         </View>
 
@@ -298,35 +333,37 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
             ];
             return (
               <View style={styles.heroContainer}>
-                {/* Pill */}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    setNumpadVisible(true);
-                    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-                  }}
-                  style={[
-                    styles.pricePill,
-                    numpadVisible && styles.pricePillActive,
-                  ]}
-                >
-                  <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
-                  <Text style={[styles.priceNumber, {
-                    fontSize: priceStr.length >= 4 ? 46 : 56,
-                    color: priceStr.length > 0 ? '#F5C518' : 'rgba(255,255,255,0.30)',
-                  }]}>
-                    {priceStr || '0'}
-                  </Text>
-                  {numpadVisible && (
-                    <Animated.View style={[styles.cursor, cursorStyle]} />
-                  )}
-                  <Ionicons
-                    name="create-outline"
-                    size={16}
-                    color={numpadVisible ? 'rgba(245,197,24,0.80)' : 'rgba(245,197,24,0.45)'}
-                    style={{ marginLeft: 8 }}
-                  />
-                </TouchableOpacity>
+                {/* Pill — V2-025: envuelta en Animated.View para el shake */}
+                <Animated.View style={pillShakeStyle}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setNumpadVisible(true);
+                      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+                    }}
+                    style={[
+                      styles.pricePill,
+                      numpadVisible && styles.pricePillActive,
+                    ]}
+                  >
+                    <Text style={styles.currencyPrefix}>{currencySymbol}</Text>
+                    <Text style={[styles.priceNumber, {
+                      fontSize: priceStr.length >= 4 ? 46 : 56,
+                      color: priceStr.length > 0 ? '#F5C518' : 'rgba(255,255,255,0.30)',
+                    }]}>
+                      {priceStr || '0'}
+                    </Text>
+                    {numpadVisible && (
+                      <Animated.View style={[styles.cursor, cursorStyle]} />
+                    )}
+                    <Ionicons
+                      name="create-outline"
+                      size={16}
+                      color={numpadVisible ? 'rgba(245,197,24,0.80)' : 'rgba(245,197,24,0.45)'}
+                      style={{ marginLeft: 8 }}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
 
                 {/* Quick-adjust buttons */}
                 <View style={styles.quickRow}>
@@ -338,6 +375,9 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
                         style={[styles.quickBtn, active && styles.quickBtnActive]}
                         onPress={() => { setPriceStr(String(opt.value)); setNumpadVisible(false); }}
                         activeOpacity={0.75}
+                        accessibilityLabel={`${opt.label}: ${formatPrice(opt.value)}`}
+                        accessibilityRole="button"
+                        accessibilityHint={`Toca para fijar el precio en ${formatPrice(opt.value)}`}
                       >
                         <Text style={[styles.quickBtnText, active && styles.quickBtnTextActive]}>
                           {opt.label === 'Sugerido' ? `${opt.label} ✓` : opt.label}
@@ -424,7 +464,23 @@ const FareOfferSheet = forwardRef<FareOfferSheetRef, FareOfferSheetProps>((props
                 <Text style={{ flex: 1, fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' }}>
                   Ingresa tu oferta
                 </Text>
-                <TouchableOpacity onPress={() => setNumpadVisible(false)} hitSlop={{ top:8,bottom:8,left:8,right:8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (isUnderMin) {
+                      // V2-025: shake la pill si el precio es inválido
+                      pillShakeX.value = withSequence(
+                        withTiming(-8, { duration: 60 }),
+                        withTiming(8, { duration: 60 }),
+                        withTiming(-6, { duration: 50 }),
+                        withTiming(6, { duration: 50 }),
+                        withTiming(0, { duration: 40 }),
+                      );
+                    } else {
+                      setNumpadVisible(false);
+                    }
+                  }}
+                  hitSlop={{ top:8,bottom:8,left:8,right:8 }}
+                >
                   <Text style={{ color: '#F5C518', fontSize: 14, fontWeight: '700' }}>Listo</Text>
                 </TouchableOpacity>
               </View>
@@ -532,6 +588,7 @@ const styles = StyleSheet.create({
   pricePillActive: {
     borderColor: 'rgba(245,197,24,0.70)',
     shadowColor: '#F5C518', shadowOpacity: 0.30, shadowRadius: 14, shadowOffset: { width: 0, height: 0 },
+    elevation: 8, // V2-026: Android shadow
   },
   currencyPrefix: { fontSize: 20, fontWeight: '300', color: 'rgba(255,255,255,0.45)', marginRight: 4 },
   priceNumber: { fontSize: 56, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5 },
@@ -548,9 +605,7 @@ const styles = StyleSheet.create({
   quickBtnTextActive: { color: '#F5C518' },
   quickBtnSub: { fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, fontWeight: '600' },
   priceSuggLabel: { fontSize: 11, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: 2, fontWeight: '500' },
-  // legacy aliases (unused but kept to avoid missing-key TS errors)
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center' },
-  priceDivider: { height: 0, backgroundColor: 'transparent' },
+  // V2-024: priceRow/priceDivider eliminados (eran aliases vacíos sin uso)
 
   // Vehicle
   vehicleSectionLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.40)', letterSpacing: 1.5, textTransform: 'uppercase', marginLeft: 20, marginTop: 18, marginBottom: 10 },
@@ -567,6 +622,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
+    elevation: 6, // V2-026: Android shadow
   },
   vehicleCheck: { position: 'absolute', top: 10, right: 10, width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5C518', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   vehicleImage: { width: '100%', height: 68, resizeMode: 'contain' },

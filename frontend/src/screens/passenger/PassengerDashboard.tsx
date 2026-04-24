@@ -533,11 +533,9 @@ export default function PassengerDashboard() {
         setIsEditingOriginFromSheet(false);
         setMapSelectionMode('none');
         setPendingCoordinate(null);
+        setPendingAddress('');
         bottomSheetRef.current?.snapToIndex(0);
         setTimeout(() => fareOfferSheetRef.current?.expand(), 400); // FIX: Ensure animation finishes
-        setPendingCoordinate(null);
-        setPendingAddress('');
-        setMapSelectionMode('none');
       }
     } else {
       setSelectedPlace(place);
@@ -1439,13 +1437,7 @@ export default function PassengerDashboard() {
           userName={user?.name}
           profilePhoto={user?.profilePhoto || user?.avatarUrl}
           onAvatarPress={() => navigation.navigate('PassengerProfile')}
-          onNotifPress={() => {
-            // BUG-001: Notifications pantalla no existe — Alert temporal para evitar crash
-            Alert.alert(
-              t('general.comingSoon', { defaultValue: 'Próximamente' }),
-              t('general.notificationsComingSoon', { defaultValue: 'El sistema de notificaciones estará disponible en la próxima versión.' })
-            );
-          }}
+          onNotifPress={() => navigation.navigate('Notifications')}
           unreadNotifications={0} // FIX-A06: extensible sin badge hasta que haya notif system
           theme={theme}
           t={t}
@@ -1938,9 +1930,10 @@ export default function PassengerDashboard() {
           loadingQuotes={loadingQuotes}
           originAddress={pickupOverride?.address ?? pickupLocation?.displayName ?? 'Mi ubicación actual'}
           onEditOrigin={() => {
+            // V2-004: activar flag ANTES de entrar en modo selección
+            setIsEditingOriginFromSheet(true);
             fareOfferSheetRef.current?.close();
-            setRouteEditorInitialField('origin');
-            setTimeout(() => setRouteEditorVisible(true), 350);
+            setTimeout(() => enterMapSelectionMode('pickup'), 350);
           }}
           onEditDest={() => {
             fareOfferSheetRef.current?.close();
